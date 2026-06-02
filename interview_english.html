@@ -1,27 +1,45 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Interview</title>
+    <title>AI Interview</title>
 </head>
 <body>
 
-<h1>Interview</h1>
+<h1>AI Interview</h1>
 
-<p>Welcome to the interview.</p>
+<div id="chat">
+    <p><b>AI:</b> Welcome to the interview.</p>
+</div>
 
-<p>Question 1:</p>
+<br>
 
-<p>Please briefly introduce yourself.</p>
+<input type="text" id="message" size="60">
 
-<textarea rows="10" cols="80"></textarea>
+<button onclick="sendMessage()">Send</button>
 
-<br><br>
+<script>
+async function sendMessage() {
 
-<button>Submit Response</button>
+    const messageBox = document.getElementById("message");
+    const message = messageBox.value;
 
-<a href="consent_english.html">
-    <button>Back</button>
-</a>
+    if (!message) return;
+
+    document.getElementById("chat").innerHTML +=
+        "<p><b>You:</b> " + message + "</p>";
+
+    messageBox.value = "";
+
+    const response = await fetch(
+        "/api/chat?message=" + encodeURIComponent(message)
+    );
+
+    const data = await response.json();
+
+    document.getElementById("chat").innerHTML +=
+        "<p><b>AI:</b> " + data.reply + "</p>";
+}
+</script>
 
 </body>
 </html>
