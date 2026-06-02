@@ -1,8 +1,16 @@
-Interview Page
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Interview Page</title>
+</head>
+<body>
+    <h1>Welcome to the interview.
+</h1>
 
 Welcome to the interview.
-
+<p>
 Question 1:
 Please introduce yourself.
 
 [Submit]
+</p>
