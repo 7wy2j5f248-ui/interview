@@ -6,9 +6,11 @@ const openai = new OpenAI({
 
 export default async function handler(req, res) {
   try {
+    const message = req.query.message || "Hello";
+
     const response = await openai.responses.create({
       model: "gpt-5",
-      input: "Say hello to the interview participant."
+      input: message
     });
 
     res.status(200).json({
