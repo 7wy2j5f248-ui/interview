@@ -1,27 +1,48 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>访谈</title>
+    <meta charset="UTF-8">
+    <title>AI访谈</title>
 </head>
 <body>
 
-<h1>访谈</h1>
+<h1>AI访谈</h1>
 
-<p>欢迎参加访谈。</p>
+<div id="chat">
+    <p><b>AI：</b>欢迎参加访谈。请先简单介绍一下自己。</p>
+</div>
 
-<p>问题 1：</p>
+<br>
 
-<p>请简要介绍一下您自己。</p>
-
-<textarea rows="10" cols="80"></textarea>
+<textarea id="message" rows="8" cols="80"></textarea>
 
 <br><br>
 
-<button>提交回答</button>
+<button onclick="sendMessage()">发送</button>
 
-<a href="consent_chinese.html">
-    <button>返回</button>
-</a>
+<script>
+async function sendMessage() {
+
+    const messageBox = document.getElementById("message");
+    const message = messageBox.value;
+
+    if (!message) return;
+
+    document.getElementById("chat").innerHTML +=
+        "<p><b>您：</b> " + message + "</p>";
+
+    messageBox.value = "";
+
+    const response = await fetch(
+        "/api/chat?message=" + encodeURIComponent(message)
+    );
+
+    const data = await response.json();
+
+    document.getElementById("chat").innerHTML +=
+        "<p><b>AI：</b> " + data.reply + "</p>";
+}
+</script>
 
 </body>
 </html>
