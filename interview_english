@@ -1,16 +1,27 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Interview Page</title>
+    <title>Interview</title>
 </head>
 <body>
-    <h1>Welcome to the interview.
-</h1>
 
-Welcome to the interview.
-<p>
-Question 1:
-Please introduce yourself.
+<h1>Interview</h1>
 
-[Submit]
-</p>
+<p>Welcome to the interview.</p>
+
+<p>Question 1:</p>
+
+<p>Please briefly introduce yourself.</p>
+
+<textarea rows="10" cols="80"></textarea>
+
+<br><br>
+
+<button>Submit Response</button>
+
+<a href="consent_english.html">
+    <button>Back</button>
+</a>
+
+</body>
+</html>
