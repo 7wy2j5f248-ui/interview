@@ -1,17 +1,27 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>面试</title>
+    <title>访谈</title>
 </head>
 <body>
-    <h1>欢迎面试
-</h1>
 
-欢迎面试
-<p>
+<h1>访谈</h1>
 
-请开始
+<p>欢迎参加访谈。</p>
 
-问题 1:
-请简单介绍你自己
-[提交]
+<p>问题 1：</p>
+
+<p>请简要介绍一下您自己。</p>
+
+<textarea rows="10" cols="80"></textarea>
+
+<br><br>
+
+<button>提交回答</button>
+
+<a href="consent_chinese.html">
+    <button>返回</button>
+</a>
+
+</body>
+</html>
