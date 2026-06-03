@@ -1,78 +1,51 @@
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AI访谈</title>
-
-<style>
-body {
-    font-family: Arial, sans-serif;
-    margin: 10px;
-}
-
-#chat {
-    width: 100%;
-    overflow-wrap: break-word;
-    word-wrap: break-word;
-}
-
-textarea {
-    width: 100%;
-    box-sizing: border-box;
-    font-size: 16px;
-}
-
-button {
-    margin-top: 10px;
-}
-</style>
-
-</head>
-
-<body>
-
-<h1>AI访谈</h1>
-
-<div id="chat">
-    <p><b>AI：</b>欢迎参加访谈。请先简单介绍一下自己。</p>
-</div>
-
-<br>
-
-<textarea id="message" rows="4"></textarea>
-
-<button onclick="sendMessage()">发送</button>
-
 <script>
+
+let history = [];
+
+const participantId =
+  localStorage.getItem("participantId") ||
+  ("P" + Date.now());
+
+localStorage.setItem("participantId", participantId);
+
 async function sendMessage() {
 
     const messageBox = document.getElementById("message");
-    const message = messageBox.value;
+    const message = messageBox.value.trim();
 
     if (!message) return;
 
     document.getElementById("chat").innerHTML +=
         "<p><b>您：</b> " + message + "</p>";
 
+    history.push({
+        role: "user",
+        content: message
+    });
+
     messageBox.value = "";
 
-    const response = await fetch(
-        "/api/chat?message=" + encodeURIComponent(message)
-    );
+    const response = await fetch("/api/chat_chinese", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            participantId,
+            message,
+            history
+        })
+    });
 
     const data = await response.json();
 
     document.getElementById("chat").innerHTML +=
         "<p><b>AI：</b> " + data.reply + "</p>";
+
+    history.push({
+        role: "assistant",
+        content: data.reply
+    });
 }
+
 </script>
-
-<br><br>
-
-<a href="index.html">
-    <button>返回主页</button>
-</a>
-
-</body>
-</html>
