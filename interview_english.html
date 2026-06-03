@@ -1,15 +1,34 @@
 <!DOCTYPE html>
 <html>
-    <style>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Interview</title>
+
+<style>
 body {
+    font-family: Arial, sans-serif;
     margin: 10px;
+}
+
+#chat {
+    width: 100%;
+    overflow-wrap: break-word;
+    word-wrap: break-word;
+}
+
+textarea {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+button {
+    margin-top: 10px;
 }
 </style>
 
-<head>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Interview</title>
 </head>
+
 <body>
 
 <h1>AI Interview</h1>
@@ -20,9 +39,7 @@ body {
 
 <br>
 
-<textarea id="message" rows="4" style="width:95%; box-sizing:border-box;"></textarea>
-
-
+<textarea id="message" rows="4"></textarea>
 
 <button onclick="sendMessage()">Send</button>
 
@@ -50,10 +67,11 @@ async function sendMessage() {
 }
 </script>
 
-</body>
-</html>
 <br><br>
 
 <a href="index.html">
     <button>Return to Home</button>
 </a>
+
+</body>
+</html>
