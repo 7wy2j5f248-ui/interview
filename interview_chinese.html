@@ -1,10 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI访谈</title>
+
+<style>
+body {
+    font-family: Arial, sans-serif;
+    margin: 10px;
+}
+
+#chat {
+    width: 100%;
+    overflow-wrap: break-word;
+    word-wrap: break-word;
+}
+
+textarea {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+button {
+    margin-top: 10px;
+}
+</style>
+
+</head>
+
+<body>
+
+<h1>AI访谈</h1>
+
+<div id="chat">
+    <p><b>AI：</b>欢迎参加访谈。</p>
+</div>
+
+<br>
+
+<textarea id="message" rows="4" style="width:100%; box-sizing:border-box; font-size:16px;"></textarea>
+
+<button onclick="sendMessage()">发送</button>
+
 <script>
 
 let history = [];
 
 const participantId =
-  localStorage.getItem("participantId") ||
-  ("P" + Date.now());
+    localStorage.getItem("participantId") ||
+    ("P" + Date.now());
 
 localStorage.setItem("participantId", participantId);
 
@@ -47,6 +92,14 @@ async function sendMessage() {
         content: data.reply
     });
 }
+
 </script>
+
+<br><br>
+
+<a href="index.html">
+    <button>返回主页</button>
+</a>
+
 </body>
 </html>
