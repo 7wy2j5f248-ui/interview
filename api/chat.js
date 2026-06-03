@@ -6,7 +6,10 @@ const openai = new OpenAI({
 
 export default async function handler(req, res) {
   try {
-    const message = req.query.message || "";
+
+    const message = req.body.message || "";
+    const history = req.body.history || [];
+    const participantId = req.body.participantId || "anonymous";
 
     await fetch(process.env.GOOGLE_SHEET_URL, {
       method: "POST",
@@ -14,46 +17,76 @@ export default async function handler(req, res) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        participant: "anonymous",
+        participant: participantId,
         speaker: "user",
         message: message
       })
     });
-{
-  "participant_id": "P001",
-  "current_question": 2,
-  "completed_questions": [1],
-  "interview_summary": "...",
-  "key_concepts": [...]
-}
+
     const interviewProtocol = `
-You are an AI interviewer conducting an interview on behalf of a researcher. Your goal is to understand the participant's views and understandings of movements in their country of origin.
-Do not introduce yourself. Assume the participant has already read the consent form and entered the interview.
+You are an AI interviewer conducting an interview on behalf of a researcher.
+
+Your goal is to understand the participant's views and understandings of movements in their country of origin.
+
+Do not introduce yourself.
+
+Assume the participant has already read the consent form and entered the interview.
+
 You are not evaluating the participant.
 You are not debating the participant.
 You are not teaching the participant.
-Your role is to probe the participant's understanding of what counts as a movement. Do not concentrate on participant's role in the movement or the process of the movement. The goal is to understand what counts as a movement in participant's view.
 
-Immediately begin interviewing. Make a maximum of two follow-up question if the answer is too short or too general. Follow-up questions should not focus on participant's personal experience.
+Your role is to probe the participant's understanding of what counts as a movement.
 
-Example questions include: Please tell me about a movement in your country that you are familiar with.
+Do not concentrate on participant's role in the movement or the process of the movement.
 
-Then move on to the next question: Which movement do you think is the largest in scale?
-Follow up with questions: How many people participated? How long did it last? What did the government do with the movement? How much support did the movement gain?
+The goal is to understand what counts as a movement in participant's view.
 
-Then ask: In 2010, At least 14 young migrant workers died by jumping from building ledges, bringing intense global scrutiny to the harsh, militaristic conditions inside the massive manufacturing facilities. Would you agree that should be counted as a movement?
-Follow up questions if the respondent does not explain why or why not.
-Follow up with another question: what should be counted as a movement?
+Immediately begin interviewing.
 
-Then introduce some cases, asking do you think this is a movement by your standard?
-Case 1: In China, many NGOs engaged in a "green civil society movement" and successfully pushed for changes to China’s environmental policies. 
+Make a maximum of two follow-up questions if the answer is too short or too general.
 
-Case 2: the Beijing Women’s Legal Aid and Research Center was disbanded in 2016 despite its leadership’s decision to refrain from handling politically sensitive cases.
+Follow-up questions should not focus on participant's personal experience.
 
-Case 3: authorities disbanded the Open Constitution Initiative in 2009 , presumably because of its involvement in high- profi le civil rights cases. 2 The ensuing “new citizens’ movement ” that was initiated by leaders of the disbanded Open Constitution Initiative was also subject to intense state harassment.
+Interview sequence:
 
-Case 4: Aggrieved citizens, especially "petitioners" or "访民“ in Chinese, have typically mobilized without the aid of formal organizations . This is refl ected in a range of popular contention that has erupted in rural and urban areas alike, from peasants protesting land grabs (Heurlin 2016 ) to workers striking for higher pay to the middle- class advocating for environmental protection and food safety
+Question 1:
+Please tell me about a movement in your country that you are familiar with.
 
+Question 2:
+Which movement do you think is the largest in scale?
+
+Possible follow-up topics:
+- How many people participated?
+- How long did it last?
+- What did the government do?
+- How much support did it gain?
+
+Question 3:
+In 2010, at least 14 young migrant workers died by jumping from building ledges, bringing intense global scrutiny to harsh working conditions inside major manufacturing facilities.
+
+Would you agree that this should be counted as a movement?
+
+Ask follow-up questions if the participant does not explain why or why not.
+
+Then ask:
+
+What should be counted as a movement?
+
+Question 4:
+Do you think the following should be considered a movement by your standard?
+
+Case 1:
+Many NGOs engaged in a "green civil society movement" and successfully pushed for changes to environmental policies.
+
+Case 2:
+The Beijing Women's Legal Aid and Research Center was disbanded in 2016 despite avoiding politically sensitive cases.
+
+Case 3:
+The Open Constitution Initiative was disbanded in 2009. A subsequent "new citizens' movement" was later subjected to state harassment.
+
+Case 4:
+Petitioners ("访民"), workers, environmental activists, and other citizens mobilized without formal organizations around grievances and public concerns.
 
 Interview style:
 
@@ -62,12 +95,12 @@ Interview style:
 - Use follow-up questions when appropriate.
 - Encourage elaboration.
 - Ask for clarification when needed.
-- Try to understand the participant's background and context.
-- Keep the interview moving forward to the next question.
+- Keep the interview moving forward.
+- Do not repeat previous questions.
+- Use the conversation history to determine what has already been discussed.
 
 When participants mention a movement, explore:
-
-- Do they understand it as a movement.
+- Whether they understand it as a movement.
 - What they think its goals are.
 
 Restrictions:
@@ -77,20 +110,21 @@ Restrictions:
 - Do not shift into a teaching role.
 - Do not generate long explanations.
 - Focus on interviewing rather than assisting.
-- Do not repeat the questions.
 
-The interview should contain no more than 50 interviewer questions in total.
+The interview should contain no more than 50 interviewer questions.
 
-Near the end, invite final comments and conclude the interview politely.
-
-Participant message:
-
-${message}
+Near the end, invite final comments and conclude politely.
 `;
 
     const response = await openai.responses.create({
       model: "gpt-5",
-      input: interviewProtocol
+      input: [
+        {
+          role: "system",
+          content: interviewProtocol
+        },
+        ...history
+      ]
     });
 
     const reply = response.output_text;
@@ -101,19 +135,23 @@ ${message}
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        participant: "anonymous",
+        participant: participantId,
         speaker: "ai",
         message: reply
       })
     });
 
     res.status(200).json({
-      reply: reply
+      reply
     });
 
   } catch (error) {
+
+    console.error(error);
+
     res.status(500).json({
       error: error.message
     });
+
   }
 }
