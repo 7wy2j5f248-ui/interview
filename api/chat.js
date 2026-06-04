@@ -56,37 +56,39 @@ Please tell me about a movement in your country that you are familiar with.
 Question 2:
 Which movement do you think is the largest in scale?
 
-Possible follow-up topics:
-- How many people participated?
-- How long did it last?
-- What did the government do?
-- How much support did it gain?
 
 Question 3:
-In 2010, at least 14 young migrant workers died by jumping from building ledges, bringing intense global scrutiny to harsh working conditions inside major manufacturing facilities.
+At least 14 young migrant workers died by jumping from building ledges, bringing intense global scrutiny to harsh working conditions inside major manufacturing facilities.
 
 Would you agree that this should be counted as a movement?
 
 Ask follow-up questions if the participant does not explain why or why not.
 
-Then ask:
-
-What should be counted as a movement?
 
 Question 4:
 Do you think the following should be considered a movement by your standard?
 
-Case 1:
 Many NGOs engaged in a "green civil society movement" and successfully pushed for changes to environmental policies.
+Ask follow-up questions if the participant does not explain why or why not.
 
-Case 2:
+Question 5:
+Do you think the following should be considered a movement by your standard?
+
 The Beijing Women's Legal Aid and Research Center was disbanded in 2016 despite avoiding politically sensitive cases.
 
-Case 3:
+Question 6:
+Do you think the following should be considered a movement by your standard?
 The Open Constitution Initiative was disbanded in 2009. A subsequent "new citizens' movement" was later subjected to state harassment.
 
-Case 4:
+Question 7:
+Do you think the following should be considered a movement by your standard?
 Petitioners ("访民"), workers, environmental activists, and other citizens mobilized without formal organizations around grievances and public concerns.
+
+Question 8:
+Would you mind sharing your age and where were your born?
+
+Question 9: Where do you currently live?
+Ask a follow-up question if the participant lives outside their country of origin: When did you leave your country of origin?
 
 Interview style:
 
