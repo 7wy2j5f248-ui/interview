@@ -10,7 +10,22 @@ export default async function handler(req, res) {
     const message = req.body.message || "";
     const history = req.body.history || [];
     const participantId = req.body.participantId || "anonymous";
+let retrievedHistory = [];
 
+try {
+
+  const historyResponse = await fetch(
+    `${process.env.GOOGLE_HISTORY_URL}?participant=${participantId}`
+  );
+
+  retrievedHistory = await historyResponse.json();
+
+} catch (err) {
+
+  console.error("History retrieval failed:", err);
+
+}
+    
     await fetch(process.env.GOOGLE_SHEET_URL, {
       method: "POST",
       headers: {
@@ -118,12 +133,19 @@ The interview should contain no more than 50 interviewer questions.
 Near the end, invite final comments and conclude politely.
 `;
 
+const interviewHistoryText = retrievedHistory
+  .map(item => `${item.speaker}: ${item.message}`)
+  .join("\n");
+    
     const response = await openai.responses.create({
       model: "gpt-5",
       input: [
         {
           role: "system",
-          content: interviewProtocol
+         content:
+  interviewProtocol +
+  "\n\nPrevious interview history:\n" +
+  interviewHistoryText
         },
         ...history
       ]
