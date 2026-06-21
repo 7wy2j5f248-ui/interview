@@ -1,9 +1,12 @@
 import OpenAI from "openai";
-
+import { createClient } from "@supabase/supabase-js";
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
-
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_ANON_KEY
+);
 export default async function handler(req, res) {
   try {
 
@@ -14,11 +17,17 @@ let retrievedHistory = [];
 
 try {
 
-  const historyResponse = await fetch(
-    `${process.env.GOOGLE_HISTORY_URL}?participant=${participantId}`
-  );
+  const { data, error } = await supabase
+    .from("interview_messages")
+    .select("*")
+    .eq("Participant", participantId)
+    .order("Timestamp", { ascending: true });
 
-  retrievedHistory = await historyResponse.json();
+  if (error) {
+    console.error("Supabase retrieval error:", error);
+  } else {
+    retrievedHistory = data || [];
+  }
 
 } catch (err) {
 
