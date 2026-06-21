@@ -1,36 +1,150 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>研究知情同意书</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>研究知情同意书</title>
+<style>
+body {
+    font-family: Arial, sans-serif;
+    max-width: 800px;
+    margin: 20px auto;
+    padding: 20px;
+    line-height: 1.6;
+}
+.participant-section {
+    margin: 20px 0;
+    padding: 15px;
+    border: 1px solid #ccc;
+}
+#participantIdBox {
+    display: none;
+    margin-top: 10px;
+}
+#generatedIdBox {
+    display: none;
+    margin-top: 10px;
+    padding: 10px;
+    background: #f5f5f5;
+    border: 1px solid #ccc;
+}
+button {
+    padding: 8px 16px;
+    margin-right: 10px;
+    cursor: pointer;
+}
+input[type="text"] {
+    width: 300px;
+    padding: 6px;
+}
+</style>
+<script>
+function participantTypeChanged() {
+    const isNew =
+        document.getElementById("newParticipant").checked;
+    const isReturning =
+        document.getElementById("returningParticipant").checked;
+    document.getElementById("participantIdBox").style.display =
+        isReturning ? "block" : "none";
+    document.getElementById("generatedIdBox").style.display =
+        isNew ? "block" : "none";
+    if (isNew) {
+        const newId =
+            "P" + Date.now();
+        document.getElementById("generatedId").textContent =
+            newId;
+        localStorage.setItem(
+            "participantId",
+            newId
+        );
+    }
+}
+function proceedToInterview() {
+    let participantId = "";
+    if (document.getElementById("newParticipant").checked) {
+        participantId =
+            document.getElementById("generatedId").textContent;
+    } else if (
+        document.getElementById("returningParticipant").checked
+    ) {
+        participantId =
+            document.getElementById("participantIdInput")
+            .value
+            .trim();
+        if (!participantId) {
+            alert("请输入参与者编号。");
+            return;
+        }
+    } else {
+        alert("请选择新参与者或返回参与者。");
+        return;
+    }
+    localStorage.setItem(
+        "participantId",
+        participantId
+    );
+    window.location.href =
+        "interview_chinese.html";
+}
+</script>
 </head>
 <body>
-
 <h1>研究知情同意书</h1>
-
 <p>
 感谢您考虑参加本研究项目。
 </p>
-
 <p>
 参与本研究完全自愿。您可以在任何时候停止访谈，而无需说明理由。
 </p>
-
 <p>
 您的回答可能会被用于学术研究。除非您主动提供，否则不会收集可识别您个人身份的信息。
 </p>
-
+<h2>参与者状态</h2>
+<p>
+如果您希望稍后继续访谈，请妥善保存您的参与者编号。返回参与者可通过输入相同的参与者编号继续之前的访谈。
+</p>
+<div class="participant-section">
+<label>
+<input
+    type="radio"
+    id="newParticipant"
+    name="participantType"
+    onchange="participantTypeChanged()">
+新参与者
+</label>
+<label>
+<input
+    type="radio"
+    id="returningParticipant"
+    name="participantType"
+    onchange="participantTypeChanged()">
+返回参与者
+</label>
+<div id="participantIdBox">
+<p>
+参与者编号：
+</p>
+</div>
+<div id="generatedIdBox">
+<p>
+您的参与者编号：
+</p>
+<h3 id="generatedId"></h3>
+<p>
+请保存此编号，以便日后继续访谈时使用。
+</p>
+</div>
+</div>
 <p>
 点击“我同意”即表示您已阅读并理解上述信息，并同意参与本研究。
 </p>
-
-<a href="interview_chinese.html">
-    <button>我同意</button>
-</a>
-
+<button onclick="proceedToInterview()">
+我同意
+</button>
 <a href="chinese.html">
-    <button>返回</button>
+<button type="button">
+返回
+</button>
 </a>
-
 </body>
 </html>
