@@ -1,9 +1,124 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Consent Form</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Research Consent Form</title>
+
+<style>
+body {
+    font-family: Arial, sans-serif;
+    max-width: 800px;
+    margin: 20px auto;
+    padding: 20px;
+    line-height: 1.6;
+}
+
+.participant-section {
+    margin: 20px 0;
+    padding: 15px;
+    border: 1px solid #ccc;
+}
+
+#participantIdBox {
+    display: none;
+    margin-top: 10px;
+}
+
+#generatedIdBox {
+    display: none;
+    margin-top: 10px;
+    padding: 10px;
+    background: #f5f5f5;
+    border: 1px solid #ccc;
+}
+
+button {
+    padding: 8px 16px;
+    margin-right: 10px;
+    cursor: pointer;
+}
+
+input[type="text"] {
+    width: 300px;
+    padding: 6px;
+}
+</style>
+
+<script>
+
+function participantTypeChanged() {
+
+    const isNew =
+        document.getElementById("newParticipant").checked;
+
+    const isReturning =
+        document.getElementById("returningParticipant").checked;
+
+    document.getElementById("participantIdBox").style.display =
+        isReturning ? "block" : "none";
+
+    document.getElementById("generatedIdBox").style.display =
+        isNew ? "block" : "none";
+
+    if (isNew) {
+
+        const newId =
+            "P" + Date.now();
+
+        document.getElementById("generatedId").textContent =
+            newId;
+
+        localStorage.setItem(
+            "participantId",
+            newId
+        );
+    }
+}
+
+function proceedToInterview() {
+
+    let participantId = "";
+
+    if (document.getElementById("newParticipant").checked) {
+
+        participantId =
+            document.getElementById("generatedId").textContent;
+
+    } else if (
+        document.getElementById("returningParticipant").checked
+    ) {
+
+        participantId =
+            document.getElementById("participantIdInput")
+            .value
+            .trim();
+
+        if (!participantId) {
+            alert("Please enter your Participant ID.");
+            return;
+        }
+
+    } else {
+
+        alert(
+            "Please select New Participant or Returning Participant."
+        );
+        return;
+    }
+
+    localStorage.setItem(
+        "participantId",
+        participantId
+    );
+
+    window.location.href =
+        "interview_english.html";
+}
+</script>
+
 </head>
+
 <body>
 
 <h1>Research Consent Form</h1>
@@ -19,33 +134,76 @@ Participation is voluntary. You may stop the interview at any time.
 <p>
 Your responses may be used for research purposes. No personally identifying information will be collected unless you choose to provide it.
 </p>
-<p>
-Participant Status
-</p>
-    <p> 
-        If you wish to continue the interview later, please keep a record of your Participant ID. Returning participants may resume a previous interview by entering the same Participant ID when they revisit the study website.
-    </p>
-<p>
 
-○ New Participant
-</p>
-    
-<p>    
-○ Returning Participant
+<h2>Participant Status</h2>
 
-Participant ID (for returning participants):
-[_______________]
-</p>    
+<p>
+If you wish to continue the interview later, please keep a record of your Participant ID. Returning participants may resume a previous interview by entering the same Participant ID when they revisit the study website.
+</p>
+
+<div class="participant-section">
+
+<label>
+<input
+    type="radio"
+    id="newParticipant"
+    name="participantType"
+    onchange="participantTypeChanged()">
+New Participant
+</label>
+
+<br><br>
+
+<label>
+<input
+    type="radio"
+    id="returningParticipant"
+    name="participantType"
+    onchange="participantTypeChanged()">
+Returning Participant
+</label>
+
+<div id="participantIdBox">
+
+<p>
+Participant ID:
+</p>
+
+<input
+    type="text"
+    id="participantIdInput"
+    placeholder="Enter your Participant ID">
+
+</div>
+
+<div id="generatedIdBox">
+
+<p>
+Your Participant ID:
+</p>
+
+<h3 id="generatedId"></h3>
+
+<p>
+Please save this ID. You will need it if you return later.
+</p>
+
+</div>
+
+</div>
+
 <p>
 By clicking "I Agree", you indicate that you understand the information above and agree to participate.
 </p>
 
-<a href="interview_english.html">
-    <button>I Agree</button>
-</a>
+<button onclick="proceedToInterview()">
+I Agree
+</button>
 
 <a href="english.html">
-    <button>Back</button>
+<button type="button">
+Back
+</button>
 </a>
 
 </body>
