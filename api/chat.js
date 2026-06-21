@@ -27,6 +27,7 @@ try {
     console.error("Supabase retrieval error:", error);
   } else {
     retrievedHistory = data || [];
+console.log("Retrieved history:", retrievedHistory);
   }
 
 } catch (err) {
@@ -142,7 +143,7 @@ Near the end, invite final comments and conclude politely.
 `;
 
 const interviewHistoryText = retrievedHistory
-  .map(item => `${item.speaker}: ${item.message}`)
+  .map(item => `${item.Speaker}: ${item.Message}`)
   .join("\n");
     
     const response = await openai.responses.create({
