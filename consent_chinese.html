@@ -76,7 +76,7 @@ function proceedToInterview() {
             return;
         }
     } else {
-        alert("请选择新参与者或返回参与者。");
+        alert("请选择新参与者或过往参与者。");
         return;
     }
     localStorage.setItem(
@@ -101,7 +101,7 @@ function proceedToInterview() {
 </p>
 <h2>参与者状态</h2>
 <p>
-如果您希望稍后继续访谈，请妥善保存您的参与者编号。返回参与者可通过输入相同的参与者编号继续之前的访谈。
+如果您希望稍后继续访谈，请妥善保存您的参与者编号。过往参与者可通过输入相同的参与者编号继续之前的访谈。
 </p>
 <div class="participant-section">
 <label>
@@ -118,12 +118,18 @@ function proceedToInterview() {
     id="returningParticipant"
     name="participantType"
     onchange="participantTypeChanged()">
-返回参与者
+过往参与者
 </label>
 <div id="participantIdBox">
 <p>
 参与者编号：
 </p>
+
+<input
+    type="text"
+    id="participantIdInput"
+    placeholder="请输入您的参与者编号">
+
 </div>
 <div id="generatedIdBox">
 <p>
