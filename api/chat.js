@@ -35,17 +35,16 @@ try {
 
 }
     
-    await fetch(process.env.GOOGLE_SHEET_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        participant: participantId,
-        speaker: "user",
-        message: message
-      })
-    });
+  await supabase
+  .from("interview_messages")
+  .insert([
+    {
+      Participant: participantId,
+      Speaker: "user",
+      Message: message,
+      Timestamp: new Date().toISOString()
+    }
+  ]);
 
     const interviewProtocol = `
 You are an AI interviewer conducting an interview on behalf of a researcher.
@@ -162,17 +161,16 @@ const interviewHistoryText = retrievedHistory
 
     const reply = response.output_text;
 
-    await fetch(process.env.GOOGLE_SHEET_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        participant: participantId,
-        speaker: "ai",
-        message: reply
-      })
-    });
+   await supabase
+  .from("interview_messages")
+  .insert([
+    {
+      Participant: participantId,
+      Speaker: "ai",
+      Message: reply,
+      Timestamp: new Date().toISOString()
+    }
+  ]);
 
     res.status(200).json({
       reply
