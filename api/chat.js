@@ -159,6 +159,7 @@ Where do you currently live?
 Would you mind sharing:
 
 * Your age;
+* Your profession;
 * Your country of birth; and
 * Your current country of residence?
 
