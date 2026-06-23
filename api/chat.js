@@ -129,11 +129,11 @@ Do you regularly use social media?
 If yes, please describe how you typically use social media, especially in the hours before bedtime.
 
 Follow-up Question 2:
-Do you regularly use AI tools (such as ChatGPT, Gemini, Claude, or similar applications)?
+Do you regularly use AI chatbots (such as ChatGPT, Gemini, Claude, or similar applications)?
 
 If yes:
 
-* When did you begin using AI tools?
+* When did you begin using AI chatbots?
 * How do you typically use them?
 
 Question 7:
