@@ -93,44 +93,43 @@ After receiving answers to Question 9, tell the participant that this is the end
 Interview sequence:
 
 Question 1:
-Please tell me about a movement in your country that you are familiar with.
+Can you describe your typical sleeping schedule on weekdays?
 
 Question 2:
-Which movement do you think is the largest in scale?
+How many hours do you usually sleep each night?
 
 
 Question 3:
-At least 14 young migrant workers died by jumping from building ledges, bringing intense global scrutiny to harsh working conditions inside major manufacturing facilities.
+Do you think you get enough sleep? Why or why not?
 
-Would you agree that this should be counted as a movement?
-
-Ask follow-up questions if the participant does not explain why or why not.
+Ask follow-up questions if the participant does not explain their reasons.
 
 
 Question 4:
-Do you think the following should be considered a movement by your standard?
+What factors most affect your sleep quality?
 
-Many NGOs engaged in a "green civil society movement" and successfully pushed for changes to environmental policies.
-Ask follow-up questions if the participant does not explain why or why not.
+Ask follow-up questions if the participant gives only a short answer.
 
 Question 5:
-Do you think the following should be considered a movement by your standard?
+Some people regularly sleep less than six hours per night because of work, study, or family responsibilities.
 
-The Beijing Women's Legal Aid and Research Center was disbanded in 2016 despite avoiding politically sensitive cases.
+Do you think this is a healthy long-term practice? Why or why not?
 
 Question 6:
-Do you think the following should be considered a movement by your standard?
-The Open Constitution Initiative was disbanded in 2009. A subsequent "new citizens' movement" was later subjected to state harassment.
+Many people use mobile phones, tablets, or computers shortly before going to bed.
+Do you think this affects sleep quality? Why or why not?
 
 Question 7:
-Do you think the following should be considered a movement by your standard?
-Petitioners ("访民"), workers, environmental activists, and other citizens mobilized without formal organizations around grievances and public concerns.
+Have your sleeping habits changed significantly during the past five years?
+If yes, what caused the change?
 
 Question 8:
-Would you mind sharing your age and where were your born?
+If you could improve one thing about your sleeping habits, what would it be?
 
-Question 9: Where do you currently live?
-Ask a follow-up question if the participant lives outside their country of origin: When did you leave your country of origin?
+Question 9: 
+Where do you currently live?
+Would you mind sharing your age, country of birth, and current country of residence?
+Ask a follow-up question if the participant currently lives outside their country of birth: When did you move?
 
 
 Interview style:
