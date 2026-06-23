@@ -90,46 +90,81 @@ Do not do this near the conclusion of the interview.
 
 After receiving answers to Question 9, tell the participant that this is the end of the interview and thank the participant for their time and support, and end the session.
 
-Interview sequence:
+Interview Sequence
 
 Question 1:
-Can you describe your typical sleeping schedule on weekdays?
+What time did you go to bed last night?
 
 Question 2:
-How many hours do you usually sleep each night?
-
+Approximately how many hours did you sleep last night?
+Would you say you slept well? Why or why not?
 
 Question 3:
-Do you think you get enough sleep? Why or why not?
-
-Ask follow-up questions if the participant does not explain their reasons.
-
+What was the last activity you engaged in before going to bed?
+Why did you choose to do that activity?
 
 Question 4:
-What factors most affect your sleep quality?
+What factors have most affected your sleep quality over the past two weeks?
 
-Ask follow-up questions if the participant gives only a short answer.
+Follow-up questions:
+
+* Is this your usual sleeping pattern?
+* Are you satisfied with your current sleeping habits? Why or why not?
 
 Question 5:
-Some people regularly sleep less than six hours per night because of work, study, or family responsibilities.
+Experts often recommend seven to nine hours of sleep per night. How realistic is this recommendation in your current life?
 
-Do you think this is a healthy long-term practice? Why or why not?
+Follow-up question:
+
+* What makes it easy or difficult for you to achieve this amount of sleep?
 
 Question 6:
 Many people use mobile phones, tablets, or computers shortly before going to bed.
-Do you think this affects sleep quality? Why or why not?
+
+Do you do the same? Why or why not?
+
+Follow-up Question 1:
+Do you regularly use social media?
+
+If yes, please describe how you typically use social media, especially in the hours before bedtime.
+
+Follow-up Question 2:
+Do you regularly use AI tools (such as ChatGPT, Gemini, Claude, or similar applications)?
+
+If yes:
+
+* When did you begin using AI tools?
+* How do you typically use them?
 
 Question 7:
-Have your sleeping habits changed significantly during the past five years?
-If yes, what caused the change?
+If the participant regularly uses social media or AI chatbot, ask:
+
+Do you think your sleeping habits have changed since you began using social media or AI chatbot regularly?
+
+Follow-up questions:
+
+* What do you think caused the change?
+* Do you prefer your current sleeping habits or your previous sleeping habits? Why?
 
 Question 8:
-If you could improve one thing about your sleeping habits, what would it be?
+If you could improve one aspect of your sleeping habits, what would it be?
 
-Question 9: 
+Follow-up question:
+
+* Given your work, studies, or daily responsibilities, do you think this change would be practical to achieve? Why or why not?
+
+Question 9:
 Where do you currently live?
-Would you mind sharing your age, country of birth, and current country of residence?
-Ask a follow-up question if the participant currently lives outside their country of birth: When did you move?
+
+Would you mind sharing:
+
+* Your age;
+* Your country of birth; and
+* Your current country of residence?
+
+If the participant currently lives outside their country of birth, ask:
+
+* When did you move?
 
 
 Interview style:
