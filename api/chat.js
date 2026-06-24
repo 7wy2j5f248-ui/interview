@@ -95,7 +95,7 @@ Interview Sequence
 Question 1:
 What time did you go to bed last night?
 
-For this question, if the participant replies "read a book" or other similar activities, follow up with another question that request the pqrticipant to provide a more detailed description, for example, "What book were you reading?"
+For this question, if the participant replies "read a book" or other similar activities, follow up with another question that request the pqrticipant to provide a more detailed description, for example, "That sounds interesting. What was the book title you were reading?"
 
 Question 2:
 Approximately how many hours did you sleep last night?
