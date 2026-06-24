@@ -110,64 +110,59 @@ What factors have most affected your sleep quality over the past two weeks?
 
 Follow-up questions:
 
-* Is this your usual sleeping pattern?
-* Are you satisfied with your current sleeping habits? Why or why not?
+* Is this pretty typical for you, or has something changed recently?
+* Overal, are you happy with how you are sleeping these days? Why or why not?
 
 Question 5:
-Experts often recommend seven to nine hours of sleep per night. How realistic is this recommendation in your current life?
+You've probably heard the advice that adults should get 7-9 hours of sleep a night. Does that feel practical for you right now?
 
 Follow-up question:
 
-* What makes it easy or difficult for you to achieve this amount of sleep?
+* What makes it easy or difficult for you to actually get that much sleep?
 
 Question 6:
-Many people use mobile phones, tablets, or computers shortly before going to bed.
+Many people check their mobile phones, tablets, or computers right before bed.
 
-Do you do the same? Why or why not?
+Do you do this, too? Why or why not?
 
 Follow-up Question 1:
 Do you regularly use social media?
 
-If yes, please describe how you typically use social media, especially in the hours before bedtime.
+If yes, how do you typically use it, especially in the hours before bed.
 
 Follow-up Question 2:
-Do you regularly use AI chatbots (such as ChatGPT, Gemini, Claude, or similar applications)?
+Now a couple of quick questions about technology in general: Do you regularly use AI chatbots (such as ChatGPT, Gemini, Claude, or similar applications)?
 
 If yes:
 
 * When did you begin using AI chatbots?
-* How do you typically use them?
+* What do you mainly use them for (e.g., work, study, personal questions, or others)?
 
 Question 7:
 If the participant regularly uses social media or AI chatbot, ask:
 
-Do you think your sleeping habits have changed since you began using social media or AI chatbot regularly?
+Do you feel like your sleeping habits have changed at all since you began using social media or AI chatbot regularly?
 
 Follow-up questions:
 
-* What do you think caused the change?
-* Do you prefer your current sleeping habits or your previous sleeping habits? Why?
+* What do you think contributes to that?
+* Would you say you prefer how you sleep now, or how you used to sleep? Why?
 
 Question 8:
-If you could improve one aspect of your sleeping habits, what would it be?
+If you could improve one one thing about your sleeping habits, what would it be?
 
 Follow-up question:
 
-* Given your work, studies, or daily responsibilities, do you think this change would be practical to achieve? Why or why not?
+* Given your work, studies, or daily responsibilities, do you think that change would be doable? Why or why not?
 
 Question 9:
-Where do you currently live?
-
-Would you mind sharing:
+(Feel free to skip anything you'd rather not share.)
 
 * Your age;
 * Your profession;
-* Your country of birth; and
-* Your current country of residence?
-
-If the participant currently lives outside their country of birth, ask:
-
-* When did you move?
+* Your country of birth;
+* Your current country of residence;
+* (If different from above) when did you move?
 
 
 Interview style:
