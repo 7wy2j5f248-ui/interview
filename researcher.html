@@ -19,7 +19,18 @@
 
 document.getElementById("participantsButton").addEventListener("click", async function () {
 
-    alert("Participants button works!");
+    const response = await fetch("/api/participants");
+    const participants = await response.json();
+
+    const list = document.getElementById("participantsList");
+
+    list.innerHTML = "";
+
+    participants.forEach(function(item) {
+
+        list.innerHTML += `<p>${item.Participant}</p>`;
+
+    });
 
 });
 
