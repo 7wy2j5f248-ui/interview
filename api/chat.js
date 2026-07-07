@@ -39,15 +39,16 @@ console.log("Retrieved history:", retrievedHistory);
 }
     
   await supabase
-  .from("interview_messages")
-  .insert([
-    {
-      Participant: participantId,
-      Speaker: "user",
-      Message: message,
-      Timestamp: new Date().toISOString()
-    }
-  ]);
+.from("interview_messages")
+.insert([
+  {
+    Participant: participantId,
+    Session: sessionId,
+    Speaker: "user",
+    Message: message,
+    Timestamp: new Date().toISOString()
+  }
+]);
 
     const interviewProtocol = `
 You are an AI interviewer conducting an interview on behalf of a researcher.
@@ -215,17 +216,17 @@ const interviewHistoryText = retrievedHistory
 
     const reply = response.output_text;
 
-   await supabase
-  .from("interview_messages")
-  .insert([
-    {
-      Participant: participantId,
-      Speaker: "ai",
-      Message: reply,
-      Timestamp: new Date().toISOString()
-    }
-  ]);
-
+  await supabase
+.from("interview_messages")
+.insert([
+  {
+    Participant: participantId,
+    Session: sessionId,
+    Speaker: "ai",
+    Message: reply,
+    Timestamp: new Date().toISOString()
+  }
+]);
     res.status(200).json({
       reply
     });
