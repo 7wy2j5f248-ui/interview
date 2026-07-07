@@ -58,7 +58,7 @@ const uniqueSessions = [...new Set(sessions.map(item => item.Session))];
 uniqueSessions.forEach(function(session) {
 
     if (session) {
-        sessionList.innerHTML += `<p>${session}</p>`;
+        sessionList.innerHTML += `<p><button class="sessionButton" data-id="${session}">${session}</button></p>`;
     }
 
 });
