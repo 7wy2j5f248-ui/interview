@@ -53,6 +53,10 @@ const participantId =
 
 localStorage.setItem("participantId", participantId);
 
+const sessionId = "S" + Date.now();
+
+sessionStorage.setItem("sessionId", sessionId);
+    
 async function sendMessage() {
 
     const messageBox = document.getElementById("message");
@@ -75,11 +79,13 @@ async function sendMessage() {
         headers: {
             "Content-Type": "application/json"
         },
+  
         body: JSON.stringify({
-            participantId,
-            message,
-            history
-        })
+    participantId,
+    sessionId,
+    message,
+    history
+})
     });
 
     const data = await response.json();
