@@ -30,7 +30,7 @@ document.getElementById("participantsButton").addEventListener("click", async fu
 
 uniqueParticipants.forEach(function(participant) {
 
-    list.innerHTML += `<p>${participant}</p>`;
+ list.innerHTML += `<p><button class="participantButton" data-id="${participant}">${participant}</button></p>`;   
 
 });
 
