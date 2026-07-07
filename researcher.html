@@ -26,11 +26,13 @@ document.getElementById("participantsButton").addEventListener("click", async fu
 
     list.innerHTML = "";
 
-    participants.forEach(function(item) {
+   const uniqueParticipants = [...new Set(participants.map(item => item.Participant))];
 
-        list.innerHTML += `<p>${item.Participant}</p>`;
+uniqueParticipants.forEach(function(participant) {
 
-    });
+    list.innerHTML += `<p>${participant}</p>`;
+
+});
 
 });
 
