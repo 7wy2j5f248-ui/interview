@@ -33,7 +33,15 @@ uniqueParticipants.forEach(function(participant) {
  list.innerHTML += `<p><button class="participantButton" data-id="${participant}">${participant}</button></p>`;   
 
 });
+document.querySelectorAll(".participantButton").forEach(function(button) {
 
+    button.addEventListener("click", function() {
+
+        alert(button.dataset.id);
+
+    });
+
+});
 });
 
 </script>
