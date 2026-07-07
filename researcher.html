@@ -17,7 +17,58 @@
     <div id="participantsList"></div>
 
 <div id="sessionsList"></div>
+
+    <div id="messagesList"></div>
+    
 <script>
+
+async function loadMessages(sessionId) {
+
+    const response = await fetch("/api/messages?session=" + sessionId);
+    const messages = await response.json();
+
+    const messageList = document.getElementById("messagesList");
+
+    messageList.innerHTML = "";
+
+    messages.forEach(function(item) {
+
+        messageList.innerHTML += `<p><strong>${item.Speaker}:</strong> ${item.Message}</p>`;
+
+    });
+
+}
+
+async function loadSessions(participantId) {
+
+    const response = await fetch("/api/sessions?participant=" + participantId);
+    const sessions = await response.json();
+
+    const sessionList = document.getElementById("sessionsList");
+
+    sessionList.innerHTML = "";
+
+    const uniqueSessions = [...new Set(sessions.map(item => item.Session))];
+
+    uniqueSessions.forEach(function(session) {
+
+        if (session) {
+            sessionList.innerHTML += `<p><button class="sessionButton" data-id="${session}">${session}</button></p>`;
+        }
+
+    });
+
+    document.querySelectorAll(".sessionButton").forEach(function(button) {
+
+        button.addEventListener("click", function() {
+
+            loadMessages(button.dataset.id);
+
+        });
+
+    });
+
+}
 
 document.getElementById("participantsButton").addEventListener("click", async function () {
 
@@ -27,44 +78,30 @@ document.getElementById("participantsButton").addEventListener("click", async fu
     const list = document.getElementById("participantsList");
 
     list.innerHTML = "";
+    document.getElementById("sessionsList").innerHTML = "";
+    document.getElementById("messagesList").innerHTML = "";
 
-   const uniqueParticipants = [...new Set(participants.map(item => item.Participant))];
+    const uniqueParticipants = [...new Set(participants.map(item => item.Participant))];
 
-uniqueParticipants.forEach(function(participant) {
+    uniqueParticipants.forEach(function(participant) {
 
- list.innerHTML += `<p><button class="participantButton" data-id="${participant}">${participant}</button></p>`;   
+        list.innerHTML += `<p><button class="participantButton" data-id="${participant}">${participant}</button></p>`;
 
-});
-document.querySelectorAll(".participantButton").forEach(function(button) {
-
-    button.addEventListener("click", function() {
-
-        loadSessions(button.dataset.id);
-        });
     });
-    
-async function loadSessions(participantId) {
 
-    const response = await fetch("/api/sessions?participant=" + participantId);
+    document.querySelectorAll(".participantButton").forEach(function(button) {
 
-    const sessions = await response.json();
+        button.addEventListener("click", function() {
 
-   const sessionList = document.getElementById("sessionsList");
+            loadSessions(button.dataset.id);
 
-sessionList.innerHTML = "";
+        });
 
-const uniqueSessions = [...new Set(sessions.map(item => item.Session))];
-
-uniqueSessions.forEach(function(session) {
-
-    if (session) {
-        sessionList.innerHTML += `<p><button class="sessionButton" data-id="${session}">${session}</button></p>`;
-    }
+    });
 
 });
 
-}
-  });  
 </script>
+    
 </body>
 </html>
