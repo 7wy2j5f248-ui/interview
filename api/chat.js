@@ -14,7 +14,7 @@ export default async function handler(req, res) {
     const history = req.body.history || [];
     const participantId = req.body.participantId || "anonymous";
 const sessionId = req.body.sessionId || "unknown";
-    
+    const language = req.body.language || "en";
 let retrievedHistory = [];
 
 try {
@@ -41,13 +41,14 @@ console.log("Retrieved history:", retrievedHistory);
   await supabase
 .from("interview_messages")
 .insert([
-  {
+ {
     Participant: participantId,
     Session: sessionId,
+    Language: language,
     Speaker: "user",
     Message: message,
     Timestamp: new Date().toISOString()
-  }
+}
 ]);
 
     const interviewProtocol = `
@@ -222,6 +223,7 @@ const interviewHistoryText = retrievedHistory
   {
     Participant: participantId,
     Session: sessionId,
+    Language: language,
     Speaker: "ai",
     Message: reply,
     Timestamp: new Date().toISOString()
