@@ -13,6 +13,8 @@ export default async function handler(req, res) {
     const message = req.body.message || "";
     const history = req.body.history || [];
     const participantId = req.body.participantId || "anonymous";
+const sessionId = req.body.sessionId || "unknown";
+    
 let retrievedHistory = [];
 
 try {
