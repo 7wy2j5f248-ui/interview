@@ -37,13 +37,20 @@ document.querySelectorAll(".participantButton").forEach(function(button) {
 
     button.addEventListener("click", function() {
 
-        alert(button.dataset.id);
-
+        loadSessions(button.dataset.id);
+        });
     });
+    
+async function loadSessions(participantId) {
 
-});
-});
+    const response = await fetch("/api/sessions?participant=" + participantId);
 
+    const sessions = await response.json();
+
+    console.log(sessions);
+
+}
+  });  
 </script>
 </body>
 </html>
