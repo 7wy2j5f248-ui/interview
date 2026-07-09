@@ -118,17 +118,26 @@ Thank you for considering participation in this research project.
 
 <script>
 async function loadTranslations() {
-    const language = localStorage.getItem("language") || "en";
+    try {
+        const language = localStorage.getItem("language") || "en";
+        console.log("Language:", language);
 
-    const response = await fetch(`translations/${language}.json`);
-    const t = await response.json();
+        const response = await fetch(`translations/${language}.json`);
+        console.log("Response:", response.status);
 
-    document.getElementById("welcomeTitle").textContent = t.welcome_title;
-    document.getElementById("welcomeIntro").textContent = t.welcome_intro;
-document.getElementById("welcomeProcess").textContent = t.welcome_process;
-document.getElementById("welcomeVoluntary").textContent = t.welcome_voluntary;
-    document.getElementById("welcomeMessage").textContent = t.welcome_message;
-    document.getElementById("continueButton").textContent = t.continue;
+        const t = await response.json();
+
+        document.getElementById("welcomeTitle").textContent = t.welcome_title;
+        document.getElementById("welcomeIntro").textContent = t.welcome_intro;
+        document.getElementById("welcomeProcess").textContent = t.welcome_process;
+        document.getElementById("welcomeVoluntary").textContent = t.welcome_voluntary;
+        document.getElementById("welcomeMessage").textContent = t.welcome_message;
+        document.getElementById("continueButton").textContent = t.continue;
+
+    } catch (error) {
+        console.error(error);
+        alert(error.message);
+    }
 }
 
 loadTranslations();
