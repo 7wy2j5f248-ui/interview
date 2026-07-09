@@ -89,31 +89,32 @@
 
 <div class="container">
 
-<h1 id="appTitle">Welcome to Interview Quest</h1>
+<h1 id="welcomeTitle">Welcome to Interview Quest</h1>
 
-<p>
+<p id="welcomeIntro">
 This research project aims to understand people's sleeping habits through AI-mediated interviews.
 </p>
 
-<p>
+<p id="welcomeProcess">
 The interview is text-based and asynchronous. You may complete the interview at your own pace.
 </p>
 
-<p>
+<p id="welcomeVoluntary">
 Your participation is voluntary. The interviewer will not judge, teach, persuade, or evaluate your opinions. We are interested in understanding your experiences and perspectives.
 </p>
 
-<p>
+<p id="welcomeMessage">
 Thank you for considering participation in this research project.
 </p>
 
 <a href="consent.html">
 
-<button>Continue</button>
+<button id="continueButton">Continue</button>
 
 </a>
 
 </div>
+
 
 <script>
 async function loadTranslations() {
@@ -122,7 +123,10 @@ async function loadTranslations() {
     const response = await fetch(`translations/${language}.json`);
     const t = await response.json();
 
-    document.getElementById("appTitle").textContent = t.app_title;
+    document.getElementById("welcomeTitle").textContent = t.welcome_title;
+    document.getElementById("welcomeIntro").textContent = t.welcome_intro;
+document.getElementById("welcomeProcess").textContent = t.welcome_process;
+document.getElementById("welcomeVoluntary").textContent = t.welcome_voluntary;
     document.getElementById("welcomeMessage").textContent = t.welcome_message;
     document.getElementById("continueButton").textContent = t.continue;
 }
