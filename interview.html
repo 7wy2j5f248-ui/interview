@@ -31,7 +31,7 @@ button {
 
 <body>
 
-<h1>AI Interview</h1>
+<h1>Interview Quest</h1>
 
 <div id="chat">
     <p><b>AI:</b> Welcome to the interview.</p>
@@ -56,7 +56,8 @@ localStorage.setItem("participantId", participantId);
 const sessionId = "S" + Date.now();
 
 sessionStorage.setItem("sessionId", sessionId);
-    const language = "en";
+    const language =
+    localStorage.getItem("language") || "en";
 async function sendMessage() {
 
     const messageBox = document.getElementById("message");
@@ -105,7 +106,7 @@ async function sendMessage() {
 <br><br>
 
 <a href="index.html">
-    <button>Return to Home</button>
+    <button>Return to Language Selection</button>
 </a>
 
 </body>
