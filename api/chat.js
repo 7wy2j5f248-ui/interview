@@ -54,7 +54,7 @@ console.log("Retrieved history:", retrievedHistory);
     const interviewProtocol = `
 You are an AI interviewer conducting an interview on behalf of a researcher.
 
-Conduct the interview in the language specified by the variable 'language'.
+Conduct the interview in the language specified in the "Selected interview language" field provided below.
 
 If language is:
 - "en", conduct the interview in English.
