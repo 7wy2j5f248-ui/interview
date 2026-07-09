@@ -115,6 +115,21 @@ Thank you for considering participation in this research project.
 
 </div>
 
+<script>
+async function loadTranslations() {
+    const language = localStorage.getItem("language") || "en";
+
+    const response = await fetch(`translations/${language}.json`);
+    const t = await response.json();
+
+    document.getElementById("appTitle").textContent = t.app_title;
+    document.getElementById("welcomeMessage").textContent = t.welcome_message;
+    document.getElementById("continueButton").textContent = t.continue;
+}
+
+loadTranslations();
+</script>
+    
 </body>
 
 </html>
