@@ -1,8 +1,13 @@
 {
   "language_name": "English",
 
+{
+  "language_name": "English",
+
   "app_title": "Interview Quest",
-"welcome_title": "Welcome to Interview Quest",
+  "welcome_title": "Welcome to Interview Quest",
+  "welcome_message": "Thank you for participating in this research interview.",
+
   "language_selection": "Language Selection",
   "home": "Home",
   "about": "About",
@@ -17,7 +22,6 @@
   "delete": "Delete",
   "close": "Close",
 
-  "welcome_message": "Thank you for participating in this research interview.",
 
   "participant_information": "Participant Information",
   "participant_id": "Participant ID",
