@@ -15,9 +15,27 @@
   "continue": "继续",
   "back": "返回",
   "send": "发送",
-  "agree": "我同意",
+"agree_button": "我同意",
 
-  "participant_information": "参与者信息",
+"consent_menu": "知情同意",
+
+"consent_title": "研究知情同意书",
+"consent_intro": "感谢您考虑参与本研究项目。",
+"consent_voluntary": "您的参与完全出于自愿。您可以在任何时候停止访谈，而不会受到任何影响。",
+"consent_privacy": "您的回答可能用于学术研究。除非您主动提供，否则不会收集任何可识别您身份的个人信息。",
+
+"participant_information_description": "如果您希望稍后继续访谈，请妥善保存您的参与者编号。再次访问本研究网站时，您可以输入相同的参与者编号继续之前的访谈。",
+
+"participant_id_placeholder": "请输入您的参与者编号",
+"generated_participant_id": "您的参与者编号：",
+"save_participant_id_message": "请保存此编号。如需稍后继续访谈，您将需要使用此编号。",
+
+"consent_agreement": "点击“我同意”即表示您已阅读并理解上述信息，并同意参与本研究。",
+
+"participant_id_required": "请输入您的参与者编号。",
+"participant_type_required": "请选择“新参与者”或“曾参与过本研究”。",
+
+"participant_information": "参与者信息",
   "participant_id": "参与者编号",
   "new_participant": "我是新参与者",
   "returning_participant": "我曾参与过本研究",
