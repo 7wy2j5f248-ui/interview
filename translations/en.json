@@ -2,20 +2,51 @@
   "language_name": "English",
 
   "app_title": "Interview Quest",
-  "welcome_message": "Thank you for participating in this research interview.",
+  "language_selection": "Language Selection",
+  "home": "Home",
+  "about": "About",
+  "help": "Help",
 
   "continue": "Continue",
   "back": "Back",
-  "send": "Send",
-  "agree": "I Agree",
+  "next": "Next",
+  "cancel": "Cancel",
+  "save": "Save",
+  "edit": "Edit",
+  "delete": "Delete",
+  "close": "Close",
+
+  "welcome_message": "Thank you for participating in this research interview.",
 
   "participant_information": "Participant Information",
   "participant_id": "Participant ID",
   "new_participant": "I am a new participant",
   "returning_participant": "I have participated before",
+  "consent": "Consent",
+  "agree": "I Agree",
 
-  "language_selection": "Language Selection",
-
+  "interview": "Interview",
   "interview_welcome": "Welcome to the interview.",
+  "send": "Send",
+  "ai": "AI",
+  "participant": "Participant",
+
+  "research_dashboard": "Research Dashboard",
+  "participants": "Participants",
+  "sessions": "Sessions",
+  "messages": "Messages",
+  "statistics": "Statistics",
+  "analytics": "Analytics",
+  "codes": "Codes",
+  "themes": "Themes",
+  "frequency": "Frequency",
+
+  "project": "Project",
+  "research_topic": "Research Topic",
+  "research_questions": "Research Questions",
+  "interview_protocol": "Interview Protocol",
+  "generate": "Generate",
+  "translation": "Translation",
+
   "return_language": "Return to Language Selection"
 }
