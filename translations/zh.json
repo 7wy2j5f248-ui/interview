@@ -3,7 +3,14 @@
 
 "app_title": "Interview Quest",
 "welcome_title": "欢迎来到 Interview Quest",
-  "welcome_message": "感谢您参与本研究访谈。",
+
+"welcome_intro": "本研究项目旨在通过人工智能辅助访谈了解人们的睡眠习惯。",
+
+"welcome_process": "本访谈采用文字形式，并可异步完成。您可以按照自己的时间安排完成访谈。",
+
+"welcome_voluntary": "您的参与完全出于自愿。AI 访谈员不会评判、说服、教育或评价您的观点。我们希望了解您的真实经历和看法。",
+
+"welcome_message": "感谢您考虑参与本研究项目。"
 
   "continue": "继续",
   "back": "返回",
