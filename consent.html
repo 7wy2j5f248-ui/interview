@@ -95,14 +95,14 @@ function proceedToInterview() {
             .trim();
 
         if (!participantId) {
-            alert("Please enter your Participant ID.");
+           alert(t.participant_id_required);
             return;
         }
 
     } else {
 
         alert(
-            "Please select New Participant or Returning Participant."
+            alert(t.participant_type_required);
         );
         return;
     }
@@ -211,6 +211,61 @@ I Agree
 Back
 </button>
 </a>
+<script>
+let t = {};
 
+async function loadTranslations() {
+
+    const language =
+        localStorage.getItem("language") || "en";
+
+    const response =
+        await fetch(`translations/${language}.json`);
+
+    t = await response.json();
+
+    document.title = t.consent_title;
+
+    document.getElementById("consentTitle").textContent = t.consent_title;
+    document.getElementById("consentIntro").textContent = t.consent_intro;
+    document.getElementById("consentVoluntary").textContent = t.consent_voluntary;
+    document.getElementById("consentPrivacy").textContent = t.consent_privacy;
+
+    document.getElementById("participantInformationTitle").textContent =
+        t.participant_information;
+
+    document.getElementById("participantInformationDescription").textContent =
+        t.participant_information_description;
+
+    document.getElementById("newParticipantLabel").textContent =
+        t.new_participant;
+
+    document.getElementById("returningParticipantLabel").textContent =
+        t.returning_participant;
+
+    document.getElementById("participantIdLabel").textContent =
+        t.participant_id;
+
+    document.getElementById("participantIdInput").placeholder =
+        t.participant_id_placeholder;
+
+    document.getElementById("generatedParticipantIdLabel").textContent =
+        t.generated_participant_id;
+
+    document.getElementById("saveParticipantIdMessage").textContent =
+        t.save_participant_id_message;
+
+    document.getElementById("consentAgreement").textContent =
+        t.consent_agreement;
+
+    document.getElementById("agreeButton").textContent =
+        t.agree_button;
+
+    document.getElementById("backButton").textContent =
+        t.back;
+}
+
+loadTranslations();
+</script>
 </body>
 </html>
