@@ -1,18 +1,21 @@
 {
   "language_name": "简体中文",
 
-  "welcome_title": "欢迎来到 Interview Quest",
+  "app_title": "Interview Quest",
   "welcome_message": "感谢您参与本研究访谈。",
-  "continue": "继续",
 
-  "participant_information": "参与者信息",
-  "new_participant": "我是新参与者",
-  "returning_participant": "我曾参与过本研究",
-  "participant_id": "参与者编号",
+  "continue": "继续",
+  "back": "返回",
+  "send": "发送",
   "agree": "我同意",
 
-  "interview_title": "Interview Quest",
-  "ai_welcome": "欢迎参加本次访谈。",
-  "send": "发送",
+  "participant_information": "参与者信息",
+  "participant_id": "参与者编号",
+  "new_participant": "我是新参与者",
+  "returning_participant": "我曾参与过本研究",
+
+  "language_selection": "语言选择",
+
+  "interview_welcome": "欢迎参加本次访谈。",
   "return_language": "返回语言选择"
 }
