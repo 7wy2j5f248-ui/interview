@@ -31,17 +31,20 @@ button {
 
 <body>
 
-<h1>Interview Quest</h1>
+<h1 id="interviewTitle">Interview Quest</h1>
 
 <div id="chat">
-    <p><b>AI:</b> Welcome to the interview.</p>
+    <p>
+    <b id="aiLabel">AI:</b>
+    <span id="interviewWelcome">Welcome to the interview.</span>
+</p>
 </div>
 
 <br>
 
 <textarea id="message" rows="4" style="width:100%; box-sizing:border-box; font-size:16px;"></textarea>
 
-<button onclick="sendMessage()">Send</button>
+<button id="sendButton" onclick="sendMessage()">Send</button>
 
 <script>
 
@@ -106,7 +109,9 @@ async function sendMessage() {
 <br><br>
 
 <a href="index.html">
-    <button>Return to Language Selection</button>
+   <button id="returnLanguageButton">
+    Return to Language Selection
+</button>
 </a>
 
 </body>
