@@ -1,18 +1,21 @@
 {
- {
   "language_name": "English",
-  "welcome_title": "Welcome to Interview Quest",
-  "welcome_message": "Thank you for participating in this research interview.",
-  "continue": "Continue",
 
-  "participant_information": "Participant Information",
-  "new_participant": "I am a new participant",
-  "returning_participant": "I have participated before",
-  "participant_id": "Participant ID",
+  "app_title": "Interview Quest",
+  "welcome_message": "Thank you for participating in this research interview.",
+
+  "continue": "Continue",
+  "back": "Back",
+  "send": "Send",
   "agree": "I Agree",
 
-  "interview_title": "Interview Quest",
-  "ai_welcome": "Welcome to the interview.",
-  "send": "Send",
+  "participant_information": "Participant Information",
+  "participant_id": "Participant ID",
+  "new_participant": "I am a new participant",
+  "returning_participant": "I have participated before",
+
+  "language_selection": "Language Selection",
+
+  "interview_welcome": "Welcome to the interview.",
   "return_language": "Return to Language Selection"
 }
