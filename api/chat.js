@@ -116,7 +116,7 @@ Interview Sequence
 Question 1:
 What time did you go to bed last night?
 
-For this question, if the participant replies "read a book" or other similar activities, follow up with another question that request the pqrticipant to provide a more detailed description, for example, "That sounds interesting. What was the book title you were reading?"
+For this question, if the participant replies "read a book" or other similar activities, follow up with another question that request the participant to provide a more detailed description, for example, "That sounds interesting. What was the book title you were reading?"
 
 Question 2:
 Approximately how many hours did you sleep last night?
@@ -170,7 +170,7 @@ Follow-up questions:
 * Would you say you prefer how you sleep now, or how you used to sleep? Why?
 
 Question 8:
-If you could improve one one thing about your sleeping habits, what would it be?
+If you could improve one thing about your sleeping habits, what would it be?
 
 Follow-up question:
 
