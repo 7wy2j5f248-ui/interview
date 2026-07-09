@@ -5,8 +5,15 @@
   "language_name": "English",
 
   "app_title": "Interview Quest",
-  "welcome_title": "Welcome to Interview Quest",
-  "welcome_message": "Thank you for participating in this research interview.",
+"welcome_title": "Welcome to Interview Quest",
+
+"welcome_intro": "This research project aims to understand people's sleeping habits through AI-mediated interviews.",
+
+"welcome_process": "The interview is text-based and asynchronous. You may complete the interview at your own pace.",
+
+"welcome_voluntary": "Your participation is voluntary. The interviewer will not judge, teach, persuade, or evaluate your opinions. We are interested in understanding your experiences and perspectives.",
+
+"welcome_message": "Thank you for considering participation in this research project.",
 
   "language_selection": "Language Selection",
   "home": "Home",
