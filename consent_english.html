@@ -113,14 +113,18 @@ function proceedToInterview() {
     );
 
     window.location.href =
-        "interview_english.html";
+        "interview.html";
 }
 </script>
 
 </head>
 
 <body>
-
+<script>
+const selectedLanguage = localStorage.getItem("language") || "en";
+console.log("Selected language:", selectedLanguage);
+</script>
+    
 <h1>Research Consent Form</h1>
 
 <p>
@@ -200,7 +204,7 @@ By clicking "I Agree", you indicate that you understand the information above an
 I Agree
 </button>
 
-<a href="english.html">
+<a href="welcome.html">
 <button type="button">
 Back
 </button>
