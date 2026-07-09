@@ -1,7 +1,8 @@
 {
   "language_name": "简体中文",
 
-  "app_title": "Interview Quest",
+"app_title": "Interview Quest",
+"welcome_title": "欢迎来到 Interview Quest",
   "welcome_message": "感谢您参与本研究访谈。",
 
   "continue": "继续",
