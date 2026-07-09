@@ -120,28 +120,25 @@ function proceedToInterview() {
 </head>
 
 <body>
-<script>
-const selectedLanguage = localStorage.getItem("language") || "en";
-console.log("Selected language:", selectedLanguage);
-</script>
-    
-<h1>Research Consent Form</h1>
 
-<p>
+    
+<h1 id="consentTitle">Research Consent Form</h1>
+
+<p id="consentIntro">
 Thank you for considering participation in this research project.
 </p>
 
-<p>
+<p id="consentVoluntary">
 Participation is voluntary. You may stop the interview at any time.
 </p>
 
-<p>
+<p id="consentPrivacy">
 Your responses may be used for research purposes. No personally identifying information will be collected unless you choose to provide it.
 </p>
 
-<h2>Participant Information</h2>
+<h2 id="participantInformationTitle">Participant Information</h2>
 
-<p>
+<p id="participantInformationDescription">
 If you wish to continue the interview later, please keep a record of your Participant ID. Returning participants may resume a previous interview by entering the same Participant ID when they revisit the study website.
 </p>
 
@@ -153,7 +150,9 @@ If you wish to continue the interview later, please keep a record of your Partic
     id="newParticipant"
     name="participantType"
     onchange="participantTypeChanged()">
+<span id="newParticipantLabel">
 New Participant
+</span>
 </label>
 
 <br><br>
@@ -164,31 +163,34 @@ New Participant
     id="returningParticipant"
     name="participantType"
     onchange="participantTypeChanged()">
+<span id="returningParticipantLabel">
 Returning Participant
+</span>
 </label>
 
 <div id="participantIdBox">
 
-<p>
+<p id="participantIdLabel">
 Participant ID:
 </p>
 
 <input
     type="text"
     id="participantIdInput"
-    placeholder="Enter your Participant ID">
+
+placeholder="Enter your Participant ID">
 
 </div>
 
 <div id="generatedIdBox">
 
-<p>
+<p id="generatedParticipantIdLabel">
 Your Participant ID:
 </p>
 
 <h3 id="generatedId"></h3>
 
-<p>
+<p id="saveParticipantIdMessage">
 Please save this ID. You will need it if you return later.
 </p>
 
@@ -196,16 +198,16 @@ Please save this ID. You will need it if you return later.
 
 </div>
 
-<p>
+<p id="consentAgreement">
 By clicking "I Agree", you indicate that you understand the information above and agree to participate.
 </p>
 
-<button onclick="proceedToInterview()">
+<button id="agreeButton" onclick="proceedToInterview()">
 I Agree
 </button>
 
 <a href="welcome.html">
-<button type="button">
+<button id="backButton" type="button">
 Back
 </button>
 </a>
