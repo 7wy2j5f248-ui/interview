@@ -8,9 +8,19 @@ export default async function handler(req, res) {
 return res.status(200).json({
   body: req.body
 });
-  const { error } = await supabase
+ const { error } = await supabase
   .from("research_designs")
-  .insert([design]);
+  .insert([{
+    research_title: design.researchTitle,
+    research_purpose: design.researchPurpose,
+    interview_topic: design.interviewTopic,
+    interview_questions: design.interviewQuestions,
+    ai_role: design.aiRole,
+    research_goal: design.researchGoal,
+    ending_message: design.endingMessage,
+    interview_question_count: Number(design.interviewQuestionCount),
+    maximum_interviewer_questions: Number(design.maximumInterviewerQuestions)
+  }]);
   if (error) {
   return res.status(500).json({ error: error.message });
 }
