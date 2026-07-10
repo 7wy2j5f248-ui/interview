@@ -120,6 +120,16 @@ Thank you for considering participation in this research project.
 async function loadTranslations() {
     try {
         const language = localStorage.getItem("language") || "en";
+
+        
+        if (language === "ar") {
+    document.documentElement.dir = "rtl";
+    document.documentElement.lang = "ar";
+} else {
+    document.documentElement.dir = "ltr";
+}
+     
+        
         console.log("Language:", language);
 
         const response = await fetch(`translations/${language}.json`);
