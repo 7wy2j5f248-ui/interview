@@ -54,19 +54,6 @@ console.log("Retrieved history:", retrievedHistory);
 const design = {
 
   const design = JSON.parse(localStorage.getItem("design"));
-  researchPurpose: "B",
-  interviewTopic: "C",
-
-  interviewQuestions: "D",
-
-  aiRole: "E",
-  researchGoal: "F",
-
-  endingMessage: "G",
-
-  interviewQuestionCount: "H",
-
-  maximumInterviewerQuestions: "I"
 
 };
 
