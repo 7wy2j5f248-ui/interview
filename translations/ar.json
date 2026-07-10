@@ -17,28 +17,37 @@
 "send": "إرسال",
 "agree_button": "أوافق",
 
-"consent_menu": "知情同意",
+"consent_menu": "الموافقة المستنيرة",
 
-"consent_title": "研究知情同意书",
-"consent_intro": "感谢您考虑参与本研究项目。",
-"consent_voluntary": "您的参与完全出于自愿。您可以在任何时候停止访谈，而不会受到任何影响。",
-"consent_privacy": "您的回答可能用于学术研究。除非您主动提供，否则不会收集任何可识别您身份的个人信息。",
+"consent_title": "نموذج الموافقة المستنيرة للمشاركة في البحث",
 
-"participant_information_description": "如果您希望稍后继续访谈，请妥善保存您的参与者编号。再次访问本研究网站时，您可以输入相同的参与者编号继续之前的访谈。",
+"consent_intro": "شكرًا لك على التفكير في المشاركة في هذا المشروع البحثي.",
 
-"participant_id_placeholder": "请输入您的参与者编号",
-"generated_participant_id": "您的参与者编号：",
-"save_participant_id_message": "请保存此编号。如需稍后继续访谈，您将需要使用此编号。",
+"consent_voluntary": "مشاركتك طوعية بالكامل. يمكنك إنهاء المقابلة في أي وقت دون أي عواقب.",
 
-"consent_agreement": "点击“我同意”即表示您已阅读并理解上述信息，并同意参与本研究。",
+"consent_privacy": "قد تُستخدم إجاباتك لأغراض البحث الأكاديمي. لن يتم جمع أي معلومات شخصية يمكن أن تحدد هويتك إلا إذا اخترت تقديمها.",
 
-"participant_id_required": "请输入您的参与者编号。",
-"participant_type_required": "请选择“新参与者”或“曾参与过本研究”。",
+"participant_information_description": "إذا كنت ترغب في متابعة المقابلة لاحقًا، يرجى الاحتفاظ بمعرّف المشارك الخاص بك. عند العودة إلى هذا الموقع، يمكنك إدخال نفس المعرّف لمتابعة المقابلة السابقة.",
 
-"participant_information": "参与者信息",
-  "participant_id": "参与者编号",
-  "new_participant": "我是新参与者",
-  "returning_participant": "我曾参与过本研究",
+"participant_id_placeholder": "يرجى إدخال معرّف المشارك",
+
+"generated_participant_id": "معرّف المشارك الخاص بك:",
+
+"save_participant_id_message": "يرجى حفظ هذا المعرّف. ستحتاج إليه إذا أردت متابعة المقابلة لاحقًا.",
+
+"consent_agreement": "بالنقر على «أوافق»، فإنك تؤكد أنك قرأت وفهمت المعلومات أعلاه وتوافق على المشاركة في هذا البحث.",
+
+"participant_id_required": "يرجى إدخال معرّف المشارك.",
+
+"participant_type_required": "يرجى اختيار «مشارك جديد» أو «شاركت في هذه الدراسة من قبل».",
+
+"participant_information": "معلومات المشارك",
+
+"participant_id": "معرّف المشارك",
+
+"new_participant": "أنا مشارك جديد",
+
+"returning_participant": "لقد شاركت في هذه الدراسة من قبل"
 
  "language_selection": "语言选择",
 
