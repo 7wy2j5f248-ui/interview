@@ -5,7 +5,10 @@ const supabase = createClient(
   process.env.SUPABASE_ANON_KEY
 );
 export default async function handler(req, res) {
-const design = req.body;
+const design =
+  typeof req.body === "string" ? JSON.parse(req.body) : req.body;
+
+console.log("design =", design);
   const { error } = await supabase
   .from("research_designs")
   .insert([design]);
