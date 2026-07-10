@@ -53,7 +53,7 @@ console.log("Retrieved history:", retrievedHistory);
 
 const design = {
 
-  researchTitle: "A",
+  const design = JSON.parse(localStorage.getItem("design"));
   researchPurpose: "B",
   interviewTopic: "C",
 
