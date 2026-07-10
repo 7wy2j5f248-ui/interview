@@ -40,8 +40,10 @@
   "new_participant": "我是新参与者",
   "returning_participant": "我曾参与过本研究",
 
-  "language_selection": "语言选择",
+ "language_selection": "语言选择",
 
-  "interview_welcome": "欢迎参加本次访谈。",
-  "return_language": "返回语言选择"
+"interview_welcome": "欢迎参加本次访谈。",
+"participant": "参与者",
+"ai": "AI",
+"return_language": "返回语言选择"
 }
