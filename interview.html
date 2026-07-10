@@ -69,7 +69,7 @@ async function sendMessage() {
     if (!message) return;
 
     document.getElementById("chat").innerHTML +=
-        "<p><b>You:</b> " + message + "</p>";
+        "<p><b>" + t.participant + ":</b> " + message + "</p>";
 
     history.push({
         role: "user",
