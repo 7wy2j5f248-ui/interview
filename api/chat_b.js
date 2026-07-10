@@ -50,10 +50,7 @@ console.log("Retrieved history:", retrievedHistory);
     Timestamp: new Date().toISOString()
 }
 ]);
-
-    const interviewProtocol = `
-You are an AI interviewer conducting an interview on behalf of a researcher.
-
+const languageInstructions = `
 Conduct the interview in the language specified in the "Selected interview language" field provided below.
 
 If language is:
@@ -72,7 +69,11 @@ If language is:
 
 
 Always ask questions and respond in the selected language unless the participant explicitly requests another language during the interview.
+`;
+    const interviewProtocol = `
+You are an AI interviewer conducting an interview on behalf of a researcher.
 
+${languageInstructions}
 
 Your goal is to understand the participant's views and understandings of the interview topic in their country of origin.
 
