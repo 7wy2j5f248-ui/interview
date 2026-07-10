@@ -56,14 +56,17 @@ const design = {
   researchTitle: "A",
   researchPurpose: "B",
   interviewTopic: "C",
-  researchQuestions: "D",
+
+  interviewQuestions: "D",
 
   aiRole: "E",
   researchGoal: "F",
 
-  interviewStyle: "G",
-  followUpStrategy: "H",
-  endingMessage: "I"
+  endingMessage: "G",
+
+  numberOfInterviewQuestions: "H",
+
+  maximumInterviewerQuestions: "I"
 
 };
 
@@ -154,7 +157,7 @@ The interview should contain no more than ${design.maximumQuestions} interviewer
 
 Near the end, invite final comments and conclude politely.
 `;
-After the participant has answered all interview questions, tell the participant that the interview has ended.
+
 const interviewHistoryText = retrievedHistory
   .map(item => `${item.Speaker}: ${item.Message}`)
   .join("\n");
