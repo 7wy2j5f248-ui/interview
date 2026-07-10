@@ -105,7 +105,42 @@ async function sendMessage() {
 }
 
 </script>
+<script>
 
+let t = {};
+
+async function loadTranslations() {
+
+    const language =
+        localStorage.getItem("language") || "en";
+
+    const response =
+        await fetch(`translations/${language}.json`);
+
+    t = await response.json();
+
+    document.title = t.app_title;
+
+    document.getElementById("interviewTitle").textContent =
+        t.app_title;
+
+    document.getElementById("aiLabel").textContent =
+        t.ai;
+
+    document.getElementById("interviewWelcome").textContent =
+        t.interview_welcome;
+
+    document.getElementById("sendButton").textContent =
+        t.send;
+
+    document.getElementById("returnLanguageButton").textContent =
+        t.return_language;
+
+}
+
+loadTranslations();
+
+</script>
 <br><br>
 
 <a href="index.html">
