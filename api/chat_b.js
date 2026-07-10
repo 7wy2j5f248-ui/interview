@@ -51,11 +51,16 @@ console.log("Retrieved history:", retrievedHistory);
 }
 ]);
 
-const design = {
+const { data: design, error: designError } = await supabase
+  .from("research_designs")
+  .select("*")
+  .order("created_at", { ascending: false })
+  .limit(1)
+  .single();
 
-  const design = JSON.parse(localStorage.getItem("design"));
-
-};
+  if (designError) {
+  throw designError;
+}
 
     const interviewProtocol = `
 You are an AI interviewer conducting an interview on behalf of a researcher.
