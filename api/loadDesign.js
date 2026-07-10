@@ -7,7 +7,10 @@ const supabase = createClient(
 export default async function handler(req, res) {
 const { data, error } = await supabase
   .from("research_designs")
-  .select("*");
+  .select("*")
+  .order("created_at", { ascending: false })
+  .limit(1)
+  .single();
 
   if (error) {
     return res.status(500).json({ error: error.message });
