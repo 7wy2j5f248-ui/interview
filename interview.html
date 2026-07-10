@@ -96,7 +96,7 @@ async function sendMessage() {
     const data = await response.json();
 
     document.getElementById("chat").innerHTML +=
-        "<p><b>AI:</b> " + data.reply + "</p>";
+        "<p><b>" + t.ai + ":</b> " + data.reply + "</p>";
 
     history.push({
         role: "assistant",
