@@ -22,6 +22,8 @@ document.getElementById("saveButton").addEventListener("click", function () {
 
     };
 
-    console.log(design);
+    localStorage.setItem("design", JSON.stringify(design));
+
+alert("Research design saved.");
 
 });
