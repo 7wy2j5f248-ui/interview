@@ -1,4 +1,4 @@
-document.getElementById("saveButton").addEventListener("click", function () {
+document.getElementById("saveButton").addEventListener("click", async function () {
 
     const design = {
 
@@ -22,8 +22,16 @@ document.getElementById("saveButton").addEventListener("click", function () {
 
     };
 
-    localStorage.setItem("design", JSON.stringify(design));
+    const response = await fetch("/api/saveDesign", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json"
+  },
+  body: JSON.stringify(design)
+});
 
-alert("Research design saved.");
+const result = await response.json();
+
+alert(result.message);
 
 });
