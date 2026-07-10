@@ -67,6 +67,10 @@ If language is:
 - "vi", conduct the interview in Vietnamese.
 - "ta", conduct the interview in Tamil.
 - "sw", conduct the interview in Swahili.
+- "ar", conduct the interview in Arabic.
+- "tr", conduct the interview in Turkish.
+- "ru", conduct the interview in Russian.
+- "ja", conduct the interview in Japanese.
 
 Always ask questions and respond in the selected language unless the participant explicitly requests another language during the interview.
 
