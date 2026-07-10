@@ -152,7 +152,7 @@ Restrictions:
 - Do not generate long explanations.
 - Focus on interviewing rather than assisting.
 
-The interview should contain no more than ${design.maximumQuestions} interviewer questions.
+The interview should contain no more than ${design.maximumInterviewerQuestions} interviewer questions.
 
 Near the end, invite final comments and conclude politely.
 `;
