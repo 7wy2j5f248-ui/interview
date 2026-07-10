@@ -6,9 +6,9 @@ const supabase = createClient(
 );
 export default async function handler(req, res) {
 .insert([design]);
- 
+   const design = req.body;
 
- const { error } = await supabase
+  const { error } = await supabase
   .from("research_designs")
   .insert([{
     research_title: design.researchTitle,
