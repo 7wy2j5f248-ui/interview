@@ -5,7 +5,7 @@ const supabase = createClient(
   process.env.SUPABASE_ANON_KEY
 );
 export default async function handler(req, res) {
-return res.status(200).json({
+.insert([design]);
   body: req.body
 });
  const { error } = await supabase
