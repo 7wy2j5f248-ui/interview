@@ -1,61 +1,49 @@
 {
-"language_name": "العربية",
+  "language_name": "العربية",
 
-  "app_title": "Interview Quest",
-"welcome_title": "Welcome to Interview Quest",
+"app_title": "Interview Quest",
+"welcome_title": "مرحبًا بكم في Interview Quest",
 
-"welcome_intro": "This research project aims to understand people's sleeping habits through AI-mediated interviews.",
+"welcome_intro": "يهدف هذا المشروع البحثي إلى فهم عادات النوم لدى الناس من خلال مقابلات مدعومة بالذكاء الاصطناعي.",
 
-"welcome_process": "The interview is text-based and asynchronous. You may complete the interview at your own pace.",
+"welcome_process": "تُجرى هذه المقابلة كتابةً ويمكن إكمالها بشكل غير متزامن. يمكنك إكمالها في الوقت الذي يناسبك.",
 
-"welcome_voluntary": "Your participation is voluntary. The interviewer will not judge, teach, persuade, or evaluate your opinions. We are interested in understanding your experiences and perspectives.",
+"welcome_voluntary": "مشاركتك طوعية بالكامل. لن يقوم محاور الذكاء الاصطناعي بالحكم على آرائك أو إقناعك أو تعليمك أو تقييمك. نود أن نفهم تجاربك وآراءك الحقيقية.",
 
-"welcome_message": "Thank you for considering participation in this research project.",
+"welcome_message": "شكرًا لك على التفكير في المشاركة في هذا المشروع البحثي.",
+  
+  "continue": "继续",
+  "back": "返回",
+  "send": "发送",
+"agree_button": "我同意",
 
-  "language_selection": "Language Selection",
-  "home": "Home",
-  "about": "About",
-  "help": "Help",
+"consent_menu": "知情同意",
 
-  "continue": "Continue",
-  "back": "Back",
-  "next": "Next",
-  "cancel": "Cancel",
-  "save": "Save",
-  "edit": "Edit",
-  "delete": "Delete",
-  "close": "Close",
+"consent_title": "研究知情同意书",
+"consent_intro": "感谢您考虑参与本研究项目。",
+"consent_voluntary": "您的参与完全出于自愿。您可以在任何时候停止访谈，而不会受到任何影响。",
+"consent_privacy": "您的回答可能用于学术研究。除非您主动提供，否则不会收集任何可识别您身份的个人信息。",
 
+"participant_information_description": "如果您希望稍后继续访谈，请妥善保存您的参与者编号。再次访问本研究网站时，您可以输入相同的参与者编号继续之前的访谈。",
 
-  "participant_information": "Participant Information",
-  "participant_id": "Participant ID",
-  "new_participant": "I am a new participant",
-  "returning_participant": "I have participated before",
-  "consent": "Consent",
-  "agree": "I Agree",
+"participant_id_placeholder": "请输入您的参与者编号",
+"generated_participant_id": "您的参与者编号：",
+"save_participant_id_message": "请保存此编号。如需稍后继续访谈，您将需要使用此编号。",
 
-  "interview": "Interview",
-  "interview_welcome": "Welcome to the interview.",
-  "send": "Send",
-  "ai": "AI",
-  "participant": "Participant",
+"consent_agreement": "点击“我同意”即表示您已阅读并理解上述信息，并同意参与本研究。",
 
-  "research_dashboard": "Research Dashboard",
-  "participants": "Participants",
-  "sessions": "Sessions",
-  "messages": "Messages",
-  "statistics": "Statistics",
-  "analytics": "Analytics",
-  "codes": "Codes",
-  "themes": "Themes",
-  "frequency": "Frequency",
+"participant_id_required": "请输入您的参与者编号。",
+"participant_type_required": "请选择“新参与者”或“曾参与过本研究”。",
 
-  "project": "Project",
-  "research_topic": "Research Topic",
-  "research_questions": "Research Questions",
-  "interview_protocol": "Interview Protocol",
-  "generate": "Generate",
-  "translation": "Translation",
+"participant_information": "参与者信息",
+  "participant_id": "参与者编号",
+  "new_participant": "我是新参与者",
+  "returning_participant": "我曾参与过本研究",
 
-  "return_language": "Return to Language Selection"
+ "language_selection": "语言选择",
+
+"interview_welcome": "欢迎参加本次访谈。",
+"participant": "参与者",
+"ai": "AI",
+"return_language": "返回语言选择"
 }
