@@ -48,11 +48,12 @@
 "new_participant": "أنا مشارك جديد",
 
 "returning_participant": "لقد شاركت في هذه الدراسة من قبل",
+"language_selection": "اختيار اللغة",
 
- "language_selection": "语言选择",
+"interview_welcome": "مرحبًا بك في هذه المقابلة.",
 
-"interview_welcome": "欢迎参加本次访谈。",
-"participant": "参与者",
+"participant": "المشارك",
+
 "ai": "AI",
-"return_language": "返回语言选择"
+"return_language": "العودة إلى اختيار اللغة"
 }
