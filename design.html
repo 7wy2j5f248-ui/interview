@@ -1,52 +1,58 @@
+<div style="max-width:900px;margin:40px auto;padding:20px;font-family:Arial,sans-serif;line-height:1.6;">
 <h1>Research Design</h1>
 <p>Complete the fields below to define how the AI interviewer should conduct your research interview. These settings will be used to generate the interview protocol automatically.</p>
-
+<div style="border:1px solid #ddd;border-radius:8px;padding:20px;margin-bottom:24px;">
 <h2>Research Information</h2>
 
-<label for="researchTitle"><strong>Research Title</strong></label>
+<input type="text" id="researchTitle" placeholder="Enter the research title" style="width:100%;padding:10px;margin-bottom:16px;box-sizing:border-box;">
 <p>Name of your research project.</p>
 <input type="text" id="researchTitle" placeholder="Enter the research title">
 
-<label for="researchPurpose"><strong>Research Purpose</strong></label>
+<textarea id="researchPurpose" rows="4" placeholder="Describe the purpose of the research." style="width:100%;padding:10px;margin-bottom:16px;box-sizing:border-box;"></textarea>
 <p>Briefly describe the purpose of this research. This is for documentation and future reference.</p>
 <textarea id="researchPurpose" rows="4" placeholder="Describe the purpose of the research."></textarea>
 
 <label for="interviewTopic"><strong>Interview Topic</strong></label>
 <p>State the topic that the interview will explore.</p>
-<input type="text" id="interviewTopic" placeholder="Enter the interview topic">
-
+<input type="text" id="interviewTopic" placeholder="Enter the interview topic" style="width:100%;padding:10px;margin-bottom:16px;box-sizing:border-box;">
+ </div>
+<div style="border:1px solid #ddd;border-radius:8px;padding:20px;margin-bottom:24px;">
 <h2>AI Interview Configuration</h2>
 
 <label for="aiRole"><strong>AI Role</strong></label>
 <p>Describe the role the AI interviewer should perform.</p>
-<textarea id="aiRole" rows="6" placeholder="Example: You are a neutral qualitative interviewer..."></textarea>
+<textarea id="aiRole" rows="6" placeholder="Example: You are a neutral qualitative interviewer..." style="width:100%;padding:10px;margin-bottom:16px;box-sizing:border-box;"></textarea>
 
 <label for="researchGoal"><strong>Research Goal</strong></label>
 <p>Describe the objectives and interview principles the AI should follow.</p>
-<textarea id="researchGoal" rows="8" placeholder="Describe the research goals and interviewing principles."></textarea>
-
+<textarea id="researchGoal" rows="8" placeholder="Describe the research goals and interviewing principles." style="width:100%;padding:10px;margin-bottom:16px;box-sizing:border-box;"></textarea>
+ </div>
+<div style="border:1px solid #ddd;border-radius:8px;padding:20px;margin-bottom:24px;">
 <h2>Interview Content</h2>
 <label for="interviewQuestions"><strong>Interview Questions</strong></label>
 <p>Enter the main interview questions in order. The AI will ask one question at a time.</p>
-<textarea id="interviewQuestions" rows="12" placeholder="Enter the interview questions."></textarea>
+<textarea id="interviewQuestions" rows="12" placeholder="Enter the interview questions." style="width:100%;padding:10px;margin-bottom:16px;box-sizing:border-box;"></textarea>
 
 
 
 <label for="endingMessage"><strong>Ending Message</strong></label>
 <p>Write the message the AI should use to conclude the interview.</p>
-<textarea id="endingMessage" rows="4" placeholder="Thank the participant and conclude the interview."></textarea>
+<textarea id="endingMessage" rows="4" placeholder="Thank the participant and conclude the interview." style="width:100%;padding:10px;margin-bottom:16px;box-sizing:border-box;"></textarea>
 
-<h2>Interview Limits</h2>
+   </div>
+<div style="border:1px solid #ddd;border-radius:8px;padding:20px;margin-bottom:24px;">
+  <h2>Interview Limits</h2>
 
 <label for="interviewQuestionCount"><strong>Interview Question Count</strong></label>
 <p>Number of main interview questions.</p>
-<input type="number" id="interviewQuestionCount" placeholder="10">
+<input type="number" id="interviewQuestionCount" placeholder="10" style="width:100%;padding:10px;margin-bottom:16px;box-sizing:border-box;">
 
 <label for="maximumInterviewerQuestions"><strong>Maximum Interviewer Questions</strong></label>
 <p>Maximum number of questions the AI may ask, including follow-up questions.</p>
-<input type="number" id="maximumInterviewerQuestions" placeholder="30">
+<input type="number" id="maximumInterviewerQuestions" placeholder="30" style="width:100%;padding:10px;margin-bottom:16px;box-sizing:border-box;">
 
 <br><br>
-<button id="saveButton">Save Research Design</button>
+<button id="saveButton" style="padding:12px 24px;font-size:16px;">Save Research Design</button>
+ </div>
 
 <script src="design.js"></script>
