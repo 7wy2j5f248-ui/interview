@@ -32,6 +32,6 @@ document.getElementById("saveButton").addEventListener("click", async function (
 
 const result = await response.json();
 
-alert(JSON.stringify(result));
+alert(result.message);
 
 });
