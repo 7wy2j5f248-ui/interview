@@ -129,8 +129,10 @@ ${design.ending_message}
 
 Interview Sequence
 
+Interview Questions Loaded:
 
 ${design.interview_questions}
+
 
 Interview Principles:
 
