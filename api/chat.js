@@ -52,24 +52,14 @@ console.log("Retrieved history:", retrievedHistory);
 ]);
 
 const { data: design, error: designError } = await supabase
-  if (designError) throw designError;
-if (!design) throw new Error("design is undefined");
-  .from("research_designs")
-  .select("*")
-  .order("created_at", { ascending: false })
-  .limit(1)
-  .single();
+
 
 if (designError) {
-  return res.status(500).json({
-    error: designError.message
-  });
+  throw designError;
 }
 
 if (!design) {
-  return res.status(500).json({
-    error: "design is undefined"
-  });
+  throw new Error("design is undefined");
 }
 
 if (!design.interview_questions) {
