@@ -56,7 +56,7 @@ console.log("Retrieved history:", retrievedHistory);
 const { data: design, error: designError } = await supabase
 .from("research_designs")
 .select("*")
-.order("created_at", { ascending: false })
+.order("created_at", { ascending: false, nullsFirst: false })
 .limit(1)
 .single();
 
