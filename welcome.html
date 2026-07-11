@@ -141,7 +141,7 @@ async function loadTranslations() {
 
         document.getElementById("welcomeTitle").textContent = t.welcome_title;
                 const topic = design.interview_topic || design.research_title || "this research topic";
-        document.getElementById("welcomeIntro").textContent = `This research project explores ${topic} through AI-mediated interviews.`;
+        document.getElementById("welcomeIntro").textContent = `This research project explores "${topic}" through AI-mediated interviews.`;
         document.getElementById("welcomeProcess").textContent = t.welcome_process;
         document.getElementById("welcomeVoluntary").textContent = t.welcome_voluntary;
         document.getElementById("welcomeMessage").textContent = t.welcome_message;
