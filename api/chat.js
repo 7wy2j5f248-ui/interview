@@ -61,8 +61,9 @@ const { data: design, error: designError } = await supabase
   if (designError) {
   throw designError;
 }
-console.log("Research design:", design);
-console.log("Interview questions:", design.interview_questions);
+if (!design.interview_questions) {
+  throw new Error("interview_questions is empty");
+}
     const interviewProtocol = `
 You are an AI interviewer conducting an interview on behalf of a researcher.
 
