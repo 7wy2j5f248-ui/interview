@@ -10,11 +10,13 @@ const supabase = createClient(
 export default async function handler(req, res) {
   try {
 
-    const message = req.body.message || "";
-    const history = req.body.history || [];
-    const participantId = req.body.participantId || "anonymous";
-const sessionId = req.body.sessionId || "unknown";
-    const language = req.body.language || "en";
+    const body = req.body || {};
+
+const message = body.message || "";
+const history = body.history || [];
+const participantId = body.participantId || "anonymous";
+const sessionId = body.sessionId || "unknown";
+const language = body.language || "en";
 let retrievedHistory = [];
 
 try {
