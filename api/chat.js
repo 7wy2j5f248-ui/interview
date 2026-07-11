@@ -71,6 +71,16 @@ if (!design) {
 if (!design.interview_questions) {
   throw new Error("interview_questions is empty");
 }
+  console.log("Question 1 text:");
+console.log(design.interview_questions);
+
+if (typeof design.interview_questions !== "string") {
+  throw new Error(`interview_questions type: ${typeof design.interview_questions}`);
+}
+
+if (design.interview_questions.trim() === "") {
+  throw new Error("interview_questions is blank");
+}
     console.log("Question 1 text:");
 console.log(design.interview_questions);
     const interviewProtocol = `
