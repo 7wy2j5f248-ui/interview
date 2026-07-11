@@ -167,7 +167,8 @@ Near the end, invite final comments and conclude politely.
 const interviewHistoryText = retrievedHistory
   .map(item => `${item.Speaker}: ${item.Message}`)
   .join("\n");
-    
+        console.log("Design loaded:", design);
+    console.log("Design error:", designError);
     const response = await openai.responses.create({
       model: "gpt-5",
       input: [
@@ -183,7 +184,7 @@ const interviewHistoryText = retrievedHistory
       ]
     });
 console.log(response.output_text);
-    const reply = response.output_text;
+        const reply = response.output_text || response.output?.[0]?.content?.[0]?.text || "";
 
   await supabase
 .from("interview_messages")
@@ -206,7 +207,8 @@ console.log(response.output_text);
     console.error(error);
 
     res.status(500).json({
-      error: String(error)
+           error: String(error),
+      stack: error?.stack 
     });
 
   }
