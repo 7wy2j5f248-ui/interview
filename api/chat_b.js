@@ -117,7 +117,10 @@ Do not do this during an ongoing interview.
 Do not do this after the participant answers a question.
 Do not do this near the conclusion of the interview.
 
-After receiving answers to Question ${design.interviewQuestionCount}, tell the participant that this is the end of the interview, thank the participant for their time and support, and end the session.
+After receiving answers to Question ${design.interviewQuestionCount}:
+
+${design.endingMessage}
+
 Interview Sequence
 
 
