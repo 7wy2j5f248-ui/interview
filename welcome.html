@@ -92,7 +92,7 @@
 <h1 id="welcomeTitle">Welcome to Interview Quest</h1>
 
 <p id="welcomeIntro">
-This research project aims to understand people's sleeping habits through AI-mediated interviews.
+Loading research information...
 </p>
 
 <p id="welcomeProcess">
@@ -121,7 +121,9 @@ async function loadTranslations() {
     try {
         const language = localStorage.getItem("language") || "en";
 
-        
+             const designResponse = await fetch("/api/loadDesign");
+        const design = await designResponse.json();
+   
         if (language === "ar") {
     document.documentElement.dir = "rtl";
     document.documentElement.lang = "ar";
@@ -138,7 +140,8 @@ async function loadTranslations() {
         const t = await response.json();
 
         document.getElementById("welcomeTitle").textContent = t.welcome_title;
-        document.getElementById("welcomeIntro").textContent = t.welcome_intro;
+                const topic = design.interview_topic || design.research_title || "this research topic";
+        document.getElementById("welcomeIntro").textContent = `This research project explores ${topic} through AI-mediated interviews.`;
         document.getElementById("welcomeProcess").textContent = t.welcome_process;
         document.getElementById("welcomeVoluntary").textContent = t.welcome_voluntary;
         document.getElementById("welcomeMessage").textContent = t.welcome_message;
