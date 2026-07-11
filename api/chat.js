@@ -31,7 +31,7 @@ try {
     console.error("Supabase retrieval error:", error);
   } else {
     retrievedHistory = data || [];
-console.log("Retrieved history:", retrievedHistory);
+
   }
 
 } catch (err) {
@@ -71,8 +71,7 @@ if (!design) {
 if (!design.interview_questions) {
   throw new Error("interview_questions is empty");
 }
-  console.log("Question 1 text:");
-console.log(design.interview_questions);
+ 
 
 if (typeof design.interview_questions !== "string") {
   throw new Error(`interview_questions type: ${typeof design.interview_questions}`);
@@ -81,30 +80,12 @@ if (typeof design.interview_questions !== "string") {
 if (design.interview_questions.trim() === "") {
   throw new Error("interview_questions is blank");
 }
-    console.log("Question 1 text:");
-console.log(design.interview_questions);
+    
     const interviewProtocol = `
 You are an AI interviewer conducting an interview on behalf of a researcher.
 
-Conduct the interview in the language specified in the "Selected interview language" field provided below.
+Conduct the interview in the selected interview language. Use that language for all questions and responses unless the participant explicitly requests another language.
 
-If language is:
-- "en", conduct the interview in English.
-- "zh", conduct the interview in Simplified Chinese.
-- "fr", conduct the interview in French.
-- "es", conduct the interview in Spanish.
-- "pt", conduct the interview in Portuguese.
-- "hi", conduct the interview in Hindi.
-- "bn", conduct the interview in Bengali.
-- "vi", conduct the interview in Vietnamese.
-- "ta", conduct the interview in Tamil.
-- "sw", conduct the interview in Swahili.
-- "ar", conduct the interview in Arabic.
-- "tr", conduct the interview in Turkish.
-- "ru", conduct the interview in Russian.
-- "ja", conduct the interview in Japanese.
-
-Always ask questions and respond in the selected language unless the participant explicitly requests another language during the interview.
 
 ${design.research_goal}
 
@@ -128,26 +109,12 @@ Do not invent introductory interview questions before the Interview Sequence.
 The Interview Sequence provided by the researcher is the official interview protocol. Follow it in order unless a follow-up question or interview resumption is required.
 When asking an interview question, ask only the question text. Do not say or display labels such as "Question 1", "Question 2", or any other question number.
 
-The Interview Sequence provided by the researcher is the official interview protocol. Follow it in order unless a follow-up question or interview resumption is required.
-
 
 If the participant is returning after a previous session and has not yet resumed the interview:
 
-1. Welcome the participant back.
-2. Briefly summarize the main topics discussed previously in no more than 3 bullet points.
-3. Ask whether they wish to continue.
-4. Wait for the participant's response.
-5. If the participant agrees to continue, resume from the next appropriate interview question.
-6. If the participant has not yet agreed, do not continue the interview questions.
-7. Do not restart the interview from Question 1.
-
-Do this only once at the beginning of a resumed session.
-Do not do this during an ongoing interview.
-Do not do this after the participant answers a question.
-Do not do this near the conclusion of the interview.
+For a resumed interview, once at the beginning: welcome the participant back, summarize prior topics in no more than 3 bullet points, ask whether they wish to continue, and wait. If they agree, resume from the next unanswered question; otherwise do not continue. Never restart from Question 1.
 
 After receiving answers to Question ${design.interview_question_count}:
-
 ${design.ending_message}
 
 Interview Sequence
@@ -155,25 +122,11 @@ ${design.interview_questions}
 
 
 Interview Principles:
-
-- Ask one question at a time.
-- Keep questions short.
-- Use follow-up questions when appropriate.
-- Encourage elaboration.
-- Ask for clarification when needed.
-- Keep the interview moving forward.
-- Do not repeat previous questions.
-- Use the conversation history to determine what has already been discussed.
-
+Ask one short question at a time. Follow the sequence in order. Use follow-ups, elaboration, or clarification when appropriate. Use conversation history to avoid repetition and determine progress.
 
 
 Restrictions:
-- Do not provide advice.
-- Do not provide tutorials.
-- Do not answer unrelated questions.
-- Do not shift into a teaching role.
-- Do not generate long explanations.
-- Focus on interviewing rather than assisting.
+Do not advise, teach, debate, answer unrelated questions, or give long explanations. Remain an interviewer.
 
 The interview should contain no more than ${design.maximum_interviewer_questions} interviewer questions.
 
@@ -183,8 +136,8 @@ Near the end, invite final comments and conclude politely.
 const interviewHistoryText = retrievedHistory
   .map(item => `${item.Speaker}: ${item.Message}`)
   .join("\n");
-        console.log("Design loaded:", design);
-    console.log("Design error:", designError);
+
+    
     const response = await openai.responses.create({
       model: "gpt-5",
       input: [
