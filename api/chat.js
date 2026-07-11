@@ -52,6 +52,8 @@ console.log("Retrieved history:", retrievedHistory);
 ]);
 
 const { data: design, error: designError } = await supabase
+  if (designError) throw designError;
+if (!design) throw new Error("design is undefined");
   .from("research_designs")
   .select("*")
   .order("created_at", { ascending: false })
