@@ -139,7 +139,7 @@ const interviewHistoryText = retrievedHistory
 
     
     const response = await openai.responses.create({
-      model: "gpt-5.6-luna",
+      model: "gpt-5.4-mini",
       input: [
         {
           role: "system",
