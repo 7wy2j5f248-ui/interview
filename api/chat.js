@@ -60,11 +60,23 @@ if (!design) throw new Error("design is undefined");
   .limit(1)
   .single();
 
-  if (designError) {
-  throw designError;
+if (designError) {
+  return res.status(500).json({
+    error: designError.message
+  });
 }
+
+if (!design) {
+  return res.status(500).json({
+    error: "design is undefined"
+  });
+}
+
 if (!design.interview_questions) {
-  throw new Error("interview_questions is empty");
+  return res.status(500).json({
+    error: "interview_questions is empty",
+    design
+  });
 }
     const interviewProtocol = `
 You are an AI interviewer conducting an interview on behalf of a researcher.
