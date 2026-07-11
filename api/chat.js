@@ -206,7 +206,7 @@ console.log(response.output_text);
     console.error(error);
 
     res.status(500).json({
-      error: error.message
+      error: String(error)
     });
 
   }
