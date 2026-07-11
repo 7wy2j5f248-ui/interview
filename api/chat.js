@@ -52,7 +52,11 @@ console.log("Retrieved history:", retrievedHistory);
 ]);
 
 const { data: design, error: designError } = await supabase
-
+.from("research_designs")
+.select("*")
+.order("created_at", { ascending: false })
+.limit(1)
+.single();
 
 if (designError) {
   throw designError;
@@ -63,10 +67,7 @@ if (!design) {
 }
 
 if (!design.interview_questions) {
-  return res.status(500).json({
-    error: "interview_questions is empty",
-    design
-  });
+  throw new Error("interview_questions is empty");
 }
     const interviewProtocol = `
 You are an AI interviewer conducting an interview on behalf of a researcher.
