@@ -8,7 +8,10 @@ export default async function handler(req, res) {
 const { data, error } = await supabase
   .from("research_designs")
   .select("*")
-  .order("created_at", { ascending: false })
+  .order("created_at", {
+    ascending: false,
+    nullsFirst: false
+  })
   .limit(1)
   .single();
 
