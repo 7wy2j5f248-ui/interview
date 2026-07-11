@@ -132,7 +132,7 @@ Interview Sequence
 
 Interview Questions Loaded:
 
-${design.interview_questions}
+${JSON.stringify(design, null, 2)}
 
 
 Interview Principles:
