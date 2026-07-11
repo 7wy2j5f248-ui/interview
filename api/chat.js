@@ -178,7 +178,7 @@ const interviewHistoryText = retrievedHistory
         ...history
       ]
     });
-
+console.log(response.output_text);
     const reply = response.output_text;
 
   await supabase
