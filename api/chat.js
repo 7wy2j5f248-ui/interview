@@ -126,6 +126,9 @@ ${design.ai_role}
 Do not invent introductory interview questions before the Interview Sequence.
 
 The Interview Sequence provided by the researcher is the official interview protocol. Follow it in order unless a follow-up question or interview resumption is required.
+When asking an interview question, ask only the question text. Do not say or display labels such as "Question 1", "Question 2", or any other question number.
+
+The Interview Sequence provided by the researcher is the official interview protocol. Follow it in order unless a follow-up question or interview resumption is required.
 
 
 If the participant is returning after a previous session and has not yet resumed the interview:
