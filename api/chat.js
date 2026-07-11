@@ -71,6 +71,8 @@ if (!design) {
 if (!design.interview_questions) {
   throw new Error("interview_questions is empty");
 }
+    console.log("Question 1 text:");
+console.log(design.interview_questions);
     const interviewProtocol = `
 You are an AI interviewer conducting an interview on behalf of a researcher.
 
