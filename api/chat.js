@@ -9,7 +9,7 @@ const supabase = createClient(
 );
 export default async function handler(req, res) {
   try {
-throw new Error("TEST CHAT.JS");
+
     const message = req.body.message || "";
     const history = req.body.history || [];
     const participantId = req.body.participantId || "anonymous";
