@@ -135,9 +135,7 @@ ${design.ending_message}
 
 Interview Sequence
 
-Interview Questions Loaded:
-
-${JSON.stringify(design, null, 2)}
+${design.interview_questions}
 
 
 Interview Principles:
