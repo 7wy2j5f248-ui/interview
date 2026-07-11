@@ -61,7 +61,7 @@ const { data: design, error: designError } = await supabase
   if (designError) {
   throw designError;
 }
-
+console.log("Research design loaded:", design);
     const interviewProtocol = `
 You are an AI interviewer conducting an interview on behalf of a researcher.
 
