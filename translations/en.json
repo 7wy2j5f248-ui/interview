@@ -4,7 +4,8 @@
   "app_title": "Interview Quest",
 "welcome_title": "Welcome to Interview Quest",
 
-"welcome_intro": "This research project aims to understand people's sleeping habits through AI-mediated interviews.",
+  "welcome_intro": "This research project explores \"{topic}\" through AI-mediated interviews.",
+  "research_topic_fallback": "this research topic",
 
 "welcome_process": "The interview is text-based and asynchronous. You may complete the interview at your own pace.",
 
