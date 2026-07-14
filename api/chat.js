@@ -56,7 +56,7 @@ try {
 const { data: design, error: designError } = await supabase
 .from("research_designs")
 .select("*")
-.eq("created_at", process.env.ACTIVE_DESIGN_CREATED_AT)
+.eq("id", "cf4badd5-5b96-406a-aebf-c62dc6573863")
 .single();
 
 if (designError) {
