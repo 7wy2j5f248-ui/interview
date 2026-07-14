@@ -119,29 +119,48 @@ Thank you for considering participation in this research project.
 <script>
 async function loadTranslations() {
     try {
-        const language = localStorage.getItem("language") || "en";
+        const requestedLanguage = localStorage.getItem("language") || "en";
+        let language = requestedLanguage;
+        let response = await fetch(`translations/${language}.json`);
 
-             const designResponse = await fetch("/api/loadDesign");
-        const design = await designResponse.json();
-   
-        if (language === "ar") {
-    document.documentElement.dir = "rtl";
-    document.documentElement.lang = "ar";
-} else {
-    document.documentElement.dir = "ltr";
-}
-     
-        
-        console.log("Language:", language);
+        if (!response.ok && language !== "en") {
+            console.warn(`Translation unavailable for ${language}; falling back to English.`);
+            language = "en";
+            response = await fetch("translations/en.json");
+        }
 
-        const response = await fetch(`translations/${language}.json`);
-        console.log("Response:", response.status);
+        if (!response.ok) {
+            throw new Error("Unable to load the welcome-page translation.");
+        }
 
         const t = await response.json();
+        let design = {};
+
+        try {
+            const designResponse = await fetch("/api/loadDesign");
+
+            if (designResponse.ok) {
+                design = await designResponse.json();
+            } else {
+                console.warn("Research design unavailable; using the localized fallback topic.");
+            }
+        } catch (designError) {
+            console.warn("Research design request failed; using the localized fallback topic.", designError);
+        }
+
+        document.documentElement.lang = language;
+        document.documentElement.dir = language === "ar" ? "rtl" : "ltr";
 
         document.getElementById("welcomeTitle").textContent = t.welcome_title;
-                const topic = design.interview_topic || design.research_title || "this research topic";
-        document.getElementById("welcomeIntro").textContent = `This research project explores "${topic}" through AI-mediated interviews.`;
+        const topic = design.interview_topic ||
+            design.research_title ||
+            t.research_topic_fallback ||
+            "this research topic";
+        const introTemplate = t.welcome_intro ||
+            "This research project explores \"{topic}\" through AI-mediated interviews.";
+
+        document.getElementById("welcomeIntro").textContent =
+            introTemplate.replace("{topic}", topic);
         document.getElementById("welcomeProcess").textContent = t.welcome_process;
         document.getElementById("welcomeVoluntary").textContent = t.welcome_voluntary;
         document.getElementById("welcomeMessage").textContent = t.welcome_message;
