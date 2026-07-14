@@ -56,8 +56,7 @@ try {
 const { data: design, error: designError } = await supabase
 .from("research_designs")
 .select("*")
-.order("created_at", { ascending: false, nullsFirst: false })
-.limit(1)
+.eq("created_at", process.env.ACTIVE_DESIGN_CREATED_AT)
 .single();
 
 if (designError) {
