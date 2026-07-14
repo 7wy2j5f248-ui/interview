@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -218,6 +218,9 @@ async function loadTranslations() {
         await fetch(`translations/${language}.json`);
 
     t = await response.json();
+
+    document.documentElement.lang = language;
+    document.documentElement.dir = language === "ar" ? "rtl" : "ltr";
 
     document.title = t.consent_title;
 

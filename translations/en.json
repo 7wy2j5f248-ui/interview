@@ -33,6 +33,7 @@
   "new_participant": "I am a new participant",
   "returning_participant": "I have participated before",
   "consent": "Consent",
+  "consent_menu": "Informed Consent",
   "agree_button": "I Agree",
 
   "consent_title": "Research Consent Form",
@@ -44,6 +45,8 @@
   "generated_participant_id": "Your Participant ID:",
   "save_participant_id_message": "Please save this ID. You will need it if you return later.",
   "consent_agreement": "By clicking \"I Agree\", you indicate that you understand the information above and agree to participate.",
+  "participant_id_required": "Please enter your Participant ID.",
+  "participant_type_required": "Please select New Participant or Returning Participant.",
   "please_enter_participant_id": "Please enter your Participant ID.",
   "please_select_participant_type": "Please select New Participant or Returning Participant.",
 
