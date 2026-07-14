@@ -3,5 +3,9 @@ window.APP_CONFIG = Object.freeze({
 });
 
 window.formatAppName = function(template) {
-    return String(template).split("{app_name}").join(window.APP_CONFIG.app_name);
+    const appName = document.documentElement.dir === "rtl"
+        ? "\u2066" + window.APP_CONFIG.app_name + "\u2069"
+        : window.APP_CONFIG.app_name;
+
+    return String(template).split("{app_name}").join(appName);
 };

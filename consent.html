@@ -12,6 +12,7 @@ body {
     margin: 20px auto;
     padding: 20px;
     line-height: 1.6;
+    text-align: start;
 }
 
 .participant-section {
@@ -35,13 +36,14 @@ body {
 
 button {
     padding: 8px 16px;
-    margin-right: 10px;
+    margin-inline-end: 10px;
     cursor: pointer;
 }
 
 input[type="text"] {
     width: 300px;
     padding: 6px;
+    text-align: start;
 }
 </style>
 
@@ -185,7 +187,7 @@ placeholder="Enter your Participant ID">
 Your Participant ID:
 </p>
 
-<h3 id="generatedId"></h3>
+<h3><bdi id="generatedId" dir="ltr"></bdi></h3>
 
 <p id="saveParticipantIdMessage">
 Please save this ID. You will need it if you return later.
@@ -219,8 +221,10 @@ async function loadTranslations() {
 
     t = await response.json();
 
+    const direction = language === "ar" ? "rtl" : "ltr";
+
     document.documentElement.lang = language;
-    document.documentElement.dir = language === "ar" ? "rtl" : "ltr";
+    document.documentElement.dir = direction;
 
     document.title = t.consent_title;
 
@@ -244,8 +248,10 @@ async function loadTranslations() {
     document.getElementById("participantIdLabel").textContent =
         t.participant_id;
 
-    document.getElementById("participantIdInput").placeholder =
-        t.participant_id_placeholder;
+    const participantIdInput = document.getElementById("participantIdInput");
+    participantIdInput.placeholder = t.participant_id_placeholder;
+    participantIdInput.lang = language;
+    participantIdInput.dir = language === "ar" ? "auto" : "ltr";
 
     document.getElementById("generatedParticipantIdLabel").textContent =
         t.generated_participant_id;
