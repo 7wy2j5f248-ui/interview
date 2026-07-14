@@ -5,7 +5,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <title>Welcome - Interview Quest</title>
+    <title>Welcome</title>
+    <script src="config.js"></script>
 
     <style>
 
@@ -89,7 +90,7 @@
 
 <div class="container">
 
-<h1 id="welcomeTitle">Welcome to Interview Quest</h1>
+<h1 id="welcomeTitle">Welcome</h1>
 
 <p id="welcomeIntro">
 Loading research information...
@@ -151,7 +152,12 @@ async function loadTranslations() {
         document.documentElement.lang = language;
         document.documentElement.dir = language === "ar" ? "rtl" : "ltr";
 
-        document.getElementById("welcomeTitle").textContent = t.welcome_title;
+        document.title = formatAppName(
+            t.welcome_page_title || "Welcome - {app_name}"
+        );
+        document.getElementById("welcomeTitle").textContent = formatAppName(
+            t.welcome_title || "Welcome to {app_name}"
+        );
         const topic = design.interview_topic ||
             design.research_title ||
             t.research_topic_fallback ||

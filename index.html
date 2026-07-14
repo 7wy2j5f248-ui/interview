@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AI-mediated multilingual research interview platform</title>
+<script src="config.js"></script>
 
 <style>
 
@@ -82,7 +83,7 @@ h2{
 
 <div class="container">
 
-<h1>Interview Quest</h1>
+<h1 id="appName"></h1>
 
 <h2>Please select the language you would like to use for this interview.</h2>
 
@@ -110,15 +111,17 @@ h2{
 
 <button class="languageButton" data-language="sw">Kiswahili</button>
 
-<p class="footer">
-
-Powered by Interview Quest
-
-</p>
+<p id="poweredBy" class="footer"></p>
 
 </div>
 
 <script>
+
+document.getElementById("appName").textContent =
+    formatAppName("{app_name}");
+
+document.getElementById("poweredBy").textContent =
+    formatAppName("Powered by {app_name}");
 
 document.querySelectorAll(".languageButton").forEach(function(button){
 

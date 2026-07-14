@@ -1,8 +1,9 @@
 {
   "language_name": "العربية",
 
-"app_title": "Interview Quest",
-"welcome_title": "مرحبًا بكم في Interview Quest",
+"app_title": "{app_name}",
+"welcome_page_title": "مرحبًا - {app_name}",
+"welcome_title": "مرحبًا بكم في {app_name}",
 
   "welcome_intro": "يستكشف هذا المشروع البحثي «{topic}» من خلال مقابلات مدعومة بالذكاء الاصطناعي.",
   "research_topic_fallback": "موضوع هذا البحث",

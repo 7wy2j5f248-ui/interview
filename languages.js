@@ -2,7 +2,7 @@ const languages = {
 
     en: {
 
-        welcome: "Welcome to Interview Quest",
+        welcome: "Welcome to {app_name}",
 
         chooseLanguage: "Please choose your language.",
 
@@ -16,7 +16,7 @@ const languages = {
 
     zh: {
 
-        welcome: "欢迎来到 Interview Quest",
+        welcome: "欢迎来到 {app_name}",
 
         chooseLanguage: "请选择您的语言。",
 

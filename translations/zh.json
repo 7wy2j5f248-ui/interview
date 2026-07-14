@@ -1,8 +1,9 @@
 {
   "language_name": "简体中文",
 
-"app_title": "Interview Quest",
-"welcome_title": "欢迎来到 Interview Quest",
+"app_title": "{app_name}",
+"welcome_page_title": "欢迎 - {app_name}",
+"welcome_title": "欢迎来到 {app_name}",
 
   "welcome_intro": "本研究项目通过人工智能辅助访谈探讨“{topic}”。",
   "research_topic_fallback": "本研究主题",
