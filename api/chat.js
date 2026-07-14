@@ -53,10 +53,21 @@ try {
 }
 ]);
 
+    
+const { data: activeDesign, error: activeDesignError } = await supabase
+.from("active_design")
+.select("active_design_id")
+.limit(1)
+.single();
+
+if (activeDesignError) {
+  throw activeDesignError;
+}
+
 const { data: design, error: designError } = await supabase
 .from("research_designs")
 .select("*")
-.eq("id", "696e334c-65df-475c-aff8-50e17a149c50")
+.eq("id", activeDesign.active_design_id)
 .single();
 
 if (designError) {
