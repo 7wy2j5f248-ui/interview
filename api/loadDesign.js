@@ -8,6 +8,7 @@ export default async function handler(req, res) {
   const { data: activeDesign, error: activeDesignError } = await supabase
     .from("active_design")
     .select("active_design_id")
+        .order("id", { ascending: false })
     .limit(1)
     .single();
   if (activeDesignError) {
