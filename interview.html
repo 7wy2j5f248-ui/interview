@@ -10,17 +10,37 @@
 body {
     font-family: Arial, sans-serif;
     margin: 10px;
+    text-align: start;
 }
 
 #chat {
     width: 100%;
     overflow-wrap: break-word;
     word-wrap: break-word;
+    direction: inherit;
+    text-align: start;
+}
+
+.chat-message {
+    direction: inherit;
+    text-align: start;
+    unicode-bidi: isolate;
+}
+
+.message-label,
+.message-content {
+    unicode-bidi: isolate;
+}
+
+.message-content {
+    white-space: pre-wrap;
 }
 
 textarea {
     width: 100%;
     box-sizing: border-box;
+    direction: inherit;
+    text-align: start;
 }
 
 button {
@@ -35,9 +55,9 @@ button {
 <h1 id="interviewTitle">AI Interview</h1>
 
 <div id="chat">
-    <p>
-    <b id="aiLabel">AI:</b>
-    <span id="interviewWelcome">Welcome to the interview.</span>
+    <p class="chat-message">
+    <b><bdi id="aiLabel" class="message-label" dir="auto">AI</bdi>:</b>
+    <bdi id="interviewWelcome" class="message-content">Welcome to the interview.</bdi>
 </p>
 </div>
 
@@ -69,8 +89,7 @@ async function sendMessage() {
 
     if (!message) return;
 
-    document.getElementById("chat").innerHTML +=
-        "<p><b>" + t.participant + ":</b> " + message + "</p>";
+    appendChatMessage(t.participant, message);
 
     history.push({
         role: "user",
@@ -96,13 +115,42 @@ async function sendMessage() {
 
     const data = await response.json();
 
-    document.getElementById("chat").innerHTML +=
-        "<p><b>" + t.ai + ":</b> " + data.reply + "</p>";
+    appendChatMessage(t.ai, data.reply);
 
     history.push({
         role: "assistant",
         content: data.reply
     });
+}
+
+function appendChatMessage(label, content) {
+
+    const messageDirection =
+        language === "ar" ? "rtl" : "ltr";
+
+    const paragraph = document.createElement("p");
+    paragraph.className = "chat-message";
+    paragraph.lang = language;
+    paragraph.dir = messageDirection;
+
+    const boldLabel = document.createElement("b");
+    const labelText = document.createElement("bdi");
+    labelText.className = "message-label";
+    labelText.dir = "auto";
+    labelText.textContent = label;
+    boldLabel.appendChild(labelText);
+    boldLabel.appendChild(document.createTextNode(":"));
+
+    const messageText = document.createElement("bdi");
+    messageText.className = "message-content";
+    messageText.dir = messageDirection;
+    messageText.textContent = content;
+
+    paragraph.appendChild(boldLabel);
+    paragraph.appendChild(document.createTextNode(" "));
+    paragraph.appendChild(messageText);
+
+    document.getElementById("chat").appendChild(paragraph);
 }
 
 </script>
@@ -120,8 +168,18 @@ async function loadTranslations() {
 
     t = await response.json();
 
+    const direction = language === "ar" ? "rtl" : "ltr";
+
     document.documentElement.lang = language;
-    document.documentElement.dir = language === "ar" ? "rtl" : "ltr";
+    document.documentElement.dir = direction;
+
+    const chat = document.getElementById("chat");
+    chat.lang = language;
+    chat.dir = direction;
+
+    const messageBox = document.getElementById("message");
+    messageBox.lang = language;
+    messageBox.dir = direction;
 
     const appTitle = formatAppName(t.app_title || "{app_name}");
 
@@ -135,6 +193,7 @@ async function loadTranslations() {
 
     document.getElementById("interviewWelcome").textContent =
         t.interview_welcome;
+    document.getElementById("interviewWelcome").dir = direction;
 
     document.getElementById("sendButton").textContent =
         t.send;
