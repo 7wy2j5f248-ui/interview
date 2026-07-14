@@ -5,12 +5,22 @@ const supabase = createClient(
   process.env.SUPABASE_ANON_KEY
 );
 export default async function handler(req, res) {
-const { data, error } = await supabase
-  .from("research_designs")
-  .select("*")
-  .eq("id", "696e334c-65df-475c-aff8-50e17a149c50")
-  .single();
+  const { data: activeDesign, error: activeDesignError } = await supabase
+    .from("active_design")
+    .select("active_design_id")
+    .limit(1)
+    .single();
+  if (activeDesignError) {
+    return res.status(500).json({ error: activeDesignError.message });
+  }
 
+  const { data, error } = await supabase
+    .from("research_designs")
+    .select("*")
+    .eq("id", activeDesign.active_design_id)
+    .single();
+
+  
   if (error) {
     return res.status(500).json({ error: error.message });
   }
