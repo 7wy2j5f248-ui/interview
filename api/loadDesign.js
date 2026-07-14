@@ -8,11 +8,7 @@ export default async function handler(req, res) {
 const { data, error } = await supabase
   .from("research_designs")
   .select("*")
-  .order("created_at", {
-    ascending: false,
-    nullsFirst: false
-  })
-  .limit(1)
+  .eq("id", "cf4badd5-5b96-406a-aebf-c62dc6573863")
   .single();
 
   if (error) {
