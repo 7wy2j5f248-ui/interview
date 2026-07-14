@@ -1,8 +1,9 @@
 {
   "language_name": "English",
 
-  "app_title": "Interview Quest",
-"welcome_title": "Welcome to Interview Quest",
+  "app_title": "{app_name}",
+  "welcome_page_title": "Welcome - {app_name}",
+"welcome_title": "Welcome to {app_name}",
 
   "welcome_intro": "This research project explores \"{topic}\" through AI-mediated interviews.",
   "research_topic_fallback": "this research topic",

@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AI Interview</title>
+<script src="config.js"></script>
 
 <style>
 body {
@@ -31,7 +32,7 @@ button {
 
 <body>
 
-<h1 id="interviewTitle">Interview Quest</h1>
+<h1 id="interviewTitle">AI Interview</h1>
 
 <div id="chat">
     <p>
@@ -119,10 +120,12 @@ async function loadTranslations() {
 
     t = await response.json();
 
-    document.title = t.app_title;
+    const appTitle = formatAppName(t.app_title || "{app_name}");
+
+    document.title = appTitle;
 
     document.getElementById("interviewTitle").textContent =
-        t.app_title;
+        appTitle;
 
     document.getElementById("aiLabel").textContent =
         t.ai;
