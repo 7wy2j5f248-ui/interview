@@ -30,6 +30,7 @@
   "returning_participant": "Tôi đã từng tham gia",
   "language_selection": "Chọn ngôn ngữ",
   "interview_welcome": "Chào mừng bạn đến với cuộc phỏng vấn này.",
+  "interview_error": "Không thể tiếp tục cuộc phỏng vấn. Vui lòng thử lại.",
   "participant": "Người tham gia",
   "ai": "AI",
   "return_language": "Quay lại phần chọn ngôn ngữ"

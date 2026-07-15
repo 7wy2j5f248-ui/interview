@@ -98,32 +98,63 @@ async function sendMessage() {
 
     messageBox.value = "";
 
-    const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json"
-        },
-  
-     body: JSON.stringify({
-    participantId,
-    sessionId,
-    language,
-    message,
-    history
-})
-    });
+    try {
+        const response = await fetch("/api/chat", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
 
-    const data = await response.json();
+         body: JSON.stringify({
+        participantId,
+        sessionId,
+        language,
+        message,
+        history
+    })
+        });
 
-    appendChatMessage(t.ai, data.reply);
+        let data = {};
 
-    history.push({
-        role: "assistant",
-        content: data.reply
-    });
+        try {
+            data = await response.json();
+        } catch (parseError) {
+            console.error("Interview response could not be parsed.", parseError);
+        }
+
+        const reply = typeof data.reply === "string"
+            ? data.reply.trim()
+            : "";
+
+        if (!response.ok || !reply) {
+            throw new Error("Interview request did not return a usable reply.");
+        }
+
+        appendChatMessage(t.ai, reply);
+
+        history.push({
+            role: "assistant",
+            content: reply
+        });
+    } catch (error) {
+        console.error("Interview request failed.", error);
+        appendChatMessage(
+            t.ai,
+            t.interview_error ||
+                "We could not continue the interview. Please try again."
+        );
+    }
 }
 
 function appendChatMessage(label, content) {
+
+    const messageContent = typeof content === "string"
+        ? content.trim()
+        : "";
+
+    if (!messageContent) {
+        return false;
+    }
 
     const messageDirection =
         language === "ar" ? "rtl" : "ltr";
@@ -144,13 +175,15 @@ function appendChatMessage(label, content) {
     const messageText = document.createElement("bdi");
     messageText.className = "message-content";
     messageText.dir = messageDirection;
-    messageText.textContent = content;
+    messageText.textContent = messageContent;
 
     paragraph.appendChild(boldLabel);
     paragraph.appendChild(document.createTextNode(" "));
     paragraph.appendChild(messageText);
 
     document.getElementById("chat").appendChild(paragraph);
+
+    return true;
 }
 
 </script>

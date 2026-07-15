@@ -1,27 +1,87 @@
 import OpenAI from "openai";
 import { createClient } from "@supabase/supabase-js";
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_ANON_KEY
-);
-export default async function handler(req, res) {
+import { selectUsableResearchDesign } from "./researchDesign.js";
+
+function valueOrFallback(value, fallback) {
+  return typeof value === "string" && value.trim()
+    ? value.trim()
+    : fallback;
+}
+
+function sanitizeHistory(history) {
+  if (!Array.isArray(history)) {
+    return null;
+  }
+
+  return history
+    .filter(item =>
+      item &&
+      (item.role === "user" || item.role === "assistant") &&
+      typeof item.content === "string" &&
+      item.content.trim()
+    )
+    .map(item => ({
+      role: item.role,
+      content: item.content.trim()
+    }));
+}
+
+export function extractReplyText(response) {
+  const candidates = [
+    response?.output_text,
+    ...(response?.output || []).flatMap(item =>
+      (item?.content || []).map(content => content?.text)
+    )
+  ];
+
+  return candidates.find(candidate =>
+    typeof candidate === "string" && candidate.trim()
+  )?.trim() || "";
+}
+
+export async function handleChat(
+  req,
+  res,
+  { openaiClient, supabaseClient }
+) {
   try {
+    if (req.method && req.method !== "POST") {
+      res.setHeader("Allow", "POST");
+      return res.status(405).json({ error: "Method not allowed." });
+    }
 
     const body = req.body || {};
 
-const message = body.message || "";
-const history = body.history || [];
-const participantId = body.participantId || "anonymous";
-const sessionId = body.sessionId || "unknown";
-const language = body.language || "en";
-let retrievedHistory = [];
+    const message = typeof body.message === "string"
+      ? body.message.trim()
+      : "";
+    const history = sanitizeHistory(body.history);
+
+    if (!message || !history) {
+      return res.status(400).json({ error: "Invalid interview request." });
+    }
+
+    const participantId = valueOrFallback(body.participantId, "anonymous");
+    const sessionId = valueOrFallback(body.sessionId, "unknown");
+    const language = valueOrFallback(body.language, "en");
+    const design = await selectUsableResearchDesign(supabaseClient);
+
+    if (!design) {
+      throw new Error("No usable research design is available.");
+    }
+
+    const lastHistoryItem = history[history.length - 1];
+    const requestHistory =
+      lastHistoryItem?.role === "user" &&
+      lastHistoryItem.content === message
+        ? history
+        : [...history, { role: "user", content: message }];
+
+    let retrievedHistory = [];
 
 try {
 
-  const { data, error } = await supabase
+  const { data, error } = await supabaseClient
     .from("interview_messages")
     .select("*")
     .eq("Participant", participantId)
@@ -38,58 +98,6 @@ try {
 
   console.error("History retrieval failed:", err);
 
-}
-    
-  await supabase
-.from("interview_messages")
-.insert([
- {
-    Participant: participantId,
-    Session: sessionId,
-    Language: language,
-    Speaker: "user",
-    Message: message,
-    Timestamp: new Date().toISOString()
-}
-]);
-
-    
-const { data: activeDesign, error: activeDesignError } = await supabase
-.from("active_design")
-.select("active_design_id")
-  .order("id", { ascending: false })
-.limit(1)
-.single();
-
-if (activeDesignError) {
-  throw activeDesignError;
-}
-
-const { data: design, error: designError } = await supabase
-.from("research_designs")
-.select("*")
-.eq("id", activeDesign.active_design_id)
-.single();
-
-if (designError) {
-  throw designError;
-}
-
-if (!design) {
-  throw new Error("design is undefined");
-}
-
-if (!design.interview_questions) {
-  throw new Error("interview_questions is empty");
-}
- 
-
-if (typeof design.interview_questions !== "string") {
-  throw new Error(`interview_questions type: ${typeof design.interview_questions}`);
-}
-
-if (design.interview_questions.trim() === "") {
-  throw new Error("interview_questions is blank");
 }
     
     const interviewProtocol = `
@@ -149,7 +157,7 @@ const interviewHistoryText = retrievedHistory
   .join("\n");
 
     
-    const response = await openai.responses.create({
+    const response = await openaiClient.responses.create({
       model: "gpt-5.1",
       input: [
         {
@@ -160,36 +168,67 @@ const interviewHistoryText = retrievedHistory
             "\n\nPrevious interview history:\n" +
             interviewHistoryText
         },
-        ...history
+        ...requestHistory
       ]
     });
-console.log(response.output_text);
-        const reply = response.output_text || response.output?.[0]?.content?.[0]?.text || "";
 
-  await supabase
-.from("interview_messages")
-.insert([
-  {
-    Participant: participantId,
-    Session: sessionId,
-    Language: language,
-    Speaker: "ai",
-    Message: reply,
-    Timestamp: new Date().toISOString()
-  }
-]);
-    res.status(200).json({
+    const reply = extractReplyText(response);
+
+    if (!reply) {
+      throw new Error("OpenAI returned an empty interview reply.");
+    }
+
+    const timestamp = new Date().toISOString();
+    const { error: persistenceError } = await supabaseClient
+      .from("interview_messages")
+      .insert([
+        {
+          Participant: participantId,
+          Session: sessionId,
+          Language: language,
+          Speaker: "user",
+          Message: message,
+          Timestamp: timestamp
+        },
+        {
+          Participant: participantId,
+          Session: sessionId,
+          Language: language,
+          Speaker: "ai",
+          Message: reply,
+          Timestamp: timestamp
+        }
+      ]);
+
+    if (persistenceError) {
+      throw new Error("Interview message persistence failed.", {
+        cause: persistenceError
+      });
+    }
+
+    return res.status(200).json({
       reply
     });
 
   } catch (error) {
 
-    console.error(error);
+    console.error("Interview request failed:", error);
 
-    res.status(500).json({
-           error: String(error),
-      stack: error?.stack 
+    return res.status(500).json({
+      error: "Unable to complete the interview request."
     });
 
   }
+}
+
+export default async function handler(req, res) {
+  const openaiClient = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY
+  });
+  const supabaseClient = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_ANON_KEY
+  );
+
+  return handleChat(req, res, { openaiClient, supabaseClient });
 }

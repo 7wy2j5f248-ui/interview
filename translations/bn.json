@@ -30,6 +30,7 @@
   "returning_participant": "আমি আগে অংশ নিয়েছি",
   "language_selection": "ভাষা নির্বাচন",
   "interview_welcome": "এই সাক্ষাৎকারে স্বাগতম।",
+  "interview_error": "সাক্ষাৎকারটি চালিয়ে যাওয়া যায়নি। অনুগ্রহ করে আবার চেষ্টা করুন।",
   "participant": "অংশগ্রহণকারী",
   "ai": "AI",
   "return_language": "ভাষা নির্বাচনে ফিরে যান"

@@ -30,6 +30,7 @@
   "returning_participant": "Nimeshiriki hapo awali",
   "language_selection": "Uchaguzi wa lugha",
   "interview_welcome": "Karibu kwenye mahojiano haya.",
+  "interview_error": "Haikuwezekana kuendelea na mahojiano. Tafadhali jaribu tena.",
   "participant": "Mshiriki",
   "ai": "AI",
   "return_language": "Rudi kwenye uchaguzi wa lugha"

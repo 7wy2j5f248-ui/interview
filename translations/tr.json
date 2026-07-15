@@ -30,6 +30,7 @@
   "returning_participant": "Daha önce katıldım",
   "language_selection": "Dil seçimi",
   "interview_welcome": "Bu görüşmeye hoş geldiniz.",
+  "interview_error": "Görüşmeye devam edilemedi. Lütfen tekrar deneyin.",
   "participant": "Katılımcı",
   "ai": "Yapay zekâ",
   "return_language": "Dil seçimine dön"

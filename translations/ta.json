@@ -30,6 +30,7 @@
   "returning_participant": "நான் முன்பு பங்கேற்றுள்ளேன்",
   "language_selection": "மொழித் தேர்வு",
   "interview_welcome": "இந்த நேர்காணலுக்கு வரவேற்கிறோம்.",
+  "interview_error": "நேர்காணலைத் தொடர முடியவில்லை. மீண்டும் முயற்சிக்கவும்.",
   "participant": "பங்கேற்பாளர்",
   "ai": "AI",
   "return_language": "மொழித் தேர்வுக்குத் திரும்பவும்"
