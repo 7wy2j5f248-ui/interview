@@ -1,6 +1,6 @@
 window.APP_CONFIG = Object.freeze({
     app_name: "Interview Quest",
-    rtl_languages: Object.freeze(["ar", "ur"])
+    rtl_languages: Object.freeze(["ar", "ur", "fa", "prs"])
 });
 
 window.getLanguageDirection = function(language) {
