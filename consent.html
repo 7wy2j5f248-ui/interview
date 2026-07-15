@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Research Consent Form</title>
+<script src="config.js"></script>
 
 <style>
 body {
@@ -221,7 +222,7 @@ async function loadTranslations() {
 
     t = await response.json();
 
-    const direction = language === "ar" ? "rtl" : "ltr";
+    const direction = getLanguageDirection(language);
 
     document.documentElement.lang = language;
     document.documentElement.dir = direction;
@@ -251,7 +252,7 @@ async function loadTranslations() {
     const participantIdInput = document.getElementById("participantIdInput");
     participantIdInput.placeholder = t.participant_id_placeholder;
     participantIdInput.lang = language;
-    participantIdInput.dir = language === "ar" ? "auto" : "ltr";
+    participantIdInput.dir = direction === "rtl" ? "auto" : "ltr";
 
     document.getElementById("generatedParticipantIdLabel").textContent =
         t.generated_participant_id;

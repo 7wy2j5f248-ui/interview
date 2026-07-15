@@ -150,7 +150,7 @@ async function loadTranslations() {
         }
 
         document.documentElement.lang = language;
-        document.documentElement.dir = language === "ar" ? "rtl" : "ltr";
+        document.documentElement.dir = getLanguageDirection(language);
 
         document.title = formatAppName(
             t.welcome_page_title || "Welcome - {app_name}"
@@ -166,7 +166,7 @@ async function loadTranslations() {
             "This research project explores \"{topic}\" through AI-mediated interviews.";
 
         document.getElementById("welcomeIntro").textContent =
-            introTemplate.replace("{topic}", topic);
+            introTemplate.replace("{topic}", isolateDynamicText(topic));
         document.getElementById("welcomeProcess").textContent = t.welcome_process;
         document.getElementById("welcomeVoluntary").textContent = t.welcome_voluntary;
         document.getElementById("welcomeMessage").textContent = t.welcome_message;
