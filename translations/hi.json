@@ -30,6 +30,7 @@
   "returning_participant": "मैं पहले भाग ले चुका/चुकी हूँ",
   "language_selection": "भाषा चयन",
   "interview_welcome": "इस साक्षात्कार में आपका स्वागत है।",
+  "interview_error": "साक्षात्कार जारी नहीं रखा जा सका। कृपया फिर से प्रयास करें।",
   "participant": "प्रतिभागी",
   "ai": "AI",
   "return_language": "भाषा चयन पर वापस जाएँ"
