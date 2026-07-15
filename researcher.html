@@ -2,8 +2,75 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Researcher Dashboard</title>
     <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.5;
+            margin: 2rem auto;
+            max-width: 72rem;
+            padding-inline: 1rem;
+        }
+
+        button {
+            cursor: pointer;
+        }
+
+        .summaryTotals {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1rem;
+            margin-block: 1rem 1.5rem;
+        }
+
+        .summaryTotal {
+            border: 1px solid #cccccc;
+            border-radius: 0.25rem;
+            min-width: 10rem;
+            padding: 1rem;
+        }
+
+        .summaryTotal strong {
+            display: block;
+            font-size: 1.5rem;
+        }
+
+        table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+
+        th,
+        td {
+            border-block-end: 1px solid #dddddd;
+            padding: 0.75rem;
+            text-align: start;
+            vertical-align: top;
+        }
+
+        th {
+            background: #f5f5f5;
+        }
+
+        .linkButton {
+            background: none;
+            border: 0;
+            color: #005fcc;
+            font: inherit;
+            padding: 0;
+            text-decoration: underline;
+        }
+
+        .backButton {
+            margin-block-end: 1rem;
+        }
+
+        .statusMessage,
+        .legacyNote {
+            color: #555555;
+        }
+
         .message {
             margin-block: 1rem;
         }
@@ -27,32 +94,285 @@
 
 <h1>Researcher Dashboard</h1>
 
-<p>Welcome to the researcher interface.</p>
-<p>Add researcher dashboard</p>
-<button id="participantsButton">Participants</button>
-    <div id="participantsList"></div>
+<p id="statusMessage" class="statusMessage" role="status">
+    Loading interview statistics…
+</p>
 
-<div id="sessionsList"></div>
+<section id="summaryView" hidden>
+    <h2>Interview Corpus Summary</h2>
 
+    <div class="summaryTotals">
+        <div class="summaryTotal">
+            <span>Total sessions</span>
+            <strong id="totalSessions">0</strong>
+        </div>
+        <div class="summaryTotal">
+            <span>Languages represented</span>
+            <strong id="totalLanguages">0</strong>
+        </div>
+        <div class="summaryTotal">
+            <span>Total messages</span>
+            <strong id="totalMessages">0</strong>
+        </div>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th scope="col">Language</th>
+                <th scope="col">Sessions</th>
+                <th scope="col">Messages</th>
+                <th scope="col">Average session duration</th>
+            </tr>
+        </thead>
+        <tbody id="languageSummaryBody"></tbody>
+    </table>
+
+    <p id="legacyNote" class="legacyNote" hidden></p>
+</section>
+
+<section id="languageView" hidden>
+    <button id="summaryBackButton" class="backButton" type="button">
+        ← Back to corpus summary
+    </button>
+    <h2 id="languageHeading"></h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th scope="col">Session</th>
+                <th scope="col">Participant</th>
+                <th scope="col">Messages</th>
+                <th scope="col">Start time</th>
+                <th scope="col">End time</th>
+                <th scope="col">Duration</th>
+            </tr>
+        </thead>
+        <tbody id="sessionSummaryBody"></tbody>
+    </table>
+    <p id="noSessionsMessage" hidden>
+        These messages do not have a usable stored session identifier.
+    </p>
+</section>
+
+<section id="transcriptView" hidden>
+    <button id="languageBackButton" class="backButton" type="button"></button>
+    <h2 id="transcriptHeading"></h2>
     <div id="messagesList"></div>
-    
+</section>
+
 <script>
+
+let statistics = null;
+let selectedLanguage = null;
+
+function formatDuration(durationMs) {
+    if (!Number.isFinite(durationMs)) {
+        return "Unavailable";
+    }
+
+    const totalSeconds = Math.max(0, Math.round(durationMs / 1000));
+
+    if (totalSeconds === 0) {
+        return "0 min";
+    }
+
+    if (totalSeconds < 60) {
+        return "<1 min";
+    }
+
+    const totalMinutes = Math.round(totalSeconds / 60);
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+
+    if (hours && minutes) {
+        return `${hours} h ${minutes} min`;
+    }
+
+    if (hours) {
+        return `${hours} h`;
+    }
+
+    return `${minutes} min`;
+}
+
+function formatTimestamp(value) {
+    if (!value) {
+        return "Unavailable";
+    }
+
+    const timestamp = new Date(value);
+    return Number.isNaN(timestamp.getTime())
+        ? "Unavailable"
+        : timestamp.toLocaleString();
+}
+
+function participantLabel(participants) {
+    return Array.isArray(participants) && participants.length
+        ? participants.join(", ")
+        : "Unknown / legacy";
+}
+
+function clearViews() {
+    document.getElementById("summaryView").hidden = true;
+    document.getElementById("languageView").hidden = true;
+    document.getElementById("transcriptView").hidden = true;
+}
+
+function showSummary() {
+    selectedLanguage = null;
+    clearViews();
+    document.getElementById("summaryView").hidden = false;
+}
+
+function showLanguage(languageCode) {
+    const language = statistics.languages.find(
+        item => item.code === languageCode
+    );
+
+    if (!language) {
+        return;
+    }
+
+    selectedLanguage = language;
+    clearViews();
+    document.getElementById("languageView").hidden = false;
+    document.getElementById("languageHeading").textContent =
+        `${language.name} — Interview Sessions`;
+
+    const sessionBody = document.getElementById("sessionSummaryBody");
+    sessionBody.replaceChildren();
+
+    language.sessions.forEach(session => {
+        const row = document.createElement("tr");
+        const sessionCell = document.createElement("td");
+        const sessionButton = document.createElement("button");
+        sessionButton.className = "linkButton";
+        sessionButton.type = "button";
+        sessionButton.textContent = session.session;
+        sessionButton.addEventListener("click", () => {
+            loadMessages(session.session);
+        });
+        sessionCell.appendChild(sessionButton);
+
+        [
+            sessionCell,
+            participantLabel(session.participants),
+            session.messageCount,
+            formatTimestamp(session.startTime),
+            formatTimestamp(session.endTime),
+            formatDuration(session.durationMs)
+        ].forEach(value => {
+            if (value instanceof HTMLElement) {
+                row.appendChild(value);
+                return;
+            }
+
+            const cell = document.createElement("td");
+            cell.textContent = value;
+            row.appendChild(cell);
+        });
+
+        sessionBody.appendChild(row);
+    });
+
+    document.getElementById("noSessionsMessage").hidden =
+        language.sessions.length > 0;
+}
+
+function renderSummary(data) {
+    document.getElementById("totalSessions").textContent =
+        data.totals.sessions;
+    document.getElementById("totalLanguages").textContent =
+        data.totals.languages;
+    document.getElementById("totalMessages").textContent =
+        data.totals.messages;
+
+    const languageBody = document.getElementById("languageSummaryBody");
+    languageBody.replaceChildren();
+
+    data.languages.forEach(language => {
+        const row = document.createElement("tr");
+        const languageCell = document.createElement("td");
+        const languageButton = document.createElement("button");
+        languageButton.className = "linkButton";
+        languageButton.type = "button";
+        languageButton.textContent = language.name;
+        languageButton.addEventListener("click", () => {
+            showLanguage(language.code);
+        });
+        languageCell.appendChild(languageButton);
+
+        [
+            languageCell,
+            language.sessionCount,
+            language.messageCount,
+            formatDuration(language.averageSessionDurationMs)
+        ].forEach(value => {
+            if (value instanceof HTMLElement) {
+                row.appendChild(value);
+                return;
+            }
+
+            const cell = document.createElement("td");
+            cell.textContent = value;
+            row.appendChild(cell);
+        });
+
+        languageBody.appendChild(row);
+    });
+
+    const legacyNote = document.getElementById("legacyNote");
+    const messagesWithoutSession = data.metadata?.messagesWithoutSession || 0;
+    legacyNote.hidden = messagesWithoutSession === 0;
+    legacyNote.textContent = messagesWithoutSession
+        ? `${messagesWithoutSession} legacy messages without a stored session identifier are included in message totals but cannot appear in a session drill-down.`
+        : "";
+
+    showSummary();
+}
+
+async function loadStatistics() {
+    const status = document.getElementById("statusMessage");
+
+    try {
+        const response = await fetch("/api/statistics");
+
+        if (!response.ok) {
+            throw new Error("Statistics request failed.");
+        }
+
+        statistics = await response.json();
+        renderSummary(statistics);
+        status.hidden = true;
+    } catch (error) {
+        status.textContent = "Unable to load interview statistics.";
+    }
+}
 
 async function loadMessages(sessionId) {
 
-    const response = await fetch("/api/messages?session=" + sessionId);
+    clearViews();
+    document.getElementById("transcriptView").hidden = false;
+    document.getElementById("transcriptHeading").textContent =
+        `Session ${sessionId} — Transcript`;
+    document.getElementById("languageBackButton").textContent =
+        `← Back to ${selectedLanguage.name} sessions`;
+
+    const messageList = document.getElementById("messagesList");
+    messageList.textContent = "Loading transcript…";
+
+    const response = await fetch(
+        "/api/messages?session=" + encodeURIComponent(sessionId)
+    );
 
     if (!response.ok) {
-        document.getElementById("messagesList").textContent =
-            "Unable to load interview messages.";
+        messageList.textContent = "Unable to load interview messages.";
         return;
     }
 
     const messages = await response.json();
-
-    const messageList = document.getElementById("messagesList");
-
-    messageList.innerHTML = "";
+    messageList.replaceChildren();
 
     messages.forEach(function(item) {
 
@@ -102,67 +422,15 @@ async function loadMessages(sessionId) {
 
 }
 
-async function loadSessions(participantId) {
-
-    const response = await fetch("/api/sessions?participant=" + participantId);
-    const sessions = await response.json();
-
-    const sessionList = document.getElementById("sessionsList");
-
-    sessionList.innerHTML = "";
-
-    const uniqueSessions = [...new Set(sessions.map(item => item.Session))];
-
-    uniqueSessions.forEach(function(session) {
-
-        if (session) {
-            sessionList.innerHTML += `<p><button class="sessionButton" data-id="${session}">${session}</button></p>`;
-        }
-
-    });
-
-    document.querySelectorAll(".sessionButton").forEach(function(button) {
-
-        button.addEventListener("click", function() {
-
-            loadMessages(button.dataset.id);
-
-        });
-
-    });
-
-}
-
-document.getElementById("participantsButton").addEventListener("click", async function () {
-
-    const response = await fetch("/api/participants");
-    const participants = await response.json();
-
-    const list = document.getElementById("participantsList");
-
-    list.innerHTML = "";
-    document.getElementById("sessionsList").innerHTML = "";
-    document.getElementById("messagesList").innerHTML = "";
-
-    const uniqueParticipants = [...new Set(participants.map(item => item.Participant))];
-
-    uniqueParticipants.forEach(function(participant) {
-
-        list.innerHTML += `<p><button class="participantButton" data-id="${participant}">${participant}</button></p>`;
-
-    });
-
-    document.querySelectorAll(".participantButton").forEach(function(button) {
-
-        button.addEventListener("click", function() {
-
-            loadSessions(button.dataset.id);
-
-        });
-
-    });
-
+document.getElementById("summaryBackButton").addEventListener("click", () => {
+    showSummary();
 });
+
+document.getElementById("languageBackButton").addEventListener("click", () => {
+    showLanguage(selectedLanguage.code);
+});
+
+loadStatistics();
 
 </script>
     
