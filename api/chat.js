@@ -17,7 +17,10 @@ const supportedInterviewLanguages = Object.freeze({
   sw: "Swahili",
   ur: "Urdu",
   id: "Indonesian",
-  so: "Somali"
+  so: "Somali",
+  my: "Burmese",
+  fa: "Persian / Farsi",
+  prs: "Dari"
 });
 
 function valueOrFallback(value, fallback) {
