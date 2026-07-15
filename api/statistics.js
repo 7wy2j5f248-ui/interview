@@ -292,7 +292,11 @@ export async function loadStatisticsRows(supabaseClient, pageSize = 1000) {
     }
 }
 
-export async function handleStatistics(req, res, { supabaseClient }) {
+export async function handleStatistics(
+    req,
+    res,
+    { supabaseClient, sessionSupabaseClient }
+) {
     if (req.method && req.method !== "GET") {
         res.setHeader("Allow", "GET");
         return res.status(405).json({ error: "Method not allowed." });
@@ -302,7 +306,7 @@ export async function handleStatistics(req, res, { supabaseClient }) {
         res.setHeader("Cache-Control", "no-store");
         const [rows, completionRows] = await Promise.all([
             loadStatisticsRows(supabaseClient),
-            loadSessionCompletionRows(supabaseClient)
+            loadSessionCompletionRows(sessionSupabaseClient)
         ]);
         return res.status(200).json(
             buildCorpusStatistics(rows, completionRows)
@@ -316,10 +320,31 @@ export async function handleStatistics(req, res, { supabaseClient }) {
 }
 
 export default async function handler(req, res) {
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!serviceRoleKey) {
+        return res.status(500).json({
+            error: "Server configuration is incomplete."
+        });
+    }
+
     const supabaseClient = createClient(
         process.env.SUPABASE_URL,
         process.env.SUPABASE_ANON_KEY
     );
+    const sessionSupabaseClient = createClient(
+        process.env.SUPABASE_URL,
+        serviceRoleKey,
+        {
+            auth: {
+                autoRefreshToken: false,
+                persistSession: false
+            }
+        }
+    );
 
-    return handleStatistics(req, res, { supabaseClient });
+    return handleStatistics(req, res, {
+        supabaseClient,
+        sessionSupabaseClient
+    });
 }

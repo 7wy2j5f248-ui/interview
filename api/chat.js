@@ -139,7 +139,7 @@ async function markInterviewSessionCompleted(supabaseClient, sessionId) {
 export async function handleChat(
   req,
   res,
-  { openaiClient, supabaseClient }
+  { openaiClient, supabaseClient, sessionSupabaseClient }
 ) {
   try {
     if (req.method && req.method !== "POST") {
@@ -168,7 +168,7 @@ export async function handleChat(
       throw new Error("No usable research design is available.");
     }
 
-    await initializeInterviewSession(supabaseClient, {
+    await initializeInterviewSession(sessionSupabaseClient, {
       sessionId,
       participantId,
       language
@@ -335,7 +335,7 @@ const interviewHistoryText = retrievedHistory
     }
 
     if (finalQuestionAnswered) {
-      await markInterviewSessionCompleted(supabaseClient, sessionId);
+      await markInterviewSessionCompleted(sessionSupabaseClient, sessionId);
     }
 
     return res.status(200).json({
@@ -354,6 +354,14 @@ const interviewHistoryText = retrievedHistory
 }
 
 export default async function handler(req, res) {
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!serviceRoleKey) {
+    return res.status(500).json({
+      error: "Server configuration is incomplete."
+    });
+  }
+
   const openaiClient = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY
   });
@@ -361,6 +369,20 @@ export default async function handler(req, res) {
     process.env.SUPABASE_URL,
     process.env.SUPABASE_ANON_KEY
   );
+  const sessionSupabaseClient = createClient(
+    process.env.SUPABASE_URL,
+    serviceRoleKey,
+    {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
+    }
+  );
 
-  return handleChat(req, res, { openaiClient, supabaseClient });
+  return handleChat(req, res, {
+    openaiClient,
+    supabaseClient,
+    sessionSupabaseClient
+  });
 }
