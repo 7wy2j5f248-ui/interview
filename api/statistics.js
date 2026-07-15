@@ -48,7 +48,7 @@ function validTimestamp(value) {
     return Number.isFinite(timestamp) ? timestamp : null;
 }
 
-function summarizeSession(session) {
+function summarizeSession(session, completed) {
     const timestamps = session.timestamps;
     const startTimestamp = timestamps.length
         ? timestamps.reduce((earliest, timestamp) =>
@@ -64,6 +64,7 @@ function summarizeSession(session) {
     return {
         session: session.session,
         participants: [...session.participants].sort(),
+        completed,
         messageCount: session.messageCount,
         startTime: startTimestamp === null
             ? null
@@ -94,8 +95,19 @@ function compareSessions(left, right) {
         || left.session.localeCompare(right.session);
 }
 
-export function buildCorpusStatistics(rows) {
+export function buildCorpusStatistics(rows, completionRows = []) {
     const messages = Array.isArray(rows) ? rows : [];
+    const completionBySession = new Map(
+        (Array.isArray(completionRows) ? completionRows : [])
+            .map(row => [
+                storedIdentifier(row?.session_id),
+                {
+                    completed: row?.completed === true,
+                    language: normalizedLanguage(row?.language)
+                }
+            ])
+            .filter(([sessionId]) => sessionId)
+    );
     const sessions = new Map();
     const languages = new Map();
     let invalidTimestampMessages = 0;
@@ -152,7 +164,10 @@ export function buildCorpusStatistics(rows) {
     const sessionSummaries = new Map(
         [...sessions.entries()].map(([sessionId, session]) => [
             sessionId,
-            summarizeSession(session)
+            summarizeSession(
+                session,
+                completionBySession.get(sessionId)?.completed === true
+            )
         ])
     );
 
@@ -169,6 +184,11 @@ export function buildCorpusStatistics(rows) {
             code: language.code,
             name: language.name,
             sessionCount: languageSessions.length,
+            completedSessionCount: languageSessions.filter(
+                session => session.completed
+                    && completionBySession.get(session.session)?.language
+                        === language.code
+            ).length,
             messageCount: language.messageCount,
             averageSessionDurationMs: durations.length
                 ? Math.round(
@@ -193,6 +213,9 @@ export function buildCorpusStatistics(rows) {
     return {
         totals: {
             sessions: sessions.size,
+            completedSessions: [...sessionSummaries.values()].filter(
+                session => session.completed
+            ).length,
             languages: languageSummaries.filter(
                 language => language.code !== UNKNOWN_LANGUAGE_CODE
             ).length,
@@ -208,6 +231,37 @@ export function buildCorpusStatistics(rows) {
             invalidTimestampMessages
         }
     };
+}
+
+export async function loadSessionCompletionRows(
+    supabaseClient,
+    pageSize = 1000
+) {
+    const rows = [];
+    let from = 0;
+
+    while (true) {
+        const { data, error } = await supabaseClient
+            .from("interview_sessions")
+            .select("session_id, language, completed")
+            .order("session_id", { ascending: true })
+            .range(from, from + pageSize - 1);
+
+        if (error) {
+            throw new Error("Interview completion statistics could not be loaded.", {
+                cause: error
+            });
+        }
+
+        const page = data || [];
+        rows.push(...page);
+
+        if (page.length < pageSize) {
+            return rows;
+        }
+
+        from += pageSize;
+    }
 }
 
 export async function loadStatisticsRows(supabaseClient, pageSize = 1000) {
@@ -246,8 +300,13 @@ export async function handleStatistics(req, res, { supabaseClient }) {
 
     try {
         res.setHeader("Cache-Control", "no-store");
-        const rows = await loadStatisticsRows(supabaseClient);
-        return res.status(200).json(buildCorpusStatistics(rows));
+        const [rows, completionRows] = await Promise.all([
+            loadStatisticsRows(supabaseClient),
+            loadSessionCompletionRows(supabaseClient)
+        ]);
+        return res.status(200).json(
+            buildCorpusStatistics(rows, completionRows)
+        );
     } catch (error) {
         console.error("Researcher statistics loading failed:", error);
         return res.status(500).json({

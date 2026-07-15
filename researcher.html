@@ -121,6 +121,7 @@
             <tr>
                 <th scope="col">Language</th>
                 <th scope="col">Sessions</th>
+                <th scope="col">Completed sessions</th>
                 <th scope="col">Messages</th>
                 <th scope="col">Average session duration</th>
             </tr>
@@ -146,6 +147,7 @@
                 <th scope="col">Start time</th>
                 <th scope="col">End time</th>
                 <th scope="col">Duration</th>
+                <th scope="col">Status</th>
             </tr>
         </thead>
         <tbody id="sessionSummaryBody"></tbody>
@@ -261,7 +263,8 @@ function showLanguage(languageCode) {
             session.messageCount,
             formatTimestamp(session.startTime),
             formatTimestamp(session.endTime),
-            formatDuration(session.durationMs)
+            formatDuration(session.durationMs),
+            session.completed ? "Completed" : "Incomplete"
         ].forEach(value => {
             if (value instanceof HTMLElement) {
                 row.appendChild(value);
@@ -306,6 +309,7 @@ function renderSummary(data) {
         [
             languageCell,
             language.sessionCount,
+            language.completedSessionCount,
             language.messageCount,
             formatDuration(language.averageSessionDurationMs)
         ].forEach(value => {

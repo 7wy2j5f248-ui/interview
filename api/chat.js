@@ -68,6 +68,74 @@ export function extractReplyText(response) {
   )?.trim() || "";
 }
 
+export function parseInterviewTurn(response) {
+  const outputText = extractReplyText(response);
+
+  if (!outputText) {
+    throw new Error("OpenAI returned an empty interview turn.");
+  }
+
+  let turn;
+
+  try {
+    turn = JSON.parse(outputText);
+  } catch (error) {
+    throw new Error("OpenAI returned invalid interview turn data.", {
+      cause: error
+    });
+  }
+
+  const reply = typeof turn?.reply === "string"
+    ? turn.reply.trim()
+    : "";
+
+  if (!reply || typeof turn?.completed !== "boolean") {
+    throw new Error("OpenAI returned incomplete interview turn data.");
+  }
+
+  return {
+    reply,
+    completed: turn.completed
+  };
+}
+
+async function initializeInterviewSession(
+  supabaseClient,
+  { sessionId, participantId, language }
+) {
+  const { error } = await supabaseClient
+    .from("interview_sessions")
+    .upsert({
+      session_id: sessionId,
+      participant_id: participantId,
+      language,
+      completed: false,
+      completed_at: null
+    }, {
+      onConflict: "session_id",
+      ignoreDuplicates: true
+    });
+
+  if (error) {
+    throw new Error("Interview session initialization failed.", {
+      cause: error
+    });
+  }
+}
+
+async function markInterviewSessionCompleted(supabaseClient, sessionId) {
+  const { data, error } = await supabaseClient.rpc(
+    "complete_interview_session",
+    { p_session_id: sessionId }
+  );
+
+  if (error || data !== true) {
+    throw new Error("Interview session completion persistence failed.", {
+      cause: error || undefined
+    });
+  }
+}
+
 export async function handleChat(
   req,
   res,
@@ -99,6 +167,12 @@ export async function handleChat(
     if (!design) {
       throw new Error("No usable research design is available.");
     }
+
+    await initializeInterviewSession(supabaseClient, {
+      sessionId,
+      participantId,
+      language
+    });
 
     const lastHistoryItem = history[history.length - 1];
     const requestHistory =
@@ -180,6 +254,9 @@ Do not advise, teach, debate, answer unrelated questions, or give long explanati
 The interview should contain no more than ${design.maximum_interviewer_questions} interviewer questions.
 
 Near the end, invite final comments and conclude politely.
+
+Interview completion state:
+Return completed as true only when the participant-facing reply in this turn definitively concludes the interview after the researcher's full protocol has been completed. The concluding reply must not ask a question or invite another response. Return completed as false for every other turn, including a final-comments invitation. This completion value is internal machine-readable state and must never be mentioned, labelled, or exposed in the participant-facing reply.
 `;
 
 const interviewHistoryText = retrievedHistory
@@ -189,6 +266,28 @@ const interviewHistoryText = retrievedHistory
     
     const response = await openaiClient.responses.create({
       model: "gpt-5.1",
+      text: {
+        format: {
+          type: "json_schema",
+          name: "interview_turn",
+          strict: true,
+          schema: {
+            type: "object",
+            properties: {
+              reply: {
+                type: "string",
+                description: "Only the natural participant-facing interviewer reply in the selected interview language."
+              },
+              completed: {
+                type: "boolean",
+                description: "True only when this reply definitively concludes the completed interview protocol."
+              }
+            },
+            required: ["reply", "completed"],
+            additionalProperties: false
+          }
+        }
+      },
       input: [
         {
           role: "system",
@@ -203,11 +302,7 @@ const interviewHistoryText = retrievedHistory
       ]
     });
 
-    const reply = extractReplyText(response);
-
-    if (!reply) {
-      throw new Error("OpenAI returned an empty interview reply.");
-    }
+    const { reply, completed } = parseInterviewTurn(response);
 
     const timestamp = new Date().toISOString();
     const { error: persistenceError } = await supabaseClient
@@ -235,6 +330,10 @@ const interviewHistoryText = retrievedHistory
       throw new Error("Interview message persistence failed.", {
         cause: persistenceError
       });
+    }
+
+    if (completed) {
+      await markInterviewSessionCompleted(supabaseClient, sessionId);
     }
 
     return res.status(200).json({
