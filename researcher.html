@@ -17,6 +17,10 @@
             margin-block-start: 0.5rem;
             padding-inline-start: 0.75rem;
         }
+
+        .translationUnavailable {
+            color: #666666;
+        }
     </style>
 </head>
 <body>
@@ -67,8 +71,11 @@ async function loadMessages(sessionId) {
         const translation = typeof item.EnglishTranslation === "string"
             ? item.EnglishTranslation.trim()
             : "";
+        const translationState = typeof item.TranslationState === "string"
+            ? item.TranslationState
+            : "";
 
-        if (language && language !== "en" && translation) {
+        if (translationState === "translated" && translation) {
             const translationBlock = document.createElement("div");
             translationBlock.className = "englishTranslation";
 
@@ -80,6 +87,13 @@ async function loadMessages(sessionId) {
 
             translationBlock.append(translationLabel, translationText);
             message.appendChild(translationBlock);
+        } else if (translationState === "translation_unavailable"
+            && language && language !== "en") {
+            const unavailableNotice = document.createElement("p");
+            unavailableNotice.className = "englishTranslation translationUnavailable";
+            unavailableNotice.textContent =
+                "English translation temporarily unavailable.";
+            message.appendChild(unavailableNotice);
         }
 
         messageList.appendChild(message);

@@ -33,14 +33,57 @@ export async function translateMessageToEnglish(openaiClient, message) {
 }
 
 function needsEnglishTranslation(item) {
-    const language = typeof item.Language === "string"
-        ? item.Language.trim().toLowerCase()
-        : "";
-    const existingTranslation = typeof item.EnglishTranslation === "string"
-        ? item.EnglishTranslation.trim()
-        : "";
+    const language = normalizedLanguage(item);
+    const existingTranslation = normalizedTranslation(item);
 
     return Boolean(language && language !== "en" && !existingTranslation);
+}
+
+function normalizedLanguage(item) {
+    return typeof item.Language === "string"
+        ? item.Language.trim().toLowerCase()
+        : "";
+}
+
+function normalizedTranslation(item) {
+    return typeof item.EnglishTranslation === "string"
+        ? item.EnglishTranslation.trim()
+        : "";
+}
+
+function translationState(item) {
+    const language = normalizedLanguage(item);
+
+    if (language === "en") {
+        return "original_english";
+    }
+
+    if (language && normalizedTranslation(item)) {
+        return "translated";
+    }
+
+    if (language) {
+        return "translation_unavailable";
+    }
+
+    return null;
+}
+
+function logTranslationFailure(item, stage, error) {
+    const details = {
+        messageId: item.id,
+        language: normalizedLanguage(item),
+        stage,
+        reason: error?.message === "Message translation was empty."
+            ? "empty_translation"
+            : `translation_${stage}_failed`
+    };
+
+    if (typeof error?.status === "number") {
+        details.status = error.status;
+    }
+
+    console.error("Researcher message translation failed:", details);
 }
 
 export async function handleMessages(
@@ -76,24 +119,38 @@ export async function handleMessages(
                 continue;
             }
 
-            const translation = await translateMessage(openaiClient, item.Message);
+            let stage = "generation";
 
-            if (!translation) {
-                throw new Error("Message translation was empty.");
+            try {
+                const generatedTranslation = await translateMessage(
+                    openaiClient,
+                    item.Message
+                );
+                const translation = typeof generatedTranslation === "string"
+                    ? generatedTranslation.trim()
+                    : "";
+
+                if (!translation) {
+                    throw new Error("Message translation was empty.");
+                }
+
+                stage = "persistence";
+
+                const { error: updateError } = await supabaseClient
+                    .from("interview_messages")
+                    .update({ EnglishTranslation: translation })
+                    .eq("id", item.id);
+
+                if (updateError) {
+                    throw new Error("Message translation could not be saved.", {
+                        cause: updateError
+                    });
+                }
+
+                item.EnglishTranslation = translation;
+            } catch (error) {
+                logTranslationFailure(item, stage, error);
             }
-
-            const { error: updateError } = await supabaseClient
-                .from("interview_messages")
-                .update({ EnglishTranslation: translation })
-                .eq("id", item.id);
-
-            if (updateError) {
-                throw new Error("Message translation could not be saved.", {
-                    cause: updateError
-                });
-            }
-
-            item.EnglishTranslation = translation;
         }
 
         return res.status(200).json(messages.map(item => ({
@@ -101,7 +158,10 @@ export async function handleMessages(
             Message: item.Message,
             Timestamp: item.Timestamp,
             Language: item.Language,
-            EnglishTranslation: item.EnglishTranslation || null
+            EnglishTranslation: normalizedTranslation(item)
+                ? item.EnglishTranslation
+                : null,
+            TranslationState: translationState(item)
         })));
     } catch (error) {
         console.error("Researcher message loading failed:", error);
