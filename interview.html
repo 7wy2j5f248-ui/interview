@@ -156,8 +156,7 @@ function appendChatMessage(label, content) {
         return false;
     }
 
-    const messageDirection =
-        language === "ar" ? "rtl" : "ltr";
+    const messageDirection = getLanguageDirection(language);
 
     const paragraph = document.createElement("p");
     paragraph.className = "chat-message";
@@ -201,7 +200,7 @@ async function loadTranslations() {
 
     t = await response.json();
 
-    const direction = language === "ar" ? "rtl" : "ltr";
+    const direction = getLanguageDirection(language);
 
     document.documentElement.lang = language;
     document.documentElement.dir = direction;

@@ -2,6 +2,24 @@ import OpenAI from "openai";
 import { createClient } from "@supabase/supabase-js";
 import { selectUsableResearchDesign } from "./researchDesign.js";
 
+const supportedInterviewLanguages = Object.freeze({
+  en: "English",
+  zh: "Simplified Chinese",
+  ar: "Arabic",
+  es: "Spanish",
+  fr: "French",
+  pt: "Portuguese",
+  tr: "Turkish",
+  hi: "Hindi",
+  bn: "Bengali",
+  vi: "Vietnamese",
+  ta: "Tamil",
+  sw: "Swahili",
+  ur: "Urdu",
+  id: "Indonesian",
+  so: "Somali"
+});
+
 function valueOrFallback(value, fallback) {
   return typeof value === "string" && value.trim()
     ? value.trim()
@@ -24,6 +42,14 @@ function sanitizeHistory(history) {
       role: item.role,
       content: item.content.trim()
     }));
+}
+
+function normalizeInterviewLanguage(language) {
+  const requestedLanguage = valueOrFallback(language, "en").toLowerCase();
+
+  return Object.hasOwn(supportedInterviewLanguages, requestedLanguage)
+    ? requestedLanguage
+    : "en";
 }
 
 export function extractReplyText(response) {
@@ -63,7 +89,8 @@ export async function handleChat(
 
     const participantId = valueOrFallback(body.participantId, "anonymous");
     const sessionId = valueOrFallback(body.sessionId, "unknown");
-    const language = valueOrFallback(body.language, "en");
+    const language = normalizeInterviewLanguage(body.language);
+    const languageName = supportedInterviewLanguages[language];
     const design = await selectUsableResearchDesign(supabaseClient);
 
     if (!design) {
@@ -164,7 +191,8 @@ const interviewHistoryText = retrievedHistory
           role: "system",
                   content:
             interviewProtocol +
-            "\n\nSelected interview language: " + language +
+            "\n\nSelected interview language: " + languageName +
+            " (" + language + ")" +
             "\n\nPrevious interview history:\n" +
             interviewHistoryText
         },
