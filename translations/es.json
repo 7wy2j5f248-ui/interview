@@ -30,6 +30,7 @@
   "returning_participant": "He participado antes",
   "language_selection": "Selección de idioma",
   "interview_welcome": "Le damos la bienvenida a esta entrevista.",
+  "interview_error": "No se pudo continuar con la entrevista. Inténtelo de nuevo.",
   "participant": "Participante",
   "ai": "IA",
   "return_language": "Volver a la selección de idioma"

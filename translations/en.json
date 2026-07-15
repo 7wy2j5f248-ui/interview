@@ -52,6 +52,7 @@
 
   "interview": "Interview",
   "interview_welcome": "Welcome to the interview.",
+  "interview_error": "We could not continue the interview. Please try again.",
   "send": "Send",
   "ai": "AI",
   "participant": "Participant",

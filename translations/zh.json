@@ -45,6 +45,7 @@
  "language_selection": "语言选择",
 
 "interview_welcome": "欢迎参加本次访谈。",
+"interview_error": "无法继续访谈。请重试。",
 "participant": "参与者",
 "ai": "AI",
 "return_language": "返回语言选择"
