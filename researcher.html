@@ -3,6 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <title>Researcher Dashboard</title>
+    <style>
+        .message {
+            margin-block: 1rem;
+        }
+
+        .message p {
+            white-space: pre-wrap;
+        }
+
+        .englishTranslation {
+            border-inline-start: 3px solid #cccccc;
+            margin-block-start: 0.5rem;
+            padding-inline-start: 0.75rem;
+        }
+    </style>
 </head>
 <body>
 
@@ -11,9 +26,6 @@
 <p>Welcome to the researcher interface.</p>
 <p>Add researcher dashboard</p>
 <button id="participantsButton">Participants</button>
-<button>Sessions</button>
-<button>Messages</button>
-<button>Statistics</button>
     <div id="participantsList"></div>
 
 <div id="sessionsList"></div>
@@ -25,6 +37,13 @@
 async function loadMessages(sessionId) {
 
     const response = await fetch("/api/messages?session=" + sessionId);
+
+    if (!response.ok) {
+        document.getElementById("messagesList").textContent =
+            "Unable to load interview messages.";
+        return;
+    }
+
     const messages = await response.json();
 
     const messageList = document.getElementById("messagesList");
@@ -33,7 +52,37 @@ async function loadMessages(sessionId) {
 
     messages.forEach(function(item) {
 
-        messageList.innerHTML += `<p><strong>${item.Speaker}:</strong> ${item.Message}</p>`;
+        const message = document.createElement("article");
+        message.className = "message";
+
+        const original = document.createElement("p");
+        const speaker = document.createElement("strong");
+        speaker.textContent = `${item.Speaker}: `;
+        original.append(speaker, document.createTextNode(item.Message));
+        message.appendChild(original);
+
+        const language = typeof item.Language === "string"
+            ? item.Language.trim().toLowerCase()
+            : "";
+        const translation = typeof item.EnglishTranslation === "string"
+            ? item.EnglishTranslation.trim()
+            : "";
+
+        if (language && language !== "en" && translation) {
+            const translationBlock = document.createElement("div");
+            translationBlock.className = "englishTranslation";
+
+            const translationLabel = document.createElement("strong");
+            translationLabel.textContent = "English translation:";
+
+            const translationText = document.createElement("p");
+            translationText.textContent = translation;
+
+            translationBlock.append(translationLabel, translationText);
+            message.appendChild(translationBlock);
+        }
+
+        messageList.appendChild(message);
 
     });
 
