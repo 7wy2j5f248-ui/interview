@@ -89,13 +89,13 @@ export function parseInterviewTurn(response) {
     ? turn.reply.trim()
     : "";
 
-  if (!reply || typeof turn?.completed !== "boolean") {
+  if (!reply || typeof turn?.final_question_answered !== "boolean") {
     throw new Error("OpenAI returned incomplete interview turn data.");
   }
 
   return {
     reply,
-    completed: turn.completed
+    finalQuestionAnswered: turn.final_question_answered
   };
 }
 
@@ -255,8 +255,10 @@ The interview should contain no more than ${design.maximum_interviewer_questions
 
 Near the end, invite final comments and conclude politely.
 
-Interview completion state:
-Return completed as true only when the participant-facing reply in this turn definitively concludes the interview after the researcher's full protocol has been completed. The concluding reply must not ask a question or invite another response. Return completed as false for every other turn, including a final-comments invitation. This completion value is internal machine-readable state and must never be mentioned, labelled, or exposed in the participant-facing reply.
+Final canonical question state:
+The Interview Sequence contains ${design.interview_question_count} canonical questions in researcher-defined order. Canonical Question ${design.interview_question_count}, the last question in that ordered sequence, is the final canonical question. Follow-up, clarification, resumption, and final-comments questions do not change which canonical question is final.
+
+Return final_question_answered as true when the participant's current message answers that final canonical question. Return it as false when the current message answers any earlier canonical question or any follow-up, clarification, resumption, or final-comments question. Base this value only on whether the participant's current message answers the structurally final canonical question. Do not base it on the tone or wording of your reply, whether your reply sounds conclusive, the ending-message wording, whether you thank the participant, or whether you invite final comments. This value is internal machine-readable state and must never be mentioned, labelled, or exposed in the participant-facing reply.
 `;
 
 const interviewHistoryText = retrievedHistory
@@ -278,12 +280,12 @@ const interviewHistoryText = retrievedHistory
                 type: "string",
                 description: "Only the natural participant-facing interviewer reply in the selected interview language."
               },
-              completed: {
+              final_question_answered: {
                 type: "boolean",
-                description: "True only when this reply definitively concludes the completed interview protocol."
+                description: "True only when the participant's current message answers the last canonical question in the researcher-defined ordered Interview Sequence."
               }
             },
-            required: ["reply", "completed"],
+            required: ["reply", "final_question_answered"],
             additionalProperties: false
           }
         }
@@ -302,7 +304,7 @@ const interviewHistoryText = retrievedHistory
       ]
     });
 
-    const { reply, completed } = parseInterviewTurn(response);
+    const { reply, finalQuestionAnswered } = parseInterviewTurn(response);
 
     const timestamp = new Date().toISOString();
     const { error: persistenceError } = await supabaseClient
@@ -332,7 +334,7 @@ const interviewHistoryText = retrievedHistory
       });
     }
 
-    if (completed) {
+    if (finalQuestionAnswered) {
       await markInterviewSessionCompleted(supabaseClient, sessionId);
     }
 
