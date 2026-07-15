@@ -320,9 +320,9 @@ export async function handleStatistics(
 }
 
 export default async function handler(req, res) {
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const secretKey = process.env.SUPABASE_SECRET_KEY;
 
-    if (!serviceRoleKey) {
+    if (!secretKey) {
         return res.status(500).json({
             error: "Server configuration is incomplete."
         });
@@ -334,7 +334,7 @@ export default async function handler(req, res) {
     );
     const sessionSupabaseClient = createClient(
         process.env.SUPABASE_URL,
-        serviceRoleKey,
+        secretKey,
         {
             auth: {
                 autoRefreshToken: false,
