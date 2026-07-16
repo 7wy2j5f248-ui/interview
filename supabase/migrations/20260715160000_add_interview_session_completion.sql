@@ -25,7 +25,7 @@ comment on column public.interview_sessions.completed is
 alter table public.interview_sessions enable row level security;
 
 revoke all on table public.interview_sessions
-from public, anon, authenticated;
+from public, anon, authenticated, service_role;
 
 grant select, insert, update on table public.interview_sessions
 to service_role;
@@ -62,7 +62,7 @@ end;
 $$;
 
 revoke all on function public.complete_interview_session(text)
-from public, anon, authenticated;
+from public, anon, authenticated, service_role;
 
 grant execute on function public.complete_interview_session(text)
 to service_role;

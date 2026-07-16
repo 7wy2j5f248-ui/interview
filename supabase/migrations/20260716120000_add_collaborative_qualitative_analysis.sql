@@ -179,13 +179,13 @@ alter table public.qualitative_analysis_items enable row level security;
 alter table public.qualitative_analysis_evidence enable row level security;
 
 revoke all on table public.qualitative_analysis_runs
-from public, anon, authenticated;
+from public, anon, authenticated, service_role;
 revoke all on table public.qualitative_analysis_run_messages
-from public, anon, authenticated;
+from public, anon, authenticated, service_role;
 revoke all on table public.qualitative_analysis_items
-from public, anon, authenticated;
+from public, anon, authenticated, service_role;
 revoke all on table public.qualitative_analysis_evidence
-from public, anon, authenticated;
+from public, anon, authenticated, service_role;
 
 grant select, insert, update on table public.qualitative_analysis_runs
 to service_role;
