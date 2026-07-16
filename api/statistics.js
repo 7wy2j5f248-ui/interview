@@ -1,4 +1,10 @@
 import { createClient } from "@supabase/supabase-js";
+import {
+    corpusPeriodFromRequest,
+    filterCorpusRows,
+    storedIdentifier,
+    validTimestamp
+} from "./corpus.js";
 
 export const SUPPORTED_LANGUAGE_NAMES = Object.freeze({
     en: "English",
@@ -23,12 +29,6 @@ export const SUPPORTED_LANGUAGE_NAMES = Object.freeze({
 
 export const UNKNOWN_LANGUAGE_CODE = "__unknown__";
 
-function storedIdentifier(value) {
-    return typeof value === "string" && value.trim()
-        ? value
-        : null;
-}
-
 function normalizedLanguage(value) {
     return typeof value === "string" && value.trim()
         ? value.trim().toLowerCase()
@@ -41,11 +41,6 @@ function languageName(code) {
     }
 
     return SUPPORTED_LANGUAGE_NAMES[code] || `Other / unrecognized (${code})`;
-}
-
-function validTimestamp(value) {
-    const timestamp = Date.parse(value);
-    return Number.isFinite(timestamp) ? timestamp : null;
 }
 
 function summarizeSession(session, completed) {
@@ -304,14 +299,24 @@ export async function handleStatistics(
 
     try {
         res.setHeader("Cache-Control", "no-store");
+        const period = corpusPeriodFromRequest(req);
         const [rows, completionRows] = await Promise.all([
             loadStatisticsRows(supabaseClient),
             loadSessionCompletionRows(sessionSupabaseClient)
         ]);
-        return res.status(200).json(
-            buildCorpusStatistics(rows, completionRows)
+        const statistics = buildCorpusStatistics(
+            filterCorpusRows(rows, period),
+            completionRows
         );
+
+        statistics.metadata.period = period;
+
+        return res.status(200).json(statistics);
     } catch (error) {
+        if (error?.message?.includes("date/time")) {
+            return res.status(400).json({ error: error.message });
+        }
+
         console.error("Researcher statistics loading failed:", error);
         return res.status(500).json({
             error: "Unable to load interview statistics."

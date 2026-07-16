@@ -88,18 +88,129 @@
         .translationUnavailable {
             color: #666666;
         }
+
+        .panel {
+            border: 1px solid #cccccc;
+            border-radius: 0.35rem;
+            margin-block: 1.5rem;
+            padding: 1rem;
+        }
+
+        .fieldRow,
+        .actionRow {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+            margin-block: 0.75rem;
+        }
+
+        label {
+            display: grid;
+            gap: 0.25rem;
+        }
+
+        input,
+        select,
+        textarea {
+            font: inherit;
+            max-width: 100%;
+            padding: 0.4rem;
+        }
+
+        textarea {
+            min-height: 5rem;
+            resize: vertical;
+        }
+
+        .errorMessage {
+            color: #9b1c1c;
+        }
+
+        .analysisTable {
+            min-width: 64rem;
+        }
+
+        .tableScroll {
+            overflow-x: auto;
+        }
+
+        .analysisField {
+            margin-block-end: 0.65rem;
+            width: 100%;
+        }
+
+        .analysisField input,
+        .analysisField textarea {
+            box-sizing: border-box;
+            width: 100%;
+        }
+
+        .analysisActions {
+            display: grid;
+            gap: 0.5rem;
+        }
+
+        .provisionalLabel,
+        .statusBadge {
+            color: #555555;
+            font-size: 0.9rem;
+        }
+
+        dialog {
+            border: 1px solid #999999;
+            max-height: 85vh;
+            max-width: 56rem;
+            overflow: auto;
+            width: calc(100% - 2rem);
+        }
+
+        .evidenceMessage {
+            border-block-end: 1px solid #dddddd;
+            padding-block: 1rem;
+        }
+
+        .evidenceText {
+            unicode-bidi: plaintext;
+            white-space: pre-wrap;
+        }
+
+        .muted {
+            color: #666666;
+        }
     </style>
 </head>
 <body>
 
 <h1>Researcher Dashboard</h1>
 
+<section class="panel" aria-labelledby="periodHeading">
+    <h2 id="periodHeading">Statistics and analysis period</h2>
+    <form id="periodForm">
+        <div class="fieldRow">
+            <label>
+                Starting date/time
+                <input id="periodStart" type="datetime-local">
+            </label>
+            <label>
+                Ending date/time
+                <input id="periodEnd" type="datetime-local">
+            </label>
+        </div>
+        <div class="actionRow">
+            <button type="submit">Apply</button>
+            <button id="periodResetButton" type="button">Reset to all time</button>
+        </div>
+    </form>
+    <p id="periodError" class="errorMessage" role="alert" hidden></p>
+    <p><strong>Active scope:</strong> <span id="activePeriod">All time</span></p>
+</section>
+
 <p id="statusMessage" class="statusMessage" role="status">
     Loading interview statistics…
 </p>
 
 <section id="summaryView" hidden>
-    <h2>Interview Corpus Summary</h2>
+    <h2>Corpus Statistics</h2>
 
     <div class="summaryTotals">
         <div class="summaryTotal">
@@ -109,6 +220,10 @@
         <div class="summaryTotal">
             <span>Languages represented</span>
             <strong id="totalLanguages">0</strong>
+        </div>
+        <div class="summaryTotal">
+            <span>Completed sessions</span>
+            <strong id="totalCompletedSessions">0</strong>
         </div>
         <div class="summaryTotal">
             <span>Total messages</span>
@@ -131,6 +246,100 @@
 
     <p id="legacyNote" class="legacyNote" hidden></p>
 </section>
+
+<section id="analysisSection" class="panel" aria-labelledby="analysisHeading">
+    <h2 id="analysisHeading">AI-Assisted Qualitative Analysis</h2>
+    <p>
+        AI suggestions are provisional. Researcher feedback controls later
+        evidence collection, and only explicitly confirmed snapshots become
+        the analytical foundation.
+    </p>
+
+    <div id="analysisTokenGate">
+        <label>
+            Researcher dashboard token
+            <input
+                id="analysisToken"
+                type="password"
+                autocomplete="current-password"
+            >
+        </label>
+        <div class="actionRow">
+            <button id="analysisUnlockButton" type="button">
+                Unlock analysis workspace
+            </button>
+        </div>
+    </div>
+
+    <div id="analysisWorkspace" hidden>
+        <div class="actionRow">
+            <button id="generateAnalysisButton" type="button">
+                Generate AI suggestions
+            </button>
+            <label>
+                Stored analysis run
+                <select id="analysisRunSelect"></select>
+            </label>
+            <button id="analysisLockButton" type="button">Lock workspace</button>
+        </div>
+        <p id="analysisRunMetadata" class="muted"></p>
+        <p id="analysisStatus" role="status"></p>
+
+        <details>
+            <summary>Create a researcher-originated analytical item</summary>
+            <div class="fieldRow">
+                <label>
+                    Theme
+                    <input id="newResearcherTheme" type="text">
+                </label>
+                <label>
+                    Codes (comma separated)
+                    <input id="newResearcherCodes" type="text">
+                </label>
+                <label>
+                    Keywords (comma separated)
+                    <input id="newResearcherKeywords" type="text">
+                </label>
+            </div>
+            <label>
+                Analytical note
+                <textarea id="newResearcherNote"></textarea>
+            </label>
+            <button id="createResearcherItemButton" type="button">
+                Add researcher item
+            </button>
+        </details>
+
+        <div class="tableScroll">
+            <table class="analysisTable">
+                <thead>
+                    <tr>
+                        <th scope="col">AI suggestion</th>
+                        <th scope="col">Researcher feedback</th>
+                        <th scope="col">Supporting messages</th>
+                        <th scope="col">Status / actions</th>
+                    </tr>
+                </thead>
+                <tbody id="analysisItemsBody"></tbody>
+            </table>
+        </div>
+    </div>
+</section>
+
+<dialog id="evidenceDialog">
+    <button id="closeEvidenceDialogButton" type="button">Close</button>
+    <h2 id="evidenceDialogHeading">Supporting messages</h2>
+    <div id="evidenceMessages"></div>
+    <div class="panel">
+        <label>
+            Add another participant message from this analysis corpus
+            <select id="manualEvidenceMessage"></select>
+        </label>
+        <button id="addManualEvidenceButton" type="button">
+            Add supporting message
+        </button>
+    </div>
+</dialog>
 
 <section id="languageView" hidden>
     <button id="summaryBackButton" class="backButton" type="button">
@@ -167,6 +376,69 @@
 
 let statistics = null;
 let selectedLanguage = null;
+let currentCorpusPeriod = { start: null, end: null, allTime: true };
+
+function periodQuery(period) {
+    const parameters = new URLSearchParams();
+
+    if (period.start) {
+        parameters.set("start", period.start);
+    }
+
+    if (period.end) {
+        parameters.set("end", period.end);
+    }
+
+    const query = parameters.toString();
+    return query ? `?${query}` : "";
+}
+
+function localPeriodFromInputs() {
+    const startValue = document.getElementById("periodStart").value;
+    const endValue = document.getElementById("periodEnd").value;
+    const startDate = startValue ? new Date(startValue) : null;
+    const endDate = endValue ? new Date(endValue) : null;
+
+    if ((startDate && Number.isNaN(startDate.getTime()))
+        || (endDate && Number.isNaN(endDate.getTime()))) {
+        throw new Error("Enter a valid starting and ending date/time.");
+    }
+
+    if (startDate && endDate && startDate > endDate) {
+        throw new Error(
+            "Starting date/time must not be later than ending date/time."
+        );
+    }
+
+    return {
+        start: startDate ? startDate.toISOString() : null,
+        end: endDate ? endDate.toISOString() : null,
+        allTime: !startDate && !endDate
+    };
+}
+
+function periodLabel(period) {
+    if (period.allTime) {
+        return "All time";
+    }
+
+    if (period.start && period.end) {
+        return `${formatTimestamp(period.start)} – ${formatTimestamp(period.end)}`;
+    }
+
+    if (period.start) {
+        return `From ${formatTimestamp(period.start)}`;
+    }
+
+    return `Through ${formatTimestamp(period.end)}`;
+}
+
+function publishCorpusPeriod(period) {
+    window.researcherCorpusPeriod = { ...period };
+    window.dispatchEvent(new CustomEvent("researchercorpusperiodchange", {
+        detail: { ...period }
+    }));
+}
 
 function formatDuration(durationMs) {
     if (!Number.isFinite(durationMs)) {
@@ -288,6 +560,8 @@ function renderSummary(data) {
         data.totals.sessions;
     document.getElementById("totalLanguages").textContent =
         data.totals.languages;
+    document.getElementById("totalCompletedSessions").textContent =
+        data.totals.completedSessions;
     document.getElementById("totalMessages").textContent =
         data.totals.messages;
 
@@ -340,7 +614,9 @@ async function loadStatistics() {
     const status = document.getElementById("statusMessage");
 
     try {
-        const response = await fetch("/api/statistics");
+        const response = await fetch(
+            "/api/statistics" + periodQuery(currentCorpusPeriod)
+        );
 
         if (!response.ok) {
             throw new Error("Statistics request failed.");
@@ -348,6 +624,9 @@ async function loadStatistics() {
 
         statistics = await response.json();
         renderSummary(statistics);
+        document.getElementById("activePeriod").textContent =
+            periodLabel(currentCorpusPeriod);
+        publishCorpusPeriod(currentCorpusPeriod);
         status.hidden = true;
     } catch (error) {
         status.textContent = "Unable to load interview statistics.";
@@ -434,9 +713,33 @@ document.getElementById("languageBackButton").addEventListener("click", () => {
     showLanguage(selectedLanguage.code);
 });
 
+document.getElementById("periodForm").addEventListener("submit", event => {
+    event.preventDefault();
+    const errorMessage = document.getElementById("periodError");
+
+    try {
+        currentCorpusPeriod = localPeriodFromInputs();
+        errorMessage.hidden = true;
+        errorMessage.textContent = "";
+        loadStatistics();
+    } catch (error) {
+        errorMessage.textContent = error.message;
+        errorMessage.hidden = false;
+    }
+});
+
+document.getElementById("periodResetButton").addEventListener("click", () => {
+    document.getElementById("periodStart").value = "";
+    document.getElementById("periodEnd").value = "";
+    document.getElementById("periodError").hidden = true;
+    currentCorpusPeriod = { start: null, end: null, allTime: true };
+    loadStatistics();
+});
+
 loadStatistics();
 
 </script>
+<script src="researcher-analysis.js"></script>
     
 </body>
 </html>
