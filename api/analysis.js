@@ -10,10 +10,10 @@ import {
     QUALITATIVE_ANALYSIS_MODEL,
     QUALITATIVE_ANALYSIS_VERSION,
     workingAnalysisFields
-} from "./analysisCore.js";
-import { calculateItemStatistics } from "./analysisStatistics.js";
-import { filterCorpusRows, normalizeCorpusPeriod } from "./corpus.js";
-import { authorizeResearcher } from "./researcherAuth.js";
+} from "../server/analysisCore.js";
+import { calculateItemStatistics } from "../server/analysisStatistics.js";
+import { filterCorpusRows, normalizeCorpusPeriod } from "../server/corpus.js";
+import { authorizeResearcher } from "../server/researcherAuth.js";
 
 const AI_ACTIONS = new Set(["generate", "collect_evidence"]);
 const KNOWN_ACTIONS = new Set([

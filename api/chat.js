@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 import { createClient } from "@supabase/supabase-js";
-import { selectUsableResearchDesign } from "./researchDesign.js";
+import { selectUsableResearchDesign } from "../server/researchDesign.js";
 
 const supportedInterviewLanguages = Object.freeze({
   en: "English",

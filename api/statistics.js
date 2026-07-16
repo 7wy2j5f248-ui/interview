@@ -4,7 +4,7 @@ import {
     filterCorpusRows,
     storedIdentifier,
     validTimestamp
-} from "./corpus.js";
+} from "../server/corpus.js";
 
 export const SUPPORTED_LANGUAGE_NAMES = Object.freeze({
     en: "English",

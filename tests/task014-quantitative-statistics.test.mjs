@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { calculateItemStatistics } from "../api/analysisStatistics.js";
+import { calculateItemStatistics } from "../server/analysisStatistics.js";
 import {
     validateEvidenceRecords,
     validateSuggestedItems
-} from "../api/analysisCore.js";
+} from "../server/analysisCore.js";
 
 const runId = "10000000-0000-4000-8000-000000000001";
 const ids = {

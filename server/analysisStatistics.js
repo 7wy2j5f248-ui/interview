@@ -2,7 +2,7 @@ import { storedIdentifier } from "./corpus.js";
 import {
     SUPPORTED_LANGUAGE_NAMES,
     UNKNOWN_LANGUAGE_CODE
-} from "./statistics.js";
+} from "../api/statistics.js";
 
 export const DESCRIPTIVE_STATISTICS_VERSION = "task-014-descriptive-v1";
 

@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import { selectUsableResearchDesign } from "./researchDesign.js";
+import { selectUsableResearchDesign } from "../server/researchDesign.js";
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
