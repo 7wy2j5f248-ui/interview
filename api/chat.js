@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 import { createClient } from "@supabase/supabase-js";
-import { selectUsableResearchDesign } from "./researchDesign.js";
+import { selectUsableResearchDesign } from "../server/researchDesign.js";
 
 const supportedInterviewLanguages = Object.freeze({
   en: "English",
@@ -68,10 +68,78 @@ export function extractReplyText(response) {
   )?.trim() || "";
 }
 
+export function parseInterviewTurn(response) {
+  const outputText = extractReplyText(response);
+
+  if (!outputText) {
+    throw new Error("OpenAI returned an empty interview turn.");
+  }
+
+  let turn;
+
+  try {
+    turn = JSON.parse(outputText);
+  } catch (error) {
+    throw new Error("OpenAI returned invalid interview turn data.", {
+      cause: error
+    });
+  }
+
+  const reply = typeof turn?.reply === "string"
+    ? turn.reply.trim()
+    : "";
+
+  if (!reply || typeof turn?.final_question_answered !== "boolean") {
+    throw new Error("OpenAI returned incomplete interview turn data.");
+  }
+
+  return {
+    reply,
+    finalQuestionAnswered: turn.final_question_answered
+  };
+}
+
+async function initializeInterviewSession(
+  supabaseClient,
+  { sessionId, participantId, language }
+) {
+  const { error } = await supabaseClient
+    .from("interview_sessions")
+    .upsert({
+      session_id: sessionId,
+      participant_id: participantId,
+      language,
+      completed: false,
+      completed_at: null
+    }, {
+      onConflict: "session_id",
+      ignoreDuplicates: true
+    });
+
+  if (error) {
+    throw new Error("Interview session initialization failed.", {
+      cause: error
+    });
+  }
+}
+
+async function markInterviewSessionCompleted(supabaseClient, sessionId) {
+  const { data, error } = await supabaseClient.rpc(
+    "complete_interview_session",
+    { p_session_id: sessionId }
+  );
+
+  if (error || data !== true) {
+    throw new Error("Interview session completion persistence failed.", {
+      cause: error || undefined
+    });
+  }
+}
+
 export async function handleChat(
   req,
   res,
-  { openaiClient, supabaseClient }
+  { openaiClient, supabaseClient, sessionSupabaseClient }
 ) {
   try {
     if (req.method && req.method !== "POST") {
@@ -99,6 +167,12 @@ export async function handleChat(
     if (!design) {
       throw new Error("No usable research design is available.");
     }
+
+    await initializeInterviewSession(sessionSupabaseClient, {
+      sessionId,
+      participantId,
+      language
+    });
 
     const lastHistoryItem = history[history.length - 1];
     const requestHistory =
@@ -180,6 +254,11 @@ Do not advise, teach, debate, answer unrelated questions, or give long explanati
 The interview should contain no more than ${design.maximum_interviewer_questions} interviewer questions.
 
 Near the end, invite final comments and conclude politely.
+
+Final canonical question state:
+The Interview Sequence contains ${design.interview_question_count} canonical questions in researcher-defined order. Canonical Question ${design.interview_question_count}, the last question in that ordered sequence, is the final canonical question. Follow-up, clarification, resumption, and final-comments questions do not change which canonical question is final.
+
+Return final_question_answered as true when the participant's current message answers that final canonical question. Return it as false when the current message answers any earlier canonical question or any follow-up, clarification, resumption, or final-comments question. Base this value only on whether the participant's current message answers the structurally final canonical question. Do not base it on the tone or wording of your reply, whether your reply sounds conclusive, the ending-message wording, whether you thank the participant, or whether you invite final comments. This value is internal machine-readable state and must never be mentioned, labelled, or exposed in the participant-facing reply.
 `;
 
 const interviewHistoryText = retrievedHistory
@@ -189,6 +268,28 @@ const interviewHistoryText = retrievedHistory
     
     const response = await openaiClient.responses.create({
       model: "gpt-5.1",
+      text: {
+        format: {
+          type: "json_schema",
+          name: "interview_turn",
+          strict: true,
+          schema: {
+            type: "object",
+            properties: {
+              reply: {
+                type: "string",
+                description: "Only the natural participant-facing interviewer reply in the selected interview language."
+              },
+              final_question_answered: {
+                type: "boolean",
+                description: "True only when the participant's current message answers the last canonical question in the researcher-defined ordered Interview Sequence."
+              }
+            },
+            required: ["reply", "final_question_answered"],
+            additionalProperties: false
+          }
+        }
+      },
       input: [
         {
           role: "system",
@@ -203,11 +304,7 @@ const interviewHistoryText = retrievedHistory
       ]
     });
 
-    const reply = extractReplyText(response);
-
-    if (!reply) {
-      throw new Error("OpenAI returned an empty interview reply.");
-    }
+    const { reply, finalQuestionAnswered } = parseInterviewTurn(response);
 
     const timestamp = new Date().toISOString();
     const { error: persistenceError } = await supabaseClient
@@ -237,6 +334,10 @@ const interviewHistoryText = retrievedHistory
       });
     }
 
+    if (finalQuestionAnswered) {
+      await markInterviewSessionCompleted(sessionSupabaseClient, sessionId);
+    }
+
     return res.status(200).json({
       reply
     });
@@ -253,6 +354,14 @@ const interviewHistoryText = retrievedHistory
 }
 
 export default async function handler(req, res) {
+  const secretKey = process.env.SUPABASE_SECRET_KEY;
+
+  if (!secretKey) {
+    return res.status(500).json({
+      error: "Server configuration is incomplete."
+    });
+  }
+
   const openaiClient = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY
   });
@@ -260,6 +369,20 @@ export default async function handler(req, res) {
     process.env.SUPABASE_URL,
     process.env.SUPABASE_ANON_KEY
   );
+  const sessionSupabaseClient = createClient(
+    process.env.SUPABASE_URL,
+    secretKey,
+    {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
+    }
+  );
 
-  return handleChat(req, res, { openaiClient, supabaseClient });
+  return handleChat(req, res, {
+    openaiClient,
+    supabaseClient,
+    sessionSupabaseClient
+  });
 }

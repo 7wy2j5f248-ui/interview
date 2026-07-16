@@ -1,4 +1,10 @@
 import { createClient } from "@supabase/supabase-js";
+import {
+    corpusPeriodFromRequest,
+    filterCorpusRows,
+    storedIdentifier,
+    validTimestamp
+} from "../server/corpus.js";
 
 export const SUPPORTED_LANGUAGE_NAMES = Object.freeze({
     en: "English",
@@ -23,12 +29,6 @@ export const SUPPORTED_LANGUAGE_NAMES = Object.freeze({
 
 export const UNKNOWN_LANGUAGE_CODE = "__unknown__";
 
-function storedIdentifier(value) {
-    return typeof value === "string" && value.trim()
-        ? value
-        : null;
-}
-
 function normalizedLanguage(value) {
     return typeof value === "string" && value.trim()
         ? value.trim().toLowerCase()
@@ -43,12 +43,7 @@ function languageName(code) {
     return SUPPORTED_LANGUAGE_NAMES[code] || `Other / unrecognized (${code})`;
 }
 
-function validTimestamp(value) {
-    const timestamp = Date.parse(value);
-    return Number.isFinite(timestamp) ? timestamp : null;
-}
-
-function summarizeSession(session) {
+function summarizeSession(session, completed) {
     const timestamps = session.timestamps;
     const startTimestamp = timestamps.length
         ? timestamps.reduce((earliest, timestamp) =>
@@ -64,6 +59,7 @@ function summarizeSession(session) {
     return {
         session: session.session,
         participants: [...session.participants].sort(),
+        completed,
         messageCount: session.messageCount,
         startTime: startTimestamp === null
             ? null
@@ -94,8 +90,19 @@ function compareSessions(left, right) {
         || left.session.localeCompare(right.session);
 }
 
-export function buildCorpusStatistics(rows) {
+export function buildCorpusStatistics(rows, completionRows = []) {
     const messages = Array.isArray(rows) ? rows : [];
+    const completionBySession = new Map(
+        (Array.isArray(completionRows) ? completionRows : [])
+            .map(row => [
+                storedIdentifier(row?.session_id),
+                {
+                    completed: row?.completed === true,
+                    language: normalizedLanguage(row?.language)
+                }
+            ])
+            .filter(([sessionId]) => sessionId)
+    );
     const sessions = new Map();
     const languages = new Map();
     let invalidTimestampMessages = 0;
@@ -152,7 +159,10 @@ export function buildCorpusStatistics(rows) {
     const sessionSummaries = new Map(
         [...sessions.entries()].map(([sessionId, session]) => [
             sessionId,
-            summarizeSession(session)
+            summarizeSession(
+                session,
+                completionBySession.get(sessionId)?.completed === true
+            )
         ])
     );
 
@@ -169,6 +179,11 @@ export function buildCorpusStatistics(rows) {
             code: language.code,
             name: language.name,
             sessionCount: languageSessions.length,
+            completedSessionCount: languageSessions.filter(
+                session => session.completed
+                    && completionBySession.get(session.session)?.language
+                        === language.code
+            ).length,
             messageCount: language.messageCount,
             averageSessionDurationMs: durations.length
                 ? Math.round(
@@ -193,6 +208,9 @@ export function buildCorpusStatistics(rows) {
     return {
         totals: {
             sessions: sessions.size,
+            completedSessions: [...sessionSummaries.values()].filter(
+                session => session.completed
+            ).length,
             languages: languageSummaries.filter(
                 language => language.code !== UNKNOWN_LANGUAGE_CODE
             ).length,
@@ -208,6 +226,37 @@ export function buildCorpusStatistics(rows) {
             invalidTimestampMessages
         }
     };
+}
+
+export async function loadSessionCompletionRows(
+    supabaseClient,
+    pageSize = 1000
+) {
+    const rows = [];
+    let from = 0;
+
+    while (true) {
+        const { data, error } = await supabaseClient
+            .from("interview_sessions")
+            .select("session_id, language, completed")
+            .order("session_id", { ascending: true })
+            .range(from, from + pageSize - 1);
+
+        if (error) {
+            throw new Error("Interview completion statistics could not be loaded.", {
+                cause: error
+            });
+        }
+
+        const page = data || [];
+        rows.push(...page);
+
+        if (page.length < pageSize) {
+            return rows;
+        }
+
+        from += pageSize;
+    }
 }
 
 export async function loadStatisticsRows(supabaseClient, pageSize = 1000) {
@@ -238,7 +287,11 @@ export async function loadStatisticsRows(supabaseClient, pageSize = 1000) {
     }
 }
 
-export async function handleStatistics(req, res, { supabaseClient }) {
+export async function handleStatistics(
+    req,
+    res,
+    { supabaseClient, sessionSupabaseClient }
+) {
     if (req.method && req.method !== "GET") {
         res.setHeader("Allow", "GET");
         return res.status(405).json({ error: "Method not allowed." });
@@ -246,9 +299,24 @@ export async function handleStatistics(req, res, { supabaseClient }) {
 
     try {
         res.setHeader("Cache-Control", "no-store");
-        const rows = await loadStatisticsRows(supabaseClient);
-        return res.status(200).json(buildCorpusStatistics(rows));
+        const period = corpusPeriodFromRequest(req);
+        const [rows, completionRows] = await Promise.all([
+            loadStatisticsRows(supabaseClient),
+            loadSessionCompletionRows(sessionSupabaseClient)
+        ]);
+        const statistics = buildCorpusStatistics(
+            filterCorpusRows(rows, period),
+            completionRows
+        );
+
+        statistics.metadata.period = period;
+
+        return res.status(200).json(statistics);
     } catch (error) {
+        if (error?.message?.includes("date/time")) {
+            return res.status(400).json({ error: error.message });
+        }
+
         console.error("Researcher statistics loading failed:", error);
         return res.status(500).json({
             error: "Unable to load interview statistics."
@@ -257,10 +325,31 @@ export async function handleStatistics(req, res, { supabaseClient }) {
 }
 
 export default async function handler(req, res) {
+    const secretKey = process.env.SUPABASE_SECRET_KEY;
+
+    if (!secretKey) {
+        return res.status(500).json({
+            error: "Server configuration is incomplete."
+        });
+    }
+
     const supabaseClient = createClient(
         process.env.SUPABASE_URL,
         process.env.SUPABASE_ANON_KEY
     );
+    const sessionSupabaseClient = createClient(
+        process.env.SUPABASE_URL,
+        secretKey,
+        {
+            auth: {
+                autoRefreshToken: false,
+                persistSession: false
+            }
+        }
+    );
 
-    return handleStatistics(req, res, { supabaseClient });
+    return handleStatistics(req, res, {
+        supabaseClient,
+        sessionSupabaseClient
+    });
 }
