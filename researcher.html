@@ -127,7 +127,7 @@
         }
 
         .analysisTable {
-            min-width: 64rem;
+            min-width: 76rem;
         }
 
         .tableScroll {
@@ -148,6 +148,18 @@
         .analysisActions {
             display: grid;
             gap: 0.5rem;
+        }
+
+        .descriptiveStatistics {
+            min-width: 13rem;
+        }
+
+        .descriptiveStatistics details {
+            margin-block-start: 0.75rem;
+        }
+
+        .descriptiveStatistics ul {
+            padding-inline-start: 1.25rem;
         }
 
         .provisionalLabel,
@@ -317,6 +329,7 @@
                         <th scope="col">AI suggestion</th>
                         <th scope="col">Researcher feedback</th>
                         <th scope="col">Supporting messages</th>
+                        <th scope="col">Descriptive statistics</th>
                         <th scope="col">Status / actions</th>
                     </tr>
                 </thead>
@@ -334,6 +347,10 @@
         <label>
             Add another participant message from this analysis corpus
             <select id="manualEvidenceMessage"></select>
+        </label>
+        <label>
+            Attribute the message to current working codes
+            <select id="manualEvidenceCodes" multiple size="4"></select>
         </label>
         <button id="addManualEvidenceButton" type="button">
             Add supporting message

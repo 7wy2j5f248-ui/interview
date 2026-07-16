@@ -11,6 +11,7 @@ import {
     QUALITATIVE_ANALYSIS_VERSION,
     workingAnalysisFields
 } from "./analysisCore.js";
+import { calculateItemStatistics } from "./analysisStatistics.js";
 import { filterCorpusRows, normalizeCorpusPeriod } from "./corpus.js";
 import { authorizeResearcher } from "./researcherAuth.js";
 
@@ -216,8 +217,31 @@ function evidenceMessage(message, link) {
         englishTranslation: message.EnglishTranslation || null,
         source: link.source,
         round: link.evidence_round,
-        included: link.included === true
+        included: link.included === true,
+        codes: Array.isArray(link.code_attributions)
+            ? link.code_attributions
+            : []
     };
+}
+
+function validatedAttributionCodes(value, item) {
+    const requested = commaSeparatedList(value);
+    const allowed = workingAnalysisFields(item).codes;
+    const allowedByKey = new Map(
+        allowed.map(code => [code.toLowerCase(), code])
+    );
+    const validated = requested
+        .map(code => allowedByKey.get(code.toLowerCase()))
+        .filter(Boolean);
+
+    if (validated.length !== requested.length) {
+        throw new AnalysisError(
+            400,
+            "Evidence can be attributed only to current working codes."
+        );
+    }
+
+    return validated;
 }
 
 async function loadWorkspace(supabaseClient, period, requestedRunId = null) {
@@ -261,16 +285,27 @@ async function loadWorkspace(supabaseClient, period, requestedRunId = null) {
     }
 
     const corpusById = new Map(corpusRows.map(message => [message.id, message]));
-    const itemPayloads = (items || []).map(item => ({
-        ...item,
-        evidence: evidence
-            .filter(link => link.analysis_item_id === item.id)
+    const itemPayloads = (items || []).map(item => {
+        const itemEvidence = evidence.filter(
+            link => link.analysis_item_id === item.id
+        );
+
+        return {
+            ...item,
+            descriptiveStatistics: calculateItemStatistics({
+                analysisRunId: run.id,
+                workingCodes: workingAnalysisFields(item).codes,
+                evidenceLinks: itemEvidence,
+                corpusMessages: corpusRows
+            }),
+            evidence: itemEvidence
             .map(link => {
                 const message = corpusById.get(link.message_id);
                 return message ? evidenceMessage(message, link) : null;
             })
             .filter(Boolean)
-    }));
+        };
+    });
 
     return {
         period,
@@ -328,14 +363,18 @@ async function persistSuggestedItem(supabaseClient, runId, item) {
         throw new AnalysisError(500, "An AI suggestion could not be stored.");
     }
 
+    const evidenceRecords = Array.isArray(item.evidence)
+        ? item.evidence
+        : item.evidenceIds.map(messageId => ({ messageId, codes: [] }));
     const { error: evidenceError } = await supabaseClient
         .from(ANALYSIS_TABLES.evidence)
-        .insert(item.evidenceIds.map(messageId => ({
+        .insert(evidenceRecords.map(evidence => ({
             analysis_item_id: data.id,
-            message_id: messageId,
+            message_id: evidence.messageId,
             evidence_round: 0,
             source: "initial_ai",
-            included: true
+            included: true,
+            code_attributions: evidence.codes
         })));
 
     if (evidenceError) {
@@ -590,7 +629,7 @@ async function collectEvidence(
     const batches = batchesFromStoredRun(
         await runMessages(supabaseClient, item.analysis_run_id)
     );
-    const collectedIds = [];
+    const collectedEvidence = new Map();
     let invalidEvidenceIds = 0;
     let failures = 0;
 
@@ -602,10 +641,14 @@ async function collectEvidence(
                 instruction
             );
             invalidEvidenceIds += result.invalidEvidenceIds;
-            result.messageIds.forEach(id => {
-                if (!collectedIds.includes(id)) {
-                    collectedIds.push(id);
+            result.evidence.forEach(evidence => {
+                if (!collectedEvidence.has(evidence.messageId)) {
+                    collectedEvidence.set(evidence.messageId, new Set());
                 }
+
+                evidence.codes.forEach(code => {
+                    collectedEvidence.get(evidence.messageId).add(code);
+                });
             });
         } catch (error) {
             failures += 1;
@@ -617,7 +660,7 @@ async function collectEvidence(
         }
     }
 
-    if (!collectedIds.length) {
+    if (!collectedEvidence.size) {
         throw new AnalysisError(
             failures ? 502 : 422,
             "No valid supporting participant messages were collected."
@@ -627,12 +670,13 @@ async function collectEvidence(
     const evidenceRound = item.evidence_round + 1;
     const { error: evidenceError } = await supabaseClient
         .from(ANALYSIS_TABLES.evidence)
-        .insert(collectedIds.map(messageId => ({
+        .insert([...collectedEvidence].map(([messageId, codes]) => ({
             analysis_item_id: itemId,
             message_id: messageId,
             evidence_round: evidenceRound,
             source: "feedback_ai",
-            included: true
+            included: true,
+            code_attributions: [...codes]
         })));
 
     if (evidenceError) {
@@ -692,7 +736,14 @@ async function setEvidence(req, supabaseClient, now) {
         throw new AnalysisError(409, "Archived analysis items cannot be edited.");
     }
 
-    const included = req.body?.included === true;
+    const hasIncluded = Object.prototype.hasOwnProperty.call(
+        req.body || {},
+        "included"
+    );
+    const hasCodes = Object.prototype.hasOwnProperty.call(
+        req.body || {},
+        "codes"
+    );
     const evidenceId = typeof req.body?.evidenceId === "string"
         ? req.body.evidenceId.trim()
         : "";
@@ -708,9 +759,26 @@ async function setEvidence(req, supabaseClient, now) {
             throw new AnalysisError(404, "Evidence link was not found.");
         }
 
+        if (!hasIncluded && !hasCodes) {
+            throw new AnalysisError(400, "No evidence change was supplied.");
+        }
+
+        const updates = { updated_at: now() };
+
+        if (hasIncluded) {
+            updates.included = req.body.included === true;
+        }
+
+        if (hasCodes) {
+            updates.code_attributions = validatedAttributionCodes(
+                req.body.codes,
+                item
+            );
+        }
+
         const { error } = await supabaseClient
             .from(ANALYSIS_TABLES.evidence)
-            .update({ included, updated_at: now() })
+            .update(updates)
             .eq("id", evidenceId);
 
         if (error) {
@@ -742,7 +810,11 @@ async function setEvidence(req, supabaseClient, now) {
                 message_id: messageId,
                 evidence_round: item.evidence_round,
                 source: "researcher_manual",
-                included: true
+                included: true,
+                code_attributions: validatedAttributionCodes(
+                    req.body?.codes,
+                    item
+                )
             });
 
         if (error) {
@@ -802,7 +874,7 @@ async function confirmItem(req, supabaseClient, now) {
 
     const { data: evidence, error: evidenceError } = await supabaseClient
         .from(ANALYSIS_TABLES.evidence)
-        .select("message_id")
+        .select("message_id, evidence_round, source, included, code_attributions")
         .eq("analysis_item_id", itemId)
         .eq("included", true);
 
@@ -819,6 +891,16 @@ async function confirmItem(req, supabaseClient, now) {
     }
 
     const confirmedAt = now();
+    const confirmedStatistics = calculateItemStatistics({
+        analysisRunId: item.analysis_run_id,
+        workingCodes: confirmed.codes,
+        evidenceLinks: evidence || [],
+        corpusMessages: await runMessages(
+            supabaseClient,
+            item.analysis_run_id
+        ),
+        calculatedAt: confirmedAt
+    });
     const { error } = await supabaseClient
         .from(ANALYSIS_TABLES.items)
         .update({
@@ -827,6 +909,8 @@ async function confirmItem(req, supabaseClient, now) {
             confirmed_keywords: confirmed.keywords,
             confirmed_evidence_message_ids: evidenceIds,
             confirmed_note: confirmed.note,
+            confirmed_statistics: confirmedStatistics,
+            confirmed_statistics_calculated_at: confirmedAt,
             confirmed_working_revision: item.working_revision,
             confirmed_at: confirmedAt,
             changed_since_confirmation: false,
@@ -905,7 +989,7 @@ export async function loadConfirmedAnalysis(
 ) {
     let query = supabaseClient
         .from(ANALYSIS_TABLES.items)
-        .select("id, analysis_run_id, status, confirmed_theme, confirmed_codes, confirmed_keywords, confirmed_evidence_message_ids, confirmed_note, confirmed_working_revision, confirmed_at, changed_since_confirmation")
+        .select("id, analysis_run_id, status, confirmed_theme, confirmed_codes, confirmed_keywords, confirmed_evidence_message_ids, confirmed_note, confirmed_statistics, confirmed_statistics_calculated_at, confirmed_working_revision, confirmed_at, changed_since_confirmation")
         .order("confirmed_at", { ascending: true });
 
     if (runId) {
@@ -928,6 +1012,9 @@ export async function loadConfirmedAnalysis(
             keywords: item.confirmed_keywords,
             supportingMessageIds: item.confirmed_evidence_message_ids,
             researcherNote: item.confirmed_note,
+            descriptiveStatistics: item.confirmed_statistics,
+            statisticsCalculatedAt:
+                item.confirmed_statistics_calculated_at,
             workingRevision: item.confirmed_working_revision,
             confirmedAt: item.confirmed_at,
             requiresReconfirmation: item.changed_since_confirmation === true

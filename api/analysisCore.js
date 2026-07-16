@@ -1,7 +1,7 @@
 import { storedIdentifier } from "./corpus.js";
 
 export const QUALITATIVE_ANALYSIS_MODEL = "gpt-5.1";
-export const QUALITATIVE_ANALYSIS_VERSION = "task-014-v1";
+export const QUALITATIVE_ANALYSIS_VERSION = "task-014-v2";
 export const DEFAULT_ANALYSIS_BATCH_SIZE = 40;
 
 function normalizedText(value) {
@@ -168,6 +168,21 @@ const suggestionSchema = {
                         type: "array",
                         items: { type: "string" }
                     },
+                    code_evidence: {
+                        type: "array",
+                        items: {
+                            type: "object",
+                            properties: {
+                                code: { type: "string" },
+                                message_ids: {
+                                    type: "array",
+                                    items: { type: "string" }
+                                }
+                            },
+                            required: ["code", "message_ids"],
+                            additionalProperties: false
+                        }
+                    },
                     rationale: { type: "string" }
                 },
                 required: [
@@ -175,6 +190,7 @@ const suggestionSchema = {
                     "codes",
                     "keywords",
                     "supporting_message_ids",
+                    "code_evidence",
                     "rationale"
                 ],
                 additionalProperties: false
@@ -188,14 +204,35 @@ const suggestionSchema = {
 const evidenceSchema = {
     type: "object",
     properties: {
-        message_ids: {
+        evidence: {
             type: "array",
-            items: { type: "string" }
+            items: {
+                type: "object",
+                properties: {
+                    message_id: { type: "string" },
+                    codes: {
+                        type: "array",
+                        items: { type: "string" }
+                    }
+                },
+                required: ["message_id", "codes"],
+                additionalProperties: false
+            }
         }
     },
-    required: ["message_ids"],
+    required: ["evidence"],
     additionalProperties: false
 };
+
+function normalizedAttributionCodes(values, allowedCodes) {
+    const allowedByKey = new Map(
+        normalizedList(allowedCodes).map(code => [code.toLowerCase(), code])
+    );
+
+    return normalizedList(values)
+        .map(code => allowedByKey.get(code.toLowerCase()))
+        .filter(Boolean);
+}
 
 export function validateSuggestedItems(value, availableMessages) {
     const availableIds = new Set(availableMessages.map(message => message.id));
@@ -206,6 +243,7 @@ export function validateSuggestedItems(value, availableMessages) {
     (Array.isArray(value?.items) ? value.items : []).forEach(item => {
         const theme = normalizedText(item?.theme);
         const rationale = normalizedText(item?.rationale);
+        const codes = normalizedList(item.codes);
         const evidenceIds = [];
 
         (Array.isArray(item?.supporting_message_ids)
@@ -229,12 +267,50 @@ export function validateSuggestedItems(value, availableMessages) {
             return;
         }
 
+        const evidenceCodesById = new Map(
+            evidenceIds.map(id => [id, []])
+        );
+
+        (Array.isArray(item?.code_evidence) ? item.code_evidence : [])
+            .forEach(attribution => {
+                const code = normalizedAttributionCodes(
+                    [attribution?.code],
+                    codes
+                )[0];
+
+                if (!code) {
+                    return;
+                }
+
+                (Array.isArray(attribution?.message_ids)
+                    ? attribution.message_ids
+                    : []
+                ).forEach(value => {
+                    const id = normalizedText(value);
+
+                    if (!id || !availableIds.has(id) || !evidenceCodesById.has(id)) {
+                        invalidEvidenceIds += 1;
+                        return;
+                    }
+
+                    const attributedCodes = evidenceCodesById.get(id);
+
+                    if (!attributedCodes.includes(code)) {
+                        attributedCodes.push(code);
+                    }
+                });
+            });
+
         items.push({
             theme,
-            codes: normalizedList(item.codes),
+            codes,
             keywords: normalizedList(item.keywords),
             rationale,
-            evidenceIds
+            evidenceIds,
+            evidence: evidenceIds.map(messageId => ({
+                messageId,
+                codes: evidenceCodesById.get(messageId)
+            }))
         });
     });
 
@@ -246,7 +322,13 @@ export function validateEvidenceIds(value, availableMessages) {
     const messageIds = [];
     let invalidEvidenceIds = 0;
 
-    (Array.isArray(value?.message_ids) ? value.message_ids : [])
+    const values = Array.isArray(value?.message_ids)
+        ? value.message_ids
+        : Array.isArray(value?.evidence)
+            ? value.evidence.map(entry => entry?.message_id)
+            : [];
+
+    values
         .forEach(value => {
             const id = normalizedText(value);
 
@@ -261,6 +343,40 @@ export function validateEvidenceIds(value, availableMessages) {
         });
 
     return { messageIds, invalidEvidenceIds };
+}
+
+export function validateEvidenceRecords(
+    value,
+    availableMessages,
+    allowedCodes = []
+) {
+    const validatedIds = validateEvidenceIds(value, availableMessages);
+    const recordsById = new Map(
+        validatedIds.messageIds.map(messageId => [messageId, {
+            messageId,
+            codes: []
+        }])
+    );
+
+    (Array.isArray(value?.evidence) ? value.evidence : []).forEach(entry => {
+        const id = normalizedText(entry?.message_id);
+
+        if (!recordsById.has(id)) {
+            return;
+        }
+
+        const record = recordsById.get(id);
+        const attributedCodes = normalizedAttributionCodes(
+            entry?.codes,
+            allowedCodes
+        );
+        record.codes = [...new Set([...record.codes, ...attributedCodes])];
+    });
+
+    return {
+        ...validatedIds,
+        evidence: [...recordsById.values()]
+    };
 }
 
 export async function generateSuggestionsForBatch(
@@ -282,7 +398,7 @@ export async function generateSuggestionsForBatch(
         input: [
             {
                 role: "system",
-                content: "You are assisting a qualitative researcher. Analyse only the participant messages supplied. Return provisional themes, qualitative codes, keywords, exact supporting participant message IDs, and concise English rationales. Never cite an ID that is not in the supplied evidence set. Do not quote, invent, or rewrite evidence."
+                content: "You are assisting a qualitative researcher. Analyse only the participant messages supplied. Return provisional themes, qualitative codes, keywords, exact supporting participant message IDs, explicit code-to-message attribution, and concise English rationales. Attribute evidence only to codes returned in the same item. Never cite an ID that is not in the supplied evidence set. Do not quote, invent, or rewrite evidence."
             },
             {
                 role: "user",
@@ -326,9 +442,10 @@ export async function collectEvidenceForBatch(
         ]
     });
 
-    return validateEvidenceIds(
+    return validateEvidenceRecords(
         parseStructuredResponse(response, "AI evidence-collection output"),
-        messages
+        messages,
+        workingInstruction?.codes
     );
 }
 

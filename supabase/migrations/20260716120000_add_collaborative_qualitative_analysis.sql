@@ -6,7 +6,7 @@ create table public.qualitative_analysis_runs (
     completed_only boolean not null default false,
     status text not null default 'generating',
     model text not null,
-    analysis_version text not null default 'task-014-v1',
+    analysis_version text not null default 'task-014-v2',
     messages_analyzed integer not null default 0,
     sessions_analyzed integer not null default 0,
     batches_used integer not null default 0,
@@ -78,6 +78,8 @@ create table public.qualitative_analysis_items (
     confirmed_keywords text[] not null default '{}',
     confirmed_evidence_message_ids uuid[] not null default '{}',
     confirmed_note text,
+    confirmed_statistics jsonb,
+    confirmed_statistics_calculated_at timestamptz,
     confirmed_working_revision integer,
     confirmed_at timestamptz,
     changed_since_confirmation boolean not null default false,
@@ -110,12 +112,20 @@ create table public.qualitative_analysis_items (
         ),
     constraint qualitative_analysis_items_confirmation_consistent
         check (
-            (confirmed_at is null and confirmed_theme is null)
+            (
+                confirmed_at is null
+                and confirmed_theme is null
+                and confirmed_statistics is null
+                and confirmed_statistics_calculated_at is null
+            )
             or
             (
                 confirmed_at is not null
                 and confirmed_theme is not null
                 and btrim(confirmed_theme) <> ''
+                and confirmed_statistics is not null
+                and jsonb_typeof(confirmed_statistics) = 'object'
+                and confirmed_statistics_calculated_at is not null
                 and confirmed_working_revision is not null
             )
         )
@@ -133,6 +143,7 @@ create table public.qualitative_analysis_evidence (
     evidence_round integer not null,
     source text not null,
     included boolean not null default true,
+    code_attributions text[] not null default '{}',
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now(),
     constraint qualitative_analysis_evidence_round_nonnegative

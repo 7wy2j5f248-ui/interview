@@ -159,6 +159,109 @@
         return button;
     }
 
+    function appendStatisticsSummary(container, statistics) {
+        appendTextBlock(
+            container,
+            "Messages",
+            String(statistics?.supportingMessageCount ?? 0)
+        );
+        appendTextBlock(
+            container,
+            "Sessions",
+            `${statistics?.supportingSessionCount ?? 0} of ${statistics?.eligibleSessionCount ?? 0}`
+        );
+        appendTextBlock(
+            container,
+            "Session prevalence",
+            Number.isFinite(statistics?.sessionPrevalencePercentage)
+                ? `${statistics.sessionPrevalencePercentage.toFixed(1)}%`
+                : "Unavailable"
+        );
+        appendTextBlock(
+            container,
+            "Participants",
+            statistics?.uniqueParticipantCountAvailable
+                ? String(statistics.uniqueParticipantCount)
+                : "Unavailable"
+        );
+        appendTextBlock(
+            container,
+            "Languages",
+            String(statistics?.languageCount ?? 0)
+        );
+    }
+
+    function distributionList(entries, formatter) {
+        const list = document.createElement("ul");
+
+        if (!entries?.length) {
+            const item = document.createElement("li");
+            item.textContent = "No included evidence";
+            list.appendChild(item);
+            return list;
+        }
+
+        entries.forEach(entry => {
+            const item = document.createElement("li");
+            item.textContent = formatter(entry);
+            list.appendChild(item);
+        });
+
+        return list;
+    }
+
+    function appendSectionHeading(container, text) {
+        const heading = document.createElement("strong");
+        heading.textContent = text;
+        container.appendChild(heading);
+    }
+
+    function renderStatistics(item) {
+        const cell = document.createElement("td");
+        cell.className = "descriptiveStatistics";
+        const heading = document.createElement("strong");
+        heading.textContent = "Linked-evidence distribution";
+        const explanation = document.createElement("p");
+        explanation.className = "muted";
+        explanation.textContent =
+            "Deterministic counts within this frozen analysis corpus.";
+        cell.append(heading, explanation);
+        appendStatisticsSummary(cell, item.descriptiveStatistics);
+
+        const details = document.createElement("details");
+        const summary = document.createElement("summary");
+        summary.textContent = "Distribution details";
+        details.appendChild(summary);
+
+        appendSectionHeading(details, "Language distribution");
+        details.appendChild(distributionList(
+            item.descriptiveStatistics?.languageDistribution,
+            language => `${language.label} (${language.code}): ${language.messageCount} messages, ${language.sessionCount} sessions`
+        ));
+        appendSectionHeading(details, "Per-code distribution");
+        details.appendChild(distributionList(
+            item.descriptiveStatistics?.perCode,
+            code => `${code.code}: ${code.messageCount} messages, ${code.sessionCount} sessions`
+        ));
+        appendSectionHeading(details, "Evidence rounds");
+        details.appendChild(distributionList(
+            item.descriptiveStatistics?.evidenceRoundDistribution,
+            round => `Round ${round.round} (${round.source}): ${round.messageCount} messages`
+        ));
+        cell.appendChild(details);
+
+        if (item.confirmed_statistics) {
+            const confirmedDetails = document.createElement("details");
+            const confirmedSummary = document.createElement("summary");
+            confirmedSummary.textContent = "Confirmed statistics snapshot";
+            confirmedDetails.appendChild(confirmedSummary);
+            appendStatisticsSummary(confirmedDetails, item.confirmed_statistics);
+            cell.appendChild(confirmedDetails);
+        }
+
+        return cell;
+    }
+
     function renderItem(item) {
         const row = document.createElement("tr");
         row.dataset.itemId = item.id;
@@ -238,6 +341,8 @@
             evidenceDialog.showModal();
         }));
 
+        const statisticsCell = renderStatistics(item);
+
         const actionsCell = document.createElement("td");
         actionsCell.className = "analysisActions";
         const status = document.createElement("span");
@@ -292,7 +397,13 @@
             }));
         }
 
-        row.append(suggestionCell, feedbackCell, evidenceCell, actionsCell);
+        row.append(
+            suggestionCell,
+            feedbackCell,
+            evidenceCell,
+            statisticsCell,
+            actionsCell
+        );
         return row;
     }
 
@@ -356,7 +467,7 @@
         if (!workspace.items.length) {
             const row = document.createElement("tr");
             const cell = document.createElement("td");
-            cell.colSpan = 4;
+            cell.colSpan = 5;
             cell.textContent = "This analysis run has no stored items.";
             row.appendChild(cell);
             body.appendChild(row);
@@ -401,8 +512,10 @@
         const item = workspace?.items.find(entry => entry.id === evidenceItemId);
         const container = document.getElementById("evidenceMessages");
         const select = document.getElementById("manualEvidenceMessage");
+        const manualCodes = document.getElementById("manualEvidenceCodes");
         container.replaceChildren();
         select.replaceChildren();
+        manualCodes.replaceChildren();
 
         if (!item) {
             return;
@@ -410,6 +523,9 @@
 
         document.getElementById("evidenceDialogHeading").textContent =
             `Supporting messages — ${item.researcher_theme || item.ai_theme || "analysis item"}`;
+        const workingCodes = item.researcher_codes?.length
+            ? item.researcher_codes
+            : item.ai_codes || [];
 
         (item.evidence || []).forEach(evidence => {
             const article = document.createElement("article");
@@ -460,6 +576,41 @@
                 article.appendChild(translation);
             }
 
+            const attribution = document.createElement("fieldset");
+            const attributionLegend = document.createElement("legend");
+            attributionLegend.textContent = "Explicit code attribution";
+            attribution.appendChild(attributionLegend);
+            const attributedKeys = new Set(
+                (evidence.codes || []).map(code => code.toLowerCase())
+            );
+
+            workingCodes.forEach(code => {
+                const label = document.createElement("label");
+                const input = document.createElement("input");
+                input.type = "checkbox";
+                input.value = code;
+                input.checked = attributedKeys.has(code.toLowerCase());
+                input.dataset.evidenceCode = "true";
+                label.append(input, document.createTextNode(` ${code}`));
+                attribution.appendChild(label);
+            });
+
+            attribution.appendChild(actionButton(
+                "Save code attribution",
+                () => {
+                    const codes = [...attribution.querySelectorAll(
+                        '[data-evidence-code="true"]:checked'
+                    )].map(input => input.value);
+                    postAction({
+                        action: "set_evidence",
+                        itemId: item.id,
+                        evidenceId: evidence.evidenceId,
+                        codes
+                    }, "Saving code-to-evidence attribution…");
+                }
+            ));
+            article.appendChild(attribution);
+
             container.appendChild(article);
         });
 
@@ -483,7 +634,14 @@
             ].join(" — ");
             select.appendChild(option);
         });
+        workingCodes.forEach(code => {
+            const option = document.createElement("option");
+            option.value = code;
+            option.textContent = code;
+            manualCodes.appendChild(option);
+        });
         select.disabled = candidates.length === 0;
+        manualCodes.disabled = workingCodes.length === 0;
         document.getElementById("addManualEvidenceButton").disabled =
             candidates.length === 0;
     }
@@ -565,10 +723,13 @@
             const messageId = document.getElementById("manualEvidenceMessage").value;
 
             if (evidenceItemId && messageId) {
+                const codes = [...document.getElementById("manualEvidenceCodes").selectedOptions]
+                    .map(option => option.value);
                 postAction({
                     action: "set_evidence",
                     itemId: evidenceItemId,
                     messageId,
+                    codes,
                     included: true
                 }, "Adding researcher-selected evidence…");
             }
