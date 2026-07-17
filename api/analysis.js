@@ -12,7 +12,14 @@ import {
     workingAnalysisFields
 } from "../server/analysisCore.js";
 import { calculateItemStatistics } from "../server/analysisStatistics.js";
-import { filterCorpusRows, normalizeCorpusPeriod } from "../server/corpus.js";
+import {
+    COMPLETION_FILTERS,
+    filterCorpusRows,
+    loadEligibleSessionRows,
+    normalizeCompletionFilter,
+    normalizeCorpusPeriod,
+    storedIdentifier
+} from "../server/corpus.js";
 import { authorizeResearcher } from "../server/researcherAuth.js";
 
 const AI_ACTIONS = new Set(["generate", "collect_evidence"]);
@@ -58,6 +65,14 @@ function analysisPeriod(start, end) {
     }
 }
 
+function analysisCompletionFilter(value) {
+    try {
+        return normalizeCompletionFilter(value);
+    } catch (error) {
+        throw new AnalysisError(400, error.message);
+    }
+}
+
 function operationalStatus(error) {
     return Number.isInteger(error?.status) ? error.status : 500;
 }
@@ -75,30 +90,51 @@ function logOperationalFailure(stage, details, error) {
     });
 }
 
-async function loadAllInterviewMessages(supabaseClient, pageSize = 1000) {
+async function loadInterviewMessagesForSessions(
+    supabaseClient,
+    sessionRows,
+    pageSize = 1000
+) {
+    const sessionIds = [...new Set(
+        (Array.isArray(sessionRows) ? sessionRows : [])
+            .map(session => storedIdentifier(session?.session_id))
+            .filter(Boolean)
+    )];
     const rows = [];
-    let from = 0;
 
-    while (true) {
-        const { data, error } = await supabaseClient
-            .from("interview_messages")
-            .select("id, Participant, Session, Language, Speaker, Message, Timestamp, EnglishTranslation")
-            .order("id", { ascending: true })
-            .range(from, from + pageSize - 1);
+    for (let index = 0; index < sessionIds.length; index += 100) {
+        const chunk = sessionIds.slice(index, index + 100);
+        let from = 0;
 
-        if (error) {
-            throw new AnalysisError(500, "The analysis corpus could not be loaded.");
+        while (true) {
+            const { data, error } = await supabaseClient
+                .from("interview_messages")
+                .select("id, Participant, Session, Language, Speaker, Message, Timestamp, EnglishTranslation")
+                .in("Session", chunk)
+                .order("id", { ascending: true })
+                .range(from, from + pageSize - 1);
+
+            if (error) {
+                throw new AnalysisError(
+                    500,
+                    "The analysis corpus could not be loaded."
+                );
+            }
+
+            const page = data || [];
+            rows.push(...page);
+
+            if (page.length < pageSize) {
+                break;
+            }
+
+            from += pageSize;
         }
-
-        const page = data || [];
-        rows.push(...page);
-
-        if (page.length < pageSize) {
-            return rows;
-        }
-
-        from += pageSize;
     }
+
+    return rows.sort((left, right) => String(left.id).localeCompare(
+        String(right.id)
+    ));
 }
 
 async function loadMessagesByIds(supabaseClient, messageIds) {
@@ -191,7 +227,17 @@ function periodMatches(run, period) {
     return runStart === period.start && runEnd === period.end;
 }
 
-async function loadRunsForPeriod(supabaseClient, period) {
+function runCompletionFilter(run) {
+    if (run?.completion_filter) {
+        return normalizeCompletionFilter(run.completion_filter);
+    }
+
+    return run?.completed_only === true
+        ? COMPLETION_FILTERS.completed
+        : COMPLETION_FILTERS.all;
+}
+
+async function loadRunsForScope(supabaseClient, period, completionFilter) {
     const { data, error } = await supabaseClient
         .from(ANALYSIS_TABLES.runs)
         .select("*")
@@ -202,7 +248,10 @@ async function loadRunsForPeriod(supabaseClient, period) {
         throw new AnalysisError(500, "Stored analysis runs could not be loaded.");
     }
 
-    return (data || []).filter(run => periodMatches(run, period));
+    return (data || []).filter(run =>
+        periodMatches(run, period)
+        && runCompletionFilter(run) === completionFilter
+    );
 }
 
 function evidenceMessage(message, link) {
@@ -244,14 +293,30 @@ function validatedAttributionCodes(value, item) {
     return validated;
 }
 
-async function loadWorkspace(supabaseClient, period, requestedRunId = null) {
-    const runs = await loadRunsForPeriod(supabaseClient, period);
+async function loadWorkspace(
+    supabaseClient,
+    period,
+    completionFilter,
+    requestedRunId = null
+) {
+    const runs = await loadRunsForScope(
+        supabaseClient,
+        period,
+        completionFilter
+    );
     const run = requestedRunId
         ? runs.find(item => item.id === requestedRunId)
         : runs[0];
 
     if (!run) {
-        return { period, runs, run: null, items: [], corpusMessages: [] };
+        return {
+            period,
+            completionFilter,
+            runs,
+            run: null,
+            items: [],
+            corpusMessages: []
+        };
     }
 
     const [{ data: items, error: itemError }, corpusRows] = await Promise.all([
@@ -309,6 +374,7 @@ async function loadWorkspace(supabaseClient, period, requestedRunId = null) {
 
     return {
         period,
+        completionFilter,
         runs,
         run,
         items: itemPayloads,
@@ -397,8 +463,18 @@ async function generateAnalysis(
     }
 
     const period = analysisPeriod(req.body?.start, req.body?.end);
+    const completionFilter = analysisCompletionFilter(
+        req.body?.completion
+    );
+    const eligibleSessions = await loadEligibleSessionRows(
+        supabaseClient,
+        completionFilter
+    );
     const rows = filterCorpusRows(
-        await loadAllInterviewMessages(supabaseClient),
+        await loadInterviewMessagesForSessions(
+            supabaseClient,
+            eligibleSessions
+        ),
         period
     );
     const prepared = prepareParticipantMessages(rows);
@@ -419,6 +495,9 @@ async function generateAnalysis(
         .insert({
             period_start: period.start,
             period_end: period.end,
+            completion_filter: completionFilter,
+            completed_only:
+                completionFilter === COMPLETION_FILTERS.completed,
             represented_languages: representedLanguages,
             status: "generating",
             model: QUALITATIVE_ANALYSIS_MODEL,
@@ -503,7 +582,12 @@ async function generateAnalysis(
         throw new AnalysisError(502, "AI suggestions could not be generated for this corpus.");
     }
 
-    return loadWorkspace(supabaseClient, period, run.id);
+    return loadWorkspace(
+        supabaseClient,
+        period,
+        completionFilter,
+        run.id
+    );
 }
 
 async function saveFeedback(req, supabaseClient, now) {
@@ -1061,9 +1145,13 @@ export async function handleAnalysis(
                 req.query?.start,
                 req.query?.end
             );
+            const completionFilter = analysisCompletionFilter(
+                req.query?.completion
+            );
             return res.status(200).json(await loadWorkspace(
                 supabaseClient,
                 period,
+                completionFilter,
                 req.query?.runId || null
             ));
         }
@@ -1113,6 +1201,7 @@ export async function handleAnalysis(
         return res.status(200).json(await loadWorkspace(
             supabaseClient,
             period,
+            runCompletionFilter(run),
             runId
         ));
     } catch (error) {

@@ -10,6 +10,9 @@
     const statusElement = document.getElementById("analysisStatus");
     const runSelect = document.getElementById("analysisRunSelect");
     const evidenceDialog = document.getElementById("evidenceDialog");
+    const completionFilter = document.getElementById(
+        "analysisCompletionFilter"
+    );
 
     function researcherToken() {
         return sessionStorage.getItem(TOKEN_STORAGE_KEY) || "";
@@ -26,6 +29,7 @@
     function analysisQuery(runId = null) {
         const period = currentPeriod();
         const parameters = new URLSearchParams({ action: "list" });
+        parameters.set("completion", completionFilter.value);
 
         if (period.start) {
             parameters.set("start", period.start);
@@ -455,6 +459,7 @@
         }
 
         metadata.textContent = [
+            completionFilter.selectedOptions[0].textContent,
             `${workspace.run.messages_analyzed} participant messages analysed`,
             `${workspace.run.sessions_analyzed} sessions`,
             `${workspace.run.batches_used} batches`,
@@ -679,10 +684,19 @@
             postAction({
                 action: "generate",
                 start: period.start,
-                end: period.end
+                end: period.end,
+                completion: completionFilter.value
             }, "Generating provisional AI suggestions…");
         }
     );
+
+    completionFilter.addEventListener("change", () => {
+        workspace = null;
+
+        if (researcherToken()) {
+            loadStoredAnalysis();
+        }
+    });
 
     runSelect.addEventListener("change", () => {
         if (runSelect.value) {
