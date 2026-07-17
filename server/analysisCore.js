@@ -1,7 +1,7 @@
 import { storedIdentifier } from "./corpus.js";
 
 export const QUALITATIVE_ANALYSIS_MODEL = "gpt-5.1";
-export const QUALITATIVE_ANALYSIS_VERSION = "task-014-v2";
+export const QUALITATIVE_ANALYSIS_VERSION = "task-014-v3-batch-traceability";
 export const DEFAULT_ANALYSIS_BATCH_SIZE = 40;
 
 function normalizedText(value) {
@@ -163,6 +163,21 @@ const suggestionSchema = {
                 properties: {
                     theme: { type: "string" },
                     codes: { type: "array", items: { type: "string" } },
+                    coded_phrases: {
+                        type: "array",
+                        items: {
+                            type: "object",
+                            properties: {
+                                phrase: { type: "string" },
+                                message_ids: {
+                                    type: "array",
+                                    items: { type: "string" }
+                                }
+                            },
+                            required: ["phrase", "message_ids"],
+                            additionalProperties: false
+                        }
+                    },
                     keywords: { type: "array", items: { type: "string" } },
                     supporting_message_ids: {
                         type: "array",
@@ -183,14 +198,31 @@ const suggestionSchema = {
                             additionalProperties: false
                         }
                     },
+                    keyword_evidence: {
+                        type: "array",
+                        items: {
+                            type: "object",
+                            properties: {
+                                keyword: { type: "string" },
+                                message_ids: {
+                                    type: "array",
+                                    items: { type: "string" }
+                                }
+                            },
+                            required: ["keyword", "message_ids"],
+                            additionalProperties: false
+                        }
+                    },
                     rationale: { type: "string" }
                 },
                 required: [
                     "theme",
                     "codes",
+                    "coded_phrases",
                     "keywords",
                     "supporting_message_ids",
                     "code_evidence",
+                    "keyword_evidence",
                     "rationale"
                 ],
                 additionalProperties: false
@@ -236,14 +268,19 @@ function normalizedAttributionCodes(values, allowedCodes) {
 
 export function validateSuggestedItems(value, availableMessages) {
     const availableIds = new Set(availableMessages.map(message => message.id));
+    const availableById = new Map(
+        availableMessages.map(message => [message.id, message])
+    );
     const items = [];
     let invalidEvidenceIds = 0;
     let skippedItems = 0;
+    let skippedComponents = 0;
 
     (Array.isArray(value?.items) ? value.items : []).forEach(item => {
         const theme = normalizedText(item?.theme);
         const rationale = normalizedText(item?.rationale);
-        const codes = normalizedList(item.codes);
+        const requestedCodes = normalizedList(item.codes);
+        const requestedKeywords = normalizedList(item.keywords);
         const evidenceIds = [];
 
         (Array.isArray(item?.supporting_message_ids)
@@ -270,12 +307,15 @@ export function validateSuggestedItems(value, availableMessages) {
         const evidenceCodesById = new Map(
             evidenceIds.map(id => [id, []])
         );
+        const codeMessages = new Map(
+            requestedCodes.map(code => [code, []])
+        );
 
         (Array.isArray(item?.code_evidence) ? item.code_evidence : [])
             .forEach(attribution => {
                 const code = normalizedAttributionCodes(
                     [attribution?.code],
-                    codes
+                    requestedCodes
                 )[0];
 
                 if (!code) {
@@ -298,23 +338,164 @@ export function validateSuggestedItems(value, availableMessages) {
                     if (!attributedCodes.includes(code)) {
                         attributedCodes.push(code);
                     }
+
+                    if (!codeMessages.get(code).includes(id)) {
+                        codeMessages.get(code).push(id);
+                    }
                 });
             });
+
+        const codes = requestedCodes.filter(code => {
+            const traceable = codeMessages.get(code)?.length > 0;
+
+            if (!traceable) {
+                skippedComponents += 1;
+            }
+
+            return traceable;
+        });
+        const keywordMessages = new Map(
+            requestedKeywords.map(keyword => [keyword, []])
+        );
+
+        (Array.isArray(item?.keyword_evidence) ? item.keyword_evidence : [])
+            .forEach(attribution => {
+                const keyword = normalizedAttributionCodes(
+                    [attribution?.keyword],
+                    requestedKeywords
+                )[0];
+
+                if (!keyword) {
+                    return;
+                }
+
+                (Array.isArray(attribution?.message_ids)
+                    ? attribution.message_ids
+                    : []
+                ).forEach(value => {
+                    const id = normalizedText(value);
+
+                    if (!id || !availableIds.has(id) || !evidenceIds.includes(id)) {
+                        invalidEvidenceIds += 1;
+                        return;
+                    }
+
+                    if (!keywordMessages.get(keyword).includes(id)) {
+                        keywordMessages.get(keyword).push(id);
+                    }
+                });
+            });
+
+        const keywords = requestedKeywords.filter(keyword => {
+            const traceable = keywordMessages.get(keyword)?.length > 0;
+
+            if (!traceable) {
+                skippedComponents += 1;
+            }
+
+            return traceable;
+        });
+        const codedPhrases = [];
+        const codedPhraseByKey = new Map();
+
+        (Array.isArray(item?.coded_phrases) ? item.coded_phrases : [])
+            .forEach(entry => {
+                const phrase = normalizedText(entry?.phrase);
+
+                if (!phrase) {
+                    skippedComponents += 1;
+                    return;
+                }
+
+                const phraseKey = phrase.toLowerCase();
+                const messageIds = [];
+
+                (Array.isArray(entry?.message_ids) ? entry.message_ids : [])
+                    .forEach(value => {
+                        const id = normalizedText(value);
+                        const message = availableById.get(id);
+                        const exactSourceText = [
+                            message?.originalText,
+                            message?.englishTranslation,
+                            message?.analysisText
+                        ].filter(Boolean).some(text =>
+                            text.toLowerCase().includes(phraseKey)
+                        );
+
+                        if (!id || !evidenceIds.includes(id) || !exactSourceText) {
+                            invalidEvidenceIds += 1;
+                            return;
+                        }
+
+                        if (!messageIds.includes(id)) {
+                            messageIds.push(id);
+                        }
+                    });
+
+                if (!messageIds.length) {
+                    skippedComponents += 1;
+                    return;
+                }
+
+                if (codedPhraseByKey.has(phraseKey)) {
+                    const existing = codedPhraseByKey.get(phraseKey);
+                    existing.messageIds = [...new Set([
+                        ...existing.messageIds,
+                        ...messageIds
+                    ])];
+                    return;
+                }
+
+                const record = { phrase, messageIds };
+                codedPhraseByKey.set(phraseKey, record);
+                codedPhrases.push(record);
+            });
+
+        const suggestionSources = [
+            ...evidenceIds.map(messageId => ({
+                suggestionType: "theme",
+                suggestionValue: theme,
+                messageId
+            })),
+            ...codes.flatMap(code => codeMessages.get(code).map(messageId => ({
+                suggestionType: "code",
+                suggestionValue: code,
+                messageId
+            }))),
+            ...codedPhrases.flatMap(entry => entry.messageIds.map(messageId => ({
+                suggestionType: "coded_phrase",
+                suggestionValue: entry.phrase,
+                messageId
+            }))),
+            ...keywords.flatMap(keyword => keywordMessages.get(keyword).map(messageId => ({
+                suggestionType: "keyword",
+                suggestionValue: keyword,
+                messageId
+            })))
+        ];
 
         items.push({
             theme,
             codes,
-            keywords: normalizedList(item.keywords),
+            codedPhrases: codedPhrases.map(entry => entry.phrase),
+            keywords,
             rationale,
             evidenceIds,
             evidence: evidenceIds.map(messageId => ({
                 messageId,
                 codes: evidenceCodesById.get(messageId)
-            }))
+                    .filter(code => codes.includes(code))
+            })),
+            suggestionSources
         });
     });
 
-    return { items, invalidEvidenceIds, skippedItems };
+    return {
+        items,
+        invalidEvidenceIds,
+        skippedItems,
+        skippedComponents
+    };
 }
 
 export function validateEvidenceIds(value, availableMessages) {
@@ -398,7 +579,7 @@ export async function generateSuggestionsForBatch(
         input: [
             {
                 role: "system",
-                content: "You are assisting a qualitative researcher. Analyse only the participant messages supplied. Return provisional themes, qualitative codes, keywords, exact supporting participant message IDs, explicit code-to-message attribution, and concise English rationales. Attribute evidence only to codes returned in the same item. Never cite an ID that is not in the supplied evidence set. Do not quote, invent, or rewrite evidence."
+                content: "You are assisting a qualitative researcher. Analyse only the participant messages supplied. Return provisional themes, qualitative codes, exact verbatim coded phrases, keywords, exact supporting participant message IDs, explicit code-to-message attribution, explicit keyword-to-message attribution, and concise English rationales. Link every suggested component to the exact supporting messages. A coded phrase must appear verbatim in the original message or its supplied English translation. Never cite an ID that is not in the supplied evidence set. Do not invent or rewrite evidence."
             },
             {
                 role: "user",
@@ -407,10 +588,17 @@ export async function generateSuggestionsForBatch(
         ]
     });
 
-    return validateSuggestedItems(
+    const validated = validateSuggestedItems(
         parseStructuredResponse(response, "AI qualitative-analysis output"),
         messages
     );
+
+    return {
+        ...validated,
+        inputTokenCount: Number.isInteger(response?.usage?.input_tokens)
+            ? response.usage.input_tokens
+            : null
+    };
 }
 
 export async function collectEvidenceForBatch(
@@ -457,6 +645,10 @@ export function workingAnalysisFields(item) {
             && item.researcher_codes.length
             ? normalizedList(item.researcher_codes)
             : normalizedList(item?.ai_codes),
+        codedPhrases: Array.isArray(item?.researcher_coded_phrases)
+            && item.researcher_coded_phrases.length
+            ? normalizedList(item.researcher_coded_phrases)
+            : normalizedList(item?.ai_coded_phrases),
         keywords: Array.isArray(item?.researcher_keywords)
             && item.researcher_keywords.length
             ? normalizedList(item.researcher_keywords)

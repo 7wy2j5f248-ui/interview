@@ -39,7 +39,12 @@ const ANALYSIS_TABLES = Object.freeze({
     runs: "qualitative_analysis_runs",
     runMessages: "qualitative_analysis_run_messages",
     items: "qualitative_analysis_items",
-    evidence: "qualitative_analysis_evidence"
+    evidence: "qualitative_analysis_evidence",
+    batches: "qualitative_analysis_batches",
+    batchSessions: "qualitative_analysis_batch_sessions",
+    batchMessages: "qualitative_analysis_batch_messages",
+    itemBatches: "qualitative_analysis_item_batches",
+    suggestionSources: "qualitative_analysis_suggestion_sources"
 });
 
 class AnalysisError extends Error {
@@ -254,13 +259,21 @@ async function loadRunsForScope(supabaseClient, period, completionFilter) {
     );
 }
 
-function evidenceMessage(message, link) {
+function evidenceMessage(message, link, suggestionSources = []) {
+    const sourceValues = type => [...new Set(
+        suggestionSources
+            .filter(source => source.suggestion_type === type)
+            .map(source => source.suggestion_value)
+    )];
+
     return {
         evidenceId: link.id,
         messageId: message.id,
+        batchId: link.batch_id || null,
         session: message.Session || null,
         participant: message.Participant || null,
         language: message.Language || null,
+        speaker: message.Speaker || null,
         timestamp: message.Timestamp || null,
         originalText: message.Message,
         englishTranslation: message.EnglishTranslation || null,
@@ -269,7 +282,13 @@ function evidenceMessage(message, link) {
         included: link.included === true,
         codes: Array.isArray(link.code_attributions)
             ? link.code_attributions
-            : []
+            : [],
+        associatedSuggestions: {
+            themes: sourceValues("theme"),
+            codes: sourceValues("code"),
+            codedPhrases: sourceValues("coded_phrase"),
+            keywords: sourceValues("keyword")
+        }
     };
 }
 
@@ -291,6 +310,341 @@ function validatedAttributionCodes(value, item) {
     }
 
     return validated;
+}
+
+function sessionDescriptorPayload(session, descriptor, fallbackSessionId = null) {
+    return {
+        sessionId: session?.session_id
+            || descriptor?.session_id
+            || fallbackSessionId,
+        participantId: session?.participant_id
+            || descriptor?.participant_id
+            || null,
+        language: session?.language || null,
+        completed: session?.completed === true,
+        completedAt: session?.completed_at || null,
+        descriptors: descriptor ? {
+            currentCountry: descriptor.current_country,
+            currentRegion: descriptor.current_region,
+            countryOfOrigin: descriptor.country_of_origin,
+            diasporaStatus: descriptor.diaspora_status,
+            gender: descriptor.gender,
+            age: descriptor.age,
+            birthYear: descriptor.birth_year,
+            birthCohort: descriptor.birth_cohort,
+            youthStatus: descriptor.youth_status,
+            educationLevel: descriptor.education_level,
+            socialIdentity: descriptor.social_identity,
+            additionalDescriptors: descriptor.additional_descriptors || {}
+        } : null
+    };
+}
+
+function batchLanguageDistribution(messageLinks, corpusById) {
+    const distribution = new Map();
+
+    messageLinks.forEach(link => {
+        const message = corpusById.get(link.message_id);
+        const language = storedIdentifier(message?.Language)?.toLowerCase()
+            || "unidentified";
+
+        if (!distribution.has(language)) {
+            distribution.set(language, {
+                language,
+                messageIds: new Set(),
+                sessionIds: new Set()
+            });
+        }
+
+        const entry = distribution.get(language);
+        entry.messageIds.add(link.message_id);
+
+        if (link.session_id) {
+            entry.sessionIds.add(link.session_id);
+        }
+    });
+
+    return [...distribution.values()]
+        .map(entry => ({
+            language: entry.language,
+            messageCount: entry.messageIds.size,
+            sessionCount: entry.sessionIds.size
+        }))
+        .sort((left, right) => left.language.localeCompare(right.language));
+}
+
+async function loadRunProvenance(
+    supabaseClient,
+    runId,
+    itemIds,
+    corpusRows
+) {
+    const { data: batchRows, error: batchError } = await supabaseClient
+        .from(ANALYSIS_TABLES.batches)
+        .select("*")
+        .eq("analysis_run_id", runId)
+        .order("batch_number", { ascending: true });
+
+    if (batchError) {
+        throw new AnalysisError(500, "Analysis batch provenance could not be loaded.");
+    }
+
+    const batchIds = (batchRows || []).map(batch => batch.id);
+    let batchSessions = [];
+    let batchMessages = [];
+
+    if (batchIds.length) {
+        const [sessionResult, messageResult] = await Promise.all([
+            supabaseClient
+                .from(ANALYSIS_TABLES.batchSessions)
+                .select("batch_id, session_id")
+                .in("batch_id", batchIds),
+            supabaseClient
+                .from(ANALYSIS_TABLES.batchMessages)
+                .select("batch_id, message_id, session_id")
+                .in("batch_id", batchIds)
+        ]);
+
+        if (sessionResult.error || messageResult.error) {
+            throw new AnalysisError(500, "Frozen batch membership could not be loaded.");
+        }
+
+        batchSessions = sessionResult.data || [];
+        batchMessages = messageResult.data || [];
+    }
+
+    let itemBatches = [];
+    let suggestionSources = [];
+
+    if (itemIds.length) {
+        const [itemBatchResult, sourceResult] = await Promise.all([
+            supabaseClient
+                .from(ANALYSIS_TABLES.itemBatches)
+                .select("analysis_item_id, batch_id, relationship_type")
+                .in("analysis_item_id", itemIds),
+            supabaseClient
+                .from(ANALYSIS_TABLES.suggestionSources)
+                .select("analysis_item_id, batch_id, suggestion_type, suggestion_value, message_id")
+                .in("analysis_item_id", itemIds)
+        ]);
+
+        if (itemBatchResult.error || sourceResult.error) {
+            throw new AnalysisError(500, "Item source provenance could not be loaded.");
+        }
+
+        itemBatches = itemBatchResult.data || [];
+        suggestionSources = sourceResult.data || [];
+    }
+
+    const sessionIds = [...new Set(
+        batchSessions.map(link => storedIdentifier(link.session_id)).filter(Boolean)
+    )];
+    let sessionRows = [];
+    let descriptorRows = [];
+
+    if (sessionIds.length) {
+        const [sessionResult, descriptorResult] = await Promise.all([
+            supabaseClient
+                .from("interview_sessions")
+                .select("session_id, participant_id, language, completed, completed_at")
+                .in("session_id", sessionIds),
+            supabaseClient
+                .from("participant_descriptors")
+                .select("session_id, participant_id, current_country, current_region, country_of_origin, diaspora_status, gender, age, birth_year, birth_cohort, youth_status, education_level, social_identity, additional_descriptors")
+                .in("session_id", sessionIds)
+        ]);
+
+        if (sessionResult.error || descriptorResult.error) {
+            throw new AnalysisError(500, "Batch session metadata could not be loaded.");
+        }
+
+        sessionRows = sessionResult.data || [];
+        descriptorRows = descriptorResult.data || [];
+    }
+
+    const sessionById = new Map(sessionRows.map(session => [
+        session.session_id,
+        session
+    ]));
+    const descriptorBySession = new Map(descriptorRows.map(descriptor => [
+        descriptor.session_id,
+        descriptor
+    ]));
+    const corpusById = new Map(corpusRows.map(message => [message.id, message]));
+    const batchPayloads = (batchRows || []).map(batch => {
+        const membership = batchMessages.filter(link =>
+            link.batch_id === batch.id
+        );
+        const sessions = batchSessions
+            .filter(link => link.batch_id === batch.id)
+            .map(link => sessionDescriptorPayload(
+                sessionById.get(link.session_id),
+                descriptorBySession.get(link.session_id),
+                link.session_id
+            ));
+
+        return {
+            id: batch.id,
+            analysisRunId: batch.analysis_run_id,
+            batchNumber: batch.batch_number,
+            totalBatches: batch.total_batches,
+            sessionCount: batch.session_count,
+            messageCount: batch.message_count,
+            inputTokenCount: batch.input_token_count,
+            groupingCriteria: batch.grouping_criteria || {},
+            createdAt: batch.created_at,
+            legacy: batch.grouping_criteria?.legacy === true,
+            sessions,
+            messageIds: membership.map(link => link.message_id),
+            messageMembership: membership.map(link => ({
+                messageId: link.message_id,
+                sessionId: link.session_id || null
+            })),
+            languageDistribution: batchLanguageDistribution(
+                membership,
+                corpusById
+            )
+        };
+    });
+
+    return {
+        batches: batchPayloads,
+        batchById: new Map(batchPayloads.map(batch => [batch.id, batch])),
+        batchIdByMessageId: new Map(batchMessages.map(link => [
+            link.message_id,
+            link.batch_id
+        ])),
+        sessionIdByMessageId: new Map(batchMessages.map(link => [
+            link.message_id,
+            link.session_id || null
+        ])),
+        sessionById: new Map(sessionIds.map(sessionId => [
+            sessionId,
+            sessionDescriptorPayload(
+                sessionById.get(sessionId),
+                descriptorBySession.get(sessionId),
+                sessionId
+            )
+        ])),
+        itemBatches,
+        suggestionSources
+    };
+}
+
+function analysisItemComponents(item, suggestionSources) {
+    const definitions = [
+        { type: "theme", values: item.ai_theme ? [item.ai_theme] : [] },
+        { type: "code", values: item.ai_codes || [] },
+        { type: "coded_phrase", values: item.ai_coded_phrases || [] },
+        { type: "keyword", values: item.ai_keywords || [] }
+    ];
+
+    return definitions.flatMap(definition =>
+        definition.values.map(value => {
+            const sources = suggestionSources.filter(source =>
+                source.suggestion_type === definition.type
+                && source.suggestion_value === value
+            );
+
+            return {
+                type: definition.type,
+                value,
+                available: sources.length > 0,
+                batchIds: [...new Set(sources.map(source => source.batch_id))],
+                messageIds: [...new Set(sources.map(source => source.message_id))]
+            };
+        })
+    );
+}
+
+function itemProvenancePayload(item, itemEvidence, provenance) {
+    const itemBatchLinks = provenance.itemBatches.filter(link =>
+        link.analysis_item_id === item.id
+    );
+    const itemSources = provenance.suggestionSources.filter(source =>
+        source.analysis_item_id === item.id
+    );
+    const includedEvidence = itemEvidence.filter(link => link.included === true);
+    const supportingBySession = new Map();
+
+    includedEvidence.forEach(link => {
+        const sessionId = provenance.sessionIdByMessageId.get(link.message_id);
+
+        if (!sessionId) {
+            return;
+        }
+
+        if (!supportingBySession.has(sessionId)) {
+            supportingBySession.set(sessionId, {
+                ...(provenance.sessionById.get(sessionId) || {
+                    sessionId,
+                    participantId: null,
+                    language: null,
+                    completed: false,
+                    completedAt: null,
+                    descriptors: null
+                }),
+                linkedEvidenceMessageIds: new Set()
+            });
+        }
+
+        supportingBySession.get(sessionId).linkedEvidenceMessageIds.add(
+            link.message_id
+        );
+    });
+
+    const batches = itemBatchLinks
+        .map(link => {
+            const batch = provenance.batchById.get(link.batch_id);
+
+            if (!batch) {
+                return null;
+            }
+
+            const supportingLinks = includedEvidence.filter(evidence =>
+                (evidence.batch_id
+                    || provenance.batchIdByMessageId.get(evidence.message_id))
+                    === batch.id
+            );
+            const supportingSessions = new Set(
+                supportingLinks.map(link => {
+                    return provenance.sessionIdByMessageId.get(
+                        link.message_id
+                    );
+                }).filter(Boolean)
+            );
+
+            return {
+                ...batch,
+                relationshipType: link.relationship_type,
+                supportingMessageCount: new Set(
+                    supportingLinks.map(link => link.message_id)
+                ).size,
+                supportingSessionCount: supportingSessions.size
+            };
+        })
+        .filter(Boolean);
+    const status = !batches.length
+        ? "unavailable"
+        : batches.some(batch => batch.legacy)
+            ? "legacy_reconstructed"
+            : "available";
+
+    return {
+        status,
+        batches,
+        supportingSessions: [...supportingBySession.values()].map(session => ({
+            sessionId: session.sessionId,
+            participantId: session.participantId,
+            language: session.language,
+            completed: session.completed,
+            completedAt: session.completedAt,
+            descriptors: session.descriptors,
+            linkedEvidenceMessageCount:
+                session.linkedEvidenceMessageIds.size
+        })),
+        components: analysisItemComponents(item, itemSources)
+    };
 }
 
 async function loadWorkspace(
@@ -315,6 +669,7 @@ async function loadWorkspace(
             runs,
             run: null,
             items: [],
+            batches: [],
             corpusMessages: []
         };
     }
@@ -349,10 +704,19 @@ async function loadWorkspace(
         evidence = evidenceResult.data || [];
     }
 
+    const provenance = await loadRunProvenance(
+        supabaseClient,
+        run.id,
+        itemIds,
+        corpusRows
+    );
     const corpusById = new Map(corpusRows.map(message => [message.id, message]));
     const itemPayloads = (items || []).map(item => {
         const itemEvidence = evidence.filter(
             link => link.analysis_item_id === item.id
+        );
+        const itemSources = provenance.suggestionSources.filter(source =>
+            source.analysis_item_id === item.id
         );
 
         return {
@@ -366,9 +730,20 @@ async function loadWorkspace(
             evidence: itemEvidence
             .map(link => {
                 const message = corpusById.get(link.message_id);
-                return message ? evidenceMessage(message, link) : null;
+                return message ? evidenceMessage(
+                    message,
+                    link,
+                    itemSources.filter(source =>
+                        source.message_id === link.message_id
+                    )
+                ) : null;
             })
-            .filter(Boolean)
+            .filter(Boolean),
+            provenance: itemProvenancePayload(
+                item,
+                itemEvidence,
+                provenance
+            )
         };
     });
 
@@ -378,11 +753,14 @@ async function loadWorkspace(
         runs,
         run,
         items: itemPayloads,
+        batches: provenance.batches,
         corpusMessages: corpusRows.map(message => ({
             messageId: message.id,
+            batchId: provenance.batchIdByMessageId.get(message.id) || null,
             session: message.Session || null,
             participant: message.Participant || null,
             language: message.Language || null,
+            speaker: message.Speaker || null,
             timestamp: message.Timestamp || null,
             originalText: message.Message,
             englishTranslation: message.EnglishTranslation || null
@@ -410,45 +788,139 @@ async function insertRunMessageLinks(supabaseClient, runId, batches) {
     }
 }
 
-async function persistSuggestedItem(supabaseClient, runId, item) {
-    const { data, error } = await supabaseClient
-        .from(ANALYSIS_TABLES.items)
-        .insert({
-            analysis_run_id: runId,
-            origin: "ai",
-            ai_theme: item.theme,
-            ai_codes: item.codes,
-            ai_keywords: item.keywords,
-            ai_rationale: item.rationale,
-            status: "ai_suggested"
-        })
-        .select("id")
-        .single();
+async function persistFrozenBatches(
+    supabaseClient,
+    runId,
+    batches,
+    batchSize
+) {
+    const sessionBatchCounts = new Map();
 
-    if (error || !data) {
-        throw new AnalysisError(500, "An AI suggestion could not be stored.");
+    batches.forEach(batch => {
+        new Set(batch.map(message => message.sessionId).filter(Boolean))
+            .forEach(sessionId => {
+                sessionBatchCounts.set(
+                    sessionId,
+                    (sessionBatchCounts.get(sessionId) || 0) + 1
+                );
+            });
+    });
+
+    const batchRows = batches.map((batch, index) => {
+        const sessionIds = [...new Set(
+            batch.map(message => message.sessionId).filter(Boolean)
+        )];
+
+        return {
+            analysis_run_id: runId,
+            batch_number: index + 1,
+            total_batches: batches.length,
+            session_count: sessionIds.length,
+            message_count: batch.length,
+            input_token_count: null,
+            grouping_criteria: {
+                strategy: "sequential_session_preserving",
+                partitionReason: "technical_message_limit",
+                configuredMessageLimit: batchSize,
+                splitSessionIds: sessionIds.filter(sessionId =>
+                    sessionBatchCounts.get(sessionId) > 1
+                )
+            }
+        };
+    });
+    const { data: storedRows, error: batchError } = await supabaseClient
+        .from(ANALYSIS_TABLES.batches)
+        .insert(batchRows)
+        .select("*");
+
+    if (batchError || (storedRows || []).length !== batches.length) {
+        throw new AnalysisError(500, "Analysis batch records could not be stored.");
     }
 
+    const storedByNumber = new Map(
+        storedRows.map(batch => [batch.batch_number, batch])
+    );
+    const storedBatches = batches.map((messages, index) => ({
+        ...storedByNumber.get(index + 1),
+        messages
+    }));
+    const sessionLinks = storedBatches.flatMap(batch =>
+        [...new Set(batch.messages
+            .map(message => message.sessionId)
+            .filter(Boolean)
+        )].map(sessionId => ({
+            batch_id: batch.id,
+            session_id: sessionId
+        }))
+    );
+    const messageLinks = storedBatches.flatMap(batch =>
+        batch.messages.map(message => ({
+            batch_id: batch.id,
+            message_id: message.id,
+            session_id: message.sessionId || null
+        }))
+    );
+
+    if (sessionLinks.length) {
+        const { error } = await supabaseClient
+            .from(ANALYSIS_TABLES.batchSessions)
+            .insert(sessionLinks);
+
+        if (error) {
+            throw new AnalysisError(500, "Frozen batch sessions could not be stored.");
+        }
+    }
+
+    for (let index = 0; index < messageLinks.length; index += 500) {
+        const { error } = await supabaseClient
+            .from(ANALYSIS_TABLES.batchMessages)
+            .insert(messageLinks.slice(index, index + 500));
+
+        if (error) {
+            throw new AnalysisError(500, "Frozen batch messages could not be stored.");
+        }
+    }
+
+    await insertRunMessageLinks(supabaseClient, runId, batches);
+    return storedBatches;
+}
+
+async function persistSuggestedItem(
+    supabaseClient,
+    runId,
+    batch,
+    item
+) {
     const evidenceRecords = Array.isArray(item.evidence)
         ? item.evidence
         : item.evidenceIds.map(messageId => ({ messageId, codes: [] }));
-    const { error: evidenceError } = await supabaseClient
-        .from(ANALYSIS_TABLES.evidence)
-        .insert(evidenceRecords.map(evidence => ({
-            analysis_item_id: data.id,
-            message_id: evidence.messageId,
-            evidence_round: 0,
-            source: "initial_ai",
-            included: true,
-            code_attributions: evidence.codes
-        })));
+    const { data, error } = await supabaseClient.rpc(
+        "create_ai_analysis_item_with_batch",
+        {
+            p_analysis_run_id: runId,
+            p_batch_id: batch.id,
+            p_theme: item.theme,
+            p_codes: item.codes,
+            p_coded_phrases: item.codedPhrases,
+            p_keywords: item.keywords,
+            p_rationale: item.rationale,
+            p_evidence: evidenceRecords.map(evidence => ({
+                message_id: evidence.messageId,
+                codes: evidence.codes
+            })),
+            p_suggestion_sources: item.suggestionSources.map(source => ({
+                suggestion_type: source.suggestionType,
+                suggestion_value: source.suggestionValue,
+                message_id: source.messageId
+            }))
+        }
+    );
 
-    if (evidenceError) {
-        await supabaseClient
-            .from(ANALYSIS_TABLES.items)
-            .update({ status: "evidence_error", updated_at: new Date().toISOString() })
-            .eq("id", data.id);
-        throw new AnalysisError(500, "AI suggestion evidence could not be stored.");
+    if (error || !data) {
+        throw new AnalysisError(
+            500,
+            "AI suggestion and source provenance could not be stored."
+        );
     }
 }
 
@@ -483,7 +955,7 @@ async function generateAnalysis(
         throw new AnalysisError(400, "No participant messages are available in this period.");
     }
 
-    const batches = buildAnalysisBatches(prepared.messages, batchSize);
+    let batches = buildAnalysisBatches(prepared.messages, batchSize);
     const representedLanguages = [...new Set(
         prepared.messages.map(message => message.language).filter(Boolean)
     )].sort();
@@ -515,7 +987,12 @@ async function generateAnalysis(
     }
 
     try {
-        await insertRunMessageLinks(supabaseClient, run.id, batches);
+        batches = await persistFrozenBatches(
+            supabaseClient,
+            run.id,
+            batches,
+            batchSize
+        );
     } catch (error) {
         await supabaseClient
             .from(ANALYSIS_TABLES.runs)
@@ -533,14 +1010,33 @@ async function generateAnalysis(
         try {
             const result = await generateSuggestionsForBatch(
                 openaiClient,
-                batches[index]
+                batches[index].messages
             );
             invalidEvidenceIds += result.invalidEvidenceIds;
-            skippedItems += result.skippedItems;
+            skippedItems += result.skippedItems + result.skippedComponents;
+
+            if (Number.isInteger(result.inputTokenCount)) {
+                const { error: tokenUpdateError } = await supabaseClient
+                    .from(ANALYSIS_TABLES.batches)
+                    .update({ input_token_count: result.inputTokenCount })
+                    .eq("id", batches[index].id);
+
+                if (tokenUpdateError) {
+                    logOperationalFailure("batch_token_persistence", {
+                        runId: run.id,
+                        batchNumber: index + 1
+                    }, tokenUpdateError);
+                }
+            }
 
             for (const item of result.items) {
                 try {
-                    await persistSuggestedItem(supabaseClient, run.id, item);
+                    await persistSuggestedItem(
+                        supabaseClient,
+                        run.id,
+                        batches[index],
+                        item
+                    );
                     storedItems += 1;
                 } catch (error) {
                     skippedItems += 1;
@@ -605,6 +1101,9 @@ async function saveFeedback(req, supabaseClient, now) {
                 ? req.body.theme.trim() || null
                 : null,
             researcher_codes: commaSeparatedList(req.body?.codes),
+            researcher_coded_phrases: commaSeparatedList(
+                req.body?.codedPhrases
+            ),
             researcher_keywords: commaSeparatedList(req.body?.keywords),
             researcher_note: typeof req.body?.note === "string"
                 ? req.body.note.trim() || null
@@ -653,6 +1152,9 @@ async function createResearcherItem(req, supabaseClient, now) {
             origin: "researcher",
             researcher_theme: theme,
             researcher_codes: commaSeparatedList(req.body?.codes),
+            researcher_coded_phrases: commaSeparatedList(
+                req.body?.codedPhrases
+            ),
             researcher_keywords: commaSeparatedList(req.body?.keywords),
             researcher_note: typeof req.body?.note === "string"
                 ? req.body.note.trim() || null
@@ -671,8 +1173,21 @@ async function createResearcherItem(req, supabaseClient, now) {
     return runId;
 }
 
-function batchesFromStoredRun(messages) {
+async function batchesFromStoredRun(supabaseClient, runId, messages) {
     const byBatch = new Map();
+    const { data: batchRows, error } = await supabaseClient
+        .from(ANALYSIS_TABLES.batches)
+        .select("id, batch_number")
+        .eq("analysis_run_id", runId);
+
+    if (error) {
+        throw new AnalysisError(500, "Stored batch provenance could not be loaded.");
+    }
+
+    const batchIdByNumber = new Map((batchRows || []).map(batch => [
+        batch.batch_number,
+        batch.id
+    ]));
 
     messages.forEach(message => {
         if (!byBatch.has(message.batchNumber)) {
@@ -684,7 +1199,11 @@ function batchesFromStoredRun(messages) {
 
     return [...byBatch.entries()]
         .sort(([left], [right]) => left - right)
-        .map(([, batch]) => prepareParticipantMessages(batch).messages);
+        .map(([batchNumber, batch]) => ({
+            id: batchIdByNumber.get(batchNumber) || null,
+            batchNumber,
+            messages: prepareParticipantMessages(batch).messages
+        }));
 }
 
 async function collectEvidence(
@@ -710,7 +1229,9 @@ async function collectEvidence(
         throw new AnalysisError(400, "A working theme is required before collecting evidence.");
     }
 
-    const batches = batchesFromStoredRun(
+    const batches = await batchesFromStoredRun(
+        supabaseClient,
+        item.analysis_run_id,
         await runMessages(supabaseClient, item.analysis_run_id)
     );
     const collectedEvidence = new Map();
@@ -721,17 +1242,20 @@ async function collectEvidence(
         try {
             const result = await collectEvidenceForBatch(
                 openaiClient,
-                batches[index],
+                batches[index].messages,
                 instruction
             );
             invalidEvidenceIds += result.invalidEvidenceIds;
             result.evidence.forEach(evidence => {
                 if (!collectedEvidence.has(evidence.messageId)) {
-                    collectedEvidence.set(evidence.messageId, new Set());
+                    collectedEvidence.set(evidence.messageId, {
+                        batchId: batches[index].id,
+                        codes: new Set()
+                    });
                 }
 
                 evidence.codes.forEach(code => {
-                    collectedEvidence.get(evidence.messageId).add(code);
+                    collectedEvidence.get(evidence.messageId).codes.add(code);
                 });
             });
         } catch (error) {
@@ -754,17 +1278,42 @@ async function collectEvidence(
     const evidenceRound = item.evidence_round + 1;
     const { error: evidenceError } = await supabaseClient
         .from(ANALYSIS_TABLES.evidence)
-        .insert([...collectedEvidence].map(([messageId, codes]) => ({
+        .insert([...collectedEvidence].map(([messageId, provenance]) => ({
             analysis_item_id: itemId,
+            batch_id: provenance.batchId,
             message_id: messageId,
             evidence_round: evidenceRound,
             source: "feedback_ai",
             included: true,
-            code_attributions: [...codes]
+            code_attributions: [...provenance.codes]
         })));
 
     if (evidenceError) {
         throw new AnalysisError(500, "Collected evidence could not be saved.");
+    }
+
+    const contributingBatches = [...new Set(
+        [...collectedEvidence.values()]
+            .map(provenance => provenance.batchId)
+            .filter(Boolean)
+    )];
+
+    if (contributingBatches.length) {
+        const { error: batchLinkError } = await supabaseClient
+            .from(ANALYSIS_TABLES.itemBatches)
+            .upsert(contributingBatches.map(batchId => ({
+                analysis_item_id: itemId,
+                batch_id: batchId,
+                analysis_run_id: item.analysis_run_id,
+                relationship_type: "contributed_to"
+            })), {
+                onConflict: "analysis_item_id,batch_id",
+                ignoreDuplicates: true
+            });
+
+        if (batchLinkError) {
+            throw new AnalysisError(500, "Contributing batch provenance could not be saved.");
+        }
     }
 
     const { error: itemError } = await supabaseClient
@@ -810,6 +1359,26 @@ async function messageBelongsToRun(supabaseClient, runId, messageId) {
         .maybeSingle();
 
     return !error && Boolean(data);
+}
+
+async function batchForRunMessage(supabaseClient, runId, messageId) {
+    const { data: batches, error: batchError } = await supabaseClient
+        .from(ANALYSIS_TABLES.batches)
+        .select("id")
+        .eq("analysis_run_id", runId);
+
+    if (batchError || !(batches || []).length) {
+        return null;
+    }
+
+    const { data, error } = await supabaseClient
+        .from(ANALYSIS_TABLES.batchMessages)
+        .select("batch_id")
+        .in("batch_id", batches.map(batch => batch.id))
+        .eq("message_id", messageId)
+        .maybeSingle();
+
+    return error ? null : data?.batch_id || null;
 }
 
 async function setEvidence(req, supabaseClient, now) {
@@ -887,10 +1456,17 @@ async function setEvidence(req, supabaseClient, now) {
             throw new AnalysisError(400, "Only participant messages can be added as evidence.");
         }
 
+        const batchId = await batchForRunMessage(
+            supabaseClient,
+            item.analysis_run_id,
+            messageId
+        );
+
         const { error } = await supabaseClient
             .from(ANALYSIS_TABLES.evidence)
             .insert({
                 analysis_item_id: itemId,
+                batch_id: batchId,
                 message_id: messageId,
                 evidence_round: item.evidence_round,
                 source: "researcher_manual",
@@ -903,6 +1479,24 @@ async function setEvidence(req, supabaseClient, now) {
 
         if (error) {
             throw new AnalysisError(409, "That participant message is already linked in this evidence round.");
+        }
+
+        if (batchId) {
+            const { error: batchLinkError } = await supabaseClient
+                .from(ANALYSIS_TABLES.itemBatches)
+                .upsert({
+                    analysis_item_id: itemId,
+                    batch_id: batchId,
+                    analysis_run_id: item.analysis_run_id,
+                    relationship_type: "contributed_to"
+                }, {
+                    onConflict: "analysis_item_id,batch_id",
+                    ignoreDuplicates: true
+                });
+
+            if (batchLinkError) {
+                throw new AnalysisError(500, "Manual evidence batch provenance could not be saved.");
+            }
         }
     }
 
@@ -990,6 +1584,7 @@ async function confirmItem(req, supabaseClient, now) {
         .update({
             confirmed_theme: confirmed.theme,
             confirmed_codes: confirmed.codes,
+            confirmed_coded_phrases: confirmed.codedPhrases,
             confirmed_keywords: confirmed.keywords,
             confirmed_evidence_message_ids: evidenceIds,
             confirmed_note: confirmed.note,
@@ -1073,7 +1668,7 @@ export async function loadConfirmedAnalysis(
 ) {
     let query = supabaseClient
         .from(ANALYSIS_TABLES.items)
-        .select("id, analysis_run_id, status, confirmed_theme, confirmed_codes, confirmed_keywords, confirmed_evidence_message_ids, confirmed_note, confirmed_statistics, confirmed_statistics_calculated_at, confirmed_working_revision, confirmed_at, changed_since_confirmation")
+        .select("id, analysis_run_id, status, confirmed_theme, confirmed_codes, confirmed_coded_phrases, confirmed_keywords, confirmed_evidence_message_ids, confirmed_note, confirmed_statistics, confirmed_statistics_calculated_at, confirmed_working_revision, confirmed_at, changed_since_confirmation")
         .order("confirmed_at", { ascending: true });
 
     if (runId) {
@@ -1093,6 +1688,7 @@ export async function loadConfirmedAnalysis(
             analysisRunId: item.analysis_run_id,
             theme: item.confirmed_theme,
             codes: item.confirmed_codes,
+            codedPhrases: item.confirmed_coded_phrases,
             keywords: item.confirmed_keywords,
             supportingMessageIds: item.confirmed_evidence_message_ids,
             researcherNote: item.confirmed_note,

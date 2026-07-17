@@ -4,12 +4,14 @@
     const TOKEN_STORAGE_KEY = "researcherDashboardToken";
     let workspace = null;
     let evidenceItemId = null;
+    let provenanceView = null;
 
     const tokenGate = document.getElementById("analysisTokenGate");
     const workspaceElement = document.getElementById("analysisWorkspace");
     const statusElement = document.getElementById("analysisStatus");
     const runSelect = document.getElementById("analysisRunSelect");
     const evidenceDialog = document.getElementById("evidenceDialog");
+    const provenanceDialog = document.getElementById("provenanceDialog");
     const completionFilter = document.getElementById(
         "analysisCompletionFilter"
     );
@@ -83,6 +85,7 @@
     function clearNewItemForm() {
         document.getElementById("newResearcherTheme").value = "";
         document.getElementById("newResearcherCodes").value = "";
+        document.getElementById("newResearcherCodedPhrases").value = "";
         document.getElementById("newResearcherKeywords").value = "";
         document.getElementById("newResearcherNote").value = "";
     }
@@ -115,6 +118,9 @@
             itemId,
             theme: row.querySelector('[data-role="theme"]').value,
             codes: row.querySelector('[data-role="codes"]').value,
+            codedPhrases: row.querySelector(
+                '[data-role="codedPhrases"]'
+            ).value,
             keywords: row.querySelector('[data-role="keywords"]').value,
             note: row.querySelector('[data-role="note"]').value
         };
@@ -133,6 +139,10 @@
 
             if (evidenceItemId && evidenceDialog.open) {
                 renderEvidenceDialog();
+            }
+
+            if (provenanceView && provenanceDialog.open) {
+                renderProvenanceDialog();
             }
 
             return true;
@@ -161,6 +171,387 @@
         button.textContent = label;
         button.addEventListener("click", handler);
         return button;
+    }
+
+    function linkButton(label, handler) {
+        const button = actionButton(label, handler);
+        button.className = "linkButton";
+        return button;
+    }
+
+    function descriptorSummary(descriptors) {
+        if (!descriptors) {
+            return "Unavailable";
+        }
+
+        const values = [
+            ["Current country", descriptors.currentCountry],
+            ["Origin", descriptors.countryOfOrigin],
+            ["Diaspora", descriptors.diasporaStatus],
+            ["Gender", descriptors.gender],
+            ["Age", descriptors.age],
+            ["Birth cohort", descriptors.birthCohort],
+            ["Youth status", descriptors.youthStatus],
+            ["Education", descriptors.educationLevel],
+            ["Social identity", descriptors.socialIdentity]
+        ].filter(([, value]) => value !== null && value !== undefined);
+
+        return values.length
+            ? values.map(([label, value]) => `${label}: ${value}`).join(" · ")
+            : "No structured descriptors recovered";
+    }
+
+    function openTranscript(sessionId, messageId = null) {
+        if (provenanceDialog.open) {
+            provenanceDialog.close();
+        }
+
+        if (evidenceDialog.open) {
+            evidenceDialog.close();
+        }
+
+        window.openResearcherTranscript?.(sessionId, messageId);
+    }
+
+    function openProvenance(view) {
+        provenanceView = view;
+        renderProvenanceDialog();
+        provenanceDialog.showModal();
+    }
+
+    function provenanceItem() {
+        return workspace?.items.find(item =>
+            item.id === provenanceView?.itemId
+        ) || null;
+    }
+
+    function appendBatchDetails(container, batch) {
+        appendTextBlock(
+            container,
+            "Batch",
+            `Batch ${batch.batchNumber} of ${batch.totalBatches}`
+        );
+        appendTextBlock(container, "Stable batch ID", batch.id);
+        appendTextBlock(container, "Analysis run", batch.analysisRunId);
+        appendTextBlock(container, "Sessions", String(batch.sessionCount));
+        appendTextBlock(container, "Messages", String(batch.messageCount));
+        appendTextBlock(
+            container,
+            "Input tokens",
+            Number.isInteger(batch.inputTokenCount)
+                ? String(batch.inputTokenCount)
+                : "Unavailable"
+        );
+        appendTextBlock(
+            container,
+            "Grouping criteria",
+            JSON.stringify(batch.groupingCriteria || {})
+        );
+
+        appendSectionHeading(container, "Language distribution");
+        container.appendChild(distributionList(
+            batch.languageDistribution,
+            entry => `${entry.language}: ${entry.messageCount} messages, ${entry.sessionCount} sessions`
+        ));
+        appendSectionHeading(container, "Included sessions");
+
+        if (!batch.sessions.length) {
+            const note = document.createElement("p");
+            note.className = "muted";
+            note.textContent = "No usable session identifier was stored for this legacy batch.";
+            container.appendChild(note);
+            return;
+        }
+
+        batch.sessions.forEach(session => {
+            const article = document.createElement("article");
+            article.className = "provenanceCard";
+            appendTextBlock(article, "Session", session.sessionId);
+            appendTextBlock(article, "Participant", session.participantId);
+            appendTextBlock(article, "Language", session.language);
+            article.appendChild(linkButton("Open complete transcript", () => {
+                openTranscript(session.sessionId);
+            }));
+            container.appendChild(article);
+        });
+    }
+
+    function renderSupportingSessions(container, item) {
+        const sessions = item.provenance?.supportingSessions || [];
+
+        if (!sessions.length) {
+            container.textContent = "No supporting sessions are linked.";
+            return;
+        }
+
+        sessions.forEach(session => {
+            const article = document.createElement("article");
+            article.className = "provenanceCard";
+            appendTextBlock(article, "Session", session.sessionId);
+            appendTextBlock(article, "Participant", session.participantId);
+            appendTextBlock(article, "Language", session.language);
+            appendTextBlock(
+                article,
+                "Completion status",
+                session.completed ? "Completed" : "Incomplete"
+            );
+            appendTextBlock(
+                article,
+                "Linked evidence messages",
+                String(session.linkedEvidenceMessageCount)
+            );
+            appendTextBlock(
+                article,
+                "Available participant descriptors",
+                descriptorSummary(session.descriptors)
+            );
+            article.appendChild(linkButton("Open complete transcript", () => {
+                openTranscript(session.sessionId);
+            }));
+            container.appendChild(article);
+        });
+    }
+
+    function suggestionAssociationText(evidence) {
+        const associations = evidence.associatedSuggestions || {};
+        const associatedCodes = [...new Set([
+            ...(associations.codes || []),
+            ...(evidence.codes || [])
+        ])];
+        const values = [
+            ["Themes", associations.themes],
+            ["Codes", associatedCodes],
+            ["Coded phrases", associations.codedPhrases],
+            ["Keywords", associations.keywords]
+        ].filter(([, entries]) => entries?.length);
+
+        return values.length
+            ? values.map(([label, entries]) =>
+                `${label}: ${entries.join(", ")}`
+            ).join(" · ")
+            : "No component-specific legacy attribution available";
+    }
+
+    function renderSupportingMessages(container, item, component = null) {
+        const allowedIds = component
+            ? new Set(component.messageIds)
+            : null;
+        const filteredMessages = (item.evidence || []).filter(evidence =>
+            component
+                ? allowedIds.has(evidence.messageId)
+                : evidence.included
+        );
+        const messagesById = new Map();
+        filteredMessages.forEach(evidence => {
+            if (!messagesById.has(evidence.messageId)) {
+                messagesById.set(evidence.messageId, evidence);
+            }
+        });
+        const messages = [...messagesById.values()];
+
+        if (!messages.length) {
+            container.textContent = component
+                ? "No stored source messages are available for this suggestion component."
+                : "No supporting messages are linked.";
+            return;
+        }
+
+        messages.forEach(evidence => {
+            const article = document.createElement("article");
+            article.className = "provenanceCard";
+            appendTextBlock(article, "Message ID", evidence.messageId);
+            appendTextBlock(article, "Session", evidence.session);
+            appendTextBlock(article, "Participant", evidence.participant);
+            appendTextBlock(article, "Language", evidence.language);
+            appendTextBlock(article, "Speaker", evidence.speaker);
+            appendTextBlock(
+                article,
+                "Current evidence state",
+                evidence.included ? "Included" : "Excluded by researcher"
+            );
+            appendTextBlock(
+                article,
+                "Timestamp",
+                evidence.timestamp
+                    ? new Date(evidence.timestamp).toLocaleString()
+                    : "Unavailable"
+            );
+            appendTextBlock(
+                article,
+                "Associated analytical suggestions",
+                suggestionAssociationText(evidence)
+            );
+            const originalLabel = document.createElement("strong");
+            originalLabel.textContent = "Original transcript message:";
+            const original = document.createElement("p");
+            original.className = "evidenceText";
+            original.dir = "auto";
+            original.textContent = evidence.originalText;
+            article.append(originalLabel, original);
+
+            if (evidence.englishTranslation) {
+                appendTextBlock(
+                    article,
+                    "Stored English translation",
+                    evidence.englishTranslation
+                );
+            }
+
+            if (evidence.session) {
+                article.appendChild(linkButton(
+                    "Open this message in the complete transcript",
+                    () => openTranscript(evidence.session, evidence.messageId)
+                ));
+            }
+            container.appendChild(article);
+        });
+    }
+
+    function renderProvenanceDialog() {
+        const heading = document.getElementById("provenanceDialogHeading");
+        const summary = document.getElementById("provenanceDialogSummary");
+        const content = document.getElementById("provenanceDialogContent");
+        content.replaceChildren();
+
+        if (provenanceView?.mode === "batch") {
+            const batch = workspace?.batches.find(entry =>
+                entry.id === provenanceView.batchId
+            );
+
+            heading.textContent = batch
+                ? `Batch ${batch.batchNumber} of ${batch.totalBatches}`
+                : "Batch provenance unavailable";
+            summary.textContent = batch?.legacy
+                ? "Legacy batch membership reconstructed only from stored run-message batch numbers."
+                : "Frozen computational batch membership.";
+
+            if (batch) {
+                appendBatchDetails(content, batch);
+            }
+            return;
+        }
+
+        const item = provenanceItem();
+
+        if (!item) {
+            heading.textContent = "Analysis provenance unavailable";
+            summary.textContent = "The selected analytical item is no longer loaded.";
+            return;
+        }
+
+        if (provenanceView?.mode === "sessions") {
+            heading.textContent = "Supporting sessions";
+            summary.textContent =
+                `${item.provenance.supportingSessions.length} exact sessions support this analytical item.`;
+            renderSupportingSessions(content, item);
+            return;
+        }
+
+        const component = provenanceView?.component || null;
+        heading.textContent = component
+            ? `${component.type.replace("_", " ")} source messages — ${component.value}`
+            : "Supporting messages";
+        summary.textContent = component
+            ? "Component-specific source attribution stored with the AI suggestion."
+            : "Exact included evidence messages for this analytical item.";
+        renderSupportingMessages(content, item, component);
+    }
+
+    function appendItemProvenance(container, item) {
+        const provenance = item.provenance;
+        const section = document.createElement("div");
+        section.className = "provenanceSummary";
+        const heading = document.createElement("strong");
+        heading.textContent = "Source traceability";
+        section.appendChild(heading);
+
+        if (!provenance || provenance.status === "unavailable") {
+            const note = document.createElement("p");
+            note.className = "muted";
+            note.textContent = item.origin === "ai"
+                ? "Batch provenance unavailable for this legacy analytical item."
+                : "Researcher-originated item; no generating AI batch.";
+            section.appendChild(note);
+            container.appendChild(section);
+            return;
+        }
+
+        if (provenance.status === "legacy_reconstructed") {
+            const note = document.createElement("p");
+            note.className = "muted";
+            note.textContent =
+                "Legacy provenance reconstructed only from stored batch numbers and evidence links; missing component attribution was not invented.";
+            section.appendChild(note);
+        }
+
+        const batchActions = document.createElement("div");
+        batchActions.className = "provenanceActions";
+        provenance.batches.forEach(batch => {
+            batchActions.appendChild(linkButton(
+                `Batch ${batch.batchNumber} of ${batch.totalBatches}`,
+                () => openProvenance({
+                    mode: "batch",
+                    batchId: batch.id
+                })
+            ));
+            const size = document.createElement("span");
+            size.textContent =
+                `${batch.sessionCount} sessions · ${batch.messageCount} messages · ${batch.supportingSessionCount} of ${batch.sessionCount} supporting sessions in this batch · ${batch.supportingMessageCount} supporting messages`;
+            batchActions.appendChild(size);
+        });
+        section.appendChild(batchActions);
+
+        const supportingSessions = provenance.supportingSessions.length;
+        const supportingMessages = new Set(
+            (item.evidence || [])
+                .filter(evidence => evidence.included)
+                .map(evidence => evidence.messageId)
+        ).size;
+        const actions = document.createElement("div");
+        actions.className = "provenanceActions";
+        actions.append(
+            linkButton(`${supportingSessions} supporting sessions`, () => {
+                openProvenance({ mode: "sessions", itemId: item.id });
+            }),
+            linkButton(`${supportingMessages} supporting messages`, () => {
+                openProvenance({ mode: "messages", itemId: item.id });
+            })
+        );
+        section.appendChild(actions);
+        appendTextBlock(
+            section,
+            "Whole-corpus prevalence",
+            `${item.descriptiveStatistics?.supportingSessionCount ?? 0} of ${item.descriptiveStatistics?.eligibleSessionCount ?? 0} eligible sessions`
+        );
+
+        const componentHeading = document.createElement("strong");
+        componentHeading.textContent = "Suggestion-specific sources";
+        section.appendChild(componentHeading);
+        const componentActions = document.createElement("div");
+        componentActions.className = "provenanceActions";
+        provenance.components.forEach(component => {
+            const label = `${component.type.replace("_", " ")}: ${component.value}`;
+
+            if (!component.available) {
+                const unavailable = document.createElement("span");
+                unavailable.className = "muted";
+                unavailable.textContent = `${label} — legacy attribution unavailable`;
+                componentActions.appendChild(unavailable);
+                return;
+            }
+
+            const button = linkButton(label, () => {
+                openProvenance({
+                    mode: "messages",
+                    itemId: item.id,
+                    component
+                });
+            });
+            button.classList.add("componentSourceButton");
+            componentActions.appendChild(button);
+        });
+        section.appendChild(componentActions);
+        container.appendChild(section);
     }
 
     function appendStatisticsSummary(container, statistics) {
@@ -287,11 +678,18 @@
             );
             appendTextBlock(
                 suggestionCell,
+                "Coded phrases",
+                (item.ai_coded_phrases || []).join(", ")
+            );
+            appendTextBlock(
+                suggestionCell,
                 "Keywords",
                 (item.ai_keywords || []).join(", ")
             );
             appendTextBlock(suggestionCell, "Rationale", item.ai_rationale);
         }
+
+        appendItemProvenance(suggestionCell, item);
 
         const feedbackCell = document.createElement("td");
         feedbackCell.append(
@@ -306,6 +704,12 @@
                 "codes",
                 (item.researcher_codes || []).join(", "),
                 (item.ai_codes || []).join(", ")
+            ),
+            createWorkingField(
+                "Coded phrases (comma separated)",
+                "codedPhrases",
+                (item.researcher_coded_phrases || []).join(", "),
+                (item.ai_coded_phrases || []).join(", ")
             ),
             createWorkingField(
                 "Keywords (comma separated)",
@@ -555,6 +959,7 @@
             appendTextBlock(article, "Session", evidence.session || "Unknown / legacy");
             appendTextBlock(article, "Participant", evidence.participant || "Unknown / legacy");
             appendTextBlock(article, "Language", evidence.language || "Unknown / legacy");
+            appendTextBlock(article, "Speaker", evidence.speaker || "Unknown / legacy");
             appendTextBlock(
                 article,
                 "Timestamp",
@@ -579,6 +984,18 @@
                     evidence.englishTranslation
                 );
                 article.appendChild(translation);
+            }
+
+            appendTextBlock(
+                article,
+                "Associated analytical suggestions",
+                suggestionAssociationText(evidence)
+            );
+            if (evidence.session) {
+                article.appendChild(linkButton(
+                    "Open this message in the complete transcript",
+                    () => openTranscript(evidence.session, evidence.messageId)
+                ));
             }
 
             const attribution = document.createElement("fieldset");
@@ -716,6 +1133,9 @@
                 runId: workspace.run.id,
                 theme: document.getElementById("newResearcherTheme").value,
                 codes: document.getElementById("newResearcherCodes").value,
+                codedPhrases: document.getElementById(
+                    "newResearcherCodedPhrases"
+                ).value,
                 keywords: document.getElementById("newResearcherKeywords").value,
                 note: document.getElementById("newResearcherNote").value
             }, "Creating researcher analytical item…");
@@ -729,6 +1149,11 @@
     document.getElementById("closeEvidenceDialogButton").addEventListener(
         "click",
         () => evidenceDialog.close()
+    );
+
+    document.getElementById("closeProvenanceDialogButton").addEventListener(
+        "click",
+        () => provenanceDialog.close()
     );
 
     document.getElementById("addManualEvidenceButton").addEventListener(
