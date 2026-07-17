@@ -4,6 +4,94 @@ export function storedIdentifier(value) {
         : null;
 }
 
+export const COMPLETION_FILTERS = Object.freeze({
+    completed: "completed",
+    all: "all",
+    incomplete: "incomplete"
+});
+
+export function normalizeCompletionFilter(value) {
+    const normalized = value === undefined || value === null || value === ""
+        ? COMPLETION_FILTERS.completed
+        : typeof value === "string"
+            ? value.trim().toLowerCase()
+            : "";
+
+    if (!Object.hasOwn(COMPLETION_FILTERS, normalized)) {
+        throw new Error(
+            "Completion filter must be completed, all, or incomplete."
+        );
+    }
+
+    return normalized;
+}
+
+export function sessionMatchesCompletionFilter(session, completionFilter) {
+    const filter = normalizeCompletionFilter(completionFilter);
+
+    if (filter === COMPLETION_FILTERS.all) {
+        return true;
+    }
+
+    return session?.completed === (filter === COMPLETION_FILTERS.completed);
+}
+
+export function filterRowsByEligibleSessions(rows, sessions) {
+    const eligibleSessionIds = new Set(
+        (Array.isArray(sessions) ? sessions : [])
+            .map(session => storedIdentifier(session?.session_id))
+            .filter(Boolean)
+    );
+
+    return (Array.isArray(rows) ? rows : []).filter(row => {
+        const sessionId = storedIdentifier(row?.Session);
+        return sessionId ? eligibleSessionIds.has(sessionId) : false;
+    });
+}
+
+export async function loadEligibleSessionRows(
+    supabaseClient,
+    completionFilter,
+    pageSize = 1000
+) {
+    const filter = normalizeCompletionFilter(completionFilter);
+    const rows = [];
+    let from = 0;
+
+    while (true) {
+        let query = supabaseClient
+            .from("interview_sessions")
+            .select("session_id, participant_id, language, completed, completed_at, created_at, updated_at")
+            .order("session_id", { ascending: true });
+
+        if (filter === COMPLETION_FILTERS.completed) {
+            query = query.eq("completed", true);
+        } else if (filter === COMPLETION_FILTERS.incomplete) {
+            query = query.eq("completed", false);
+        }
+
+        const { data, error } = await query.range(
+            from,
+            from + pageSize - 1
+        );
+
+        if (error) {
+            throw new Error("Eligible interview sessions could not be loaded.", {
+                cause: error
+            });
+        }
+
+        const page = data || [];
+        rows.push(...page);
+
+        if (page.length < pageSize) {
+            return rows;
+        }
+
+        from += pageSize;
+    }
+}
+
 export function validTimestamp(value) {
     const timestamp = Date.parse(value);
     return Number.isFinite(timestamp) ? timestamp : null;

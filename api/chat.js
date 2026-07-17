@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { createClient } from "@supabase/supabase-js";
+import { ensureParticipantDescriptor } from "../server/participantDescriptors.js";
 import { selectUsableResearchDesign } from "../server/researchDesign.js";
 
 const supportedInterviewLanguages = Object.freeze({
@@ -121,6 +122,11 @@ async function initializeInterviewSession(
       cause: error
     });
   }
+
+  await ensureParticipantDescriptor(supabaseClient, {
+    sessionId,
+    participantId
+  });
 }
 
 async function markInterviewSessionCompleted(supabaseClient, sessionId) {
