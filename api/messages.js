@@ -154,6 +154,7 @@ export async function handleMessages(
         }
 
         return res.status(200).json(messages.map(item => ({
+            id: item.id,
             Speaker: item.Speaker,
             Message: item.Message,
             Timestamp: item.Timestamp,

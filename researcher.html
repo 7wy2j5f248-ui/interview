@@ -189,6 +189,33 @@
         .muted {
             color: #666666;
         }
+
+        .provenanceSummary {
+            border-block-start: 1px solid #dddddd;
+            margin-block-start: 0.75rem;
+            padding-block-start: 0.75rem;
+        }
+
+        .provenanceActions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
+        .provenanceCard {
+            border-block-end: 1px solid #dddddd;
+            padding-block: 0.75rem;
+        }
+
+        .componentSourceButton {
+            margin: 0.2rem;
+        }
+
+        .targetTranscriptMessage {
+            background: #fff8d6;
+            border: 2px solid #8a6d00;
+            padding: 0.75rem;
+        }
     </style>
 </head>
 <body>
@@ -318,6 +345,10 @@
                     <input id="newResearcherCodes" type="text">
                 </label>
                 <label>
+                    Coded phrases (comma separated)
+                    <input id="newResearcherCodedPhrases" type="text">
+                </label>
+                <label>
                     Keywords (comma separated)
                     <input id="newResearcherKeywords" type="text">
                 </label>
@@ -367,6 +398,13 @@
     </div>
 </dialog>
 
+<dialog id="provenanceDialog">
+    <button id="closeProvenanceDialogButton" type="button">Close</button>
+    <h2 id="provenanceDialogHeading">Analysis provenance</h2>
+    <p id="provenanceDialogSummary" class="muted"></p>
+    <div id="provenanceDialogContent"></div>
+</dialog>
+
 <section id="languageView" hidden>
     <button id="summaryBackButton" class="backButton" type="button">
         ← Back to corpus summary
@@ -403,6 +441,7 @@
 let statistics = null;
 let selectedLanguage = null;
 let currentCorpusPeriod = { start: null, end: null, allTime: true };
+let transcriptReturnMode = "language";
 
 function periodQuery(period) {
     const parameters = new URLSearchParams();
@@ -659,14 +698,20 @@ async function loadStatistics() {
     }
 }
 
-async function loadMessages(sessionId) {
+async function loadMessages(
+    sessionId,
+    { returnMode = "language", highlightMessageId = null } = {}
+) {
 
+    transcriptReturnMode = returnMode;
     clearViews();
     document.getElementById("transcriptView").hidden = false;
     document.getElementById("transcriptHeading").textContent =
         `Session ${sessionId} — Transcript`;
     document.getElementById("languageBackButton").textContent =
-        `← Back to ${selectedLanguage.name} sessions`;
+        returnMode === "analysis"
+            ? "← Back to analysis workspace"
+            : `← Back to ${selectedLanguage?.name || "language"} sessions`;
 
     const messageList = document.getElementById("messagesList");
     messageList.textContent = "Loading transcript…";
@@ -687,6 +732,12 @@ async function loadMessages(sessionId) {
 
         const message = document.createElement("article");
         message.className = "message";
+        message.id = `transcript-message-${item.id}`;
+        message.dataset.messageId = item.id;
+
+        if (item.id === highlightMessageId) {
+            message.classList.add("targetTranscriptMessage");
+        }
 
         const original = document.createElement("p");
         const speaker = document.createElement("strong");
@@ -729,13 +780,34 @@ async function loadMessages(sessionId) {
 
     });
 
+    if (highlightMessageId) {
+        document.getElementById(
+            `transcript-message-${highlightMessageId}`
+        )?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+
 }
+
+window.openResearcherTranscript = (sessionId, messageId = null) =>
+    loadMessages(sessionId, {
+        returnMode: "analysis",
+        highlightMessageId: messageId
+    });
 
 document.getElementById("summaryBackButton").addEventListener("click", () => {
     showSummary();
 });
 
 document.getElementById("languageBackButton").addEventListener("click", () => {
+    if (transcriptReturnMode === "analysis") {
+        showSummary();
+        document.getElementById("analysisSection").scrollIntoView({
+            behavior: "smooth",
+            block: "start"
+        });
+        return;
+    }
+
     showLanguage(selectedLanguage.code);
 });
 

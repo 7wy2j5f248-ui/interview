@@ -220,11 +220,18 @@ test("structured AI output retains explicit validated code attribution", () => {
         items: [{
             theme: "Community support",
             codes: ["Support", "Access"],
+            coded_phrases: [{
+                phrase: "participant response",
+                message_ids: [ids.en1]
+            }],
             keywords: ["community"],
             supporting_message_ids: [ids.en1, ids.zh],
             code_evidence: [
                 { code: "Support", message_ids: [ids.en1, ids.zh] },
                 { code: "Unknown code", message_ids: [ids.en1] }
+            ],
+            keyword_evidence: [
+                { keyword: "community", message_ids: [ids.en1, ids.zh] }
             ],
             rationale: "Grounded in participant accounts."
         }]
