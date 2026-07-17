@@ -63,15 +63,19 @@ export function normalizedDescriptorChanges(input) {
         changes.birth_year = nullableInteger(input.birth_year, "birth_year");
     }
 
-    if (Object.prototype.hasOwnProperty.call(input, "additional_descriptors")) {
-        const value = input.additional_descriptors;
-
-        if (!value || typeof value !== "object" || Array.isArray(value)) {
-            throw new Error("additional_descriptors must be a JSON object.");
+    ["additional_descriptors", "descriptor_sources"].forEach(field => {
+        if (!Object.prototype.hasOwnProperty.call(input, field)) {
+            return;
         }
 
-        changes.additional_descriptors = value;
-    }
+        const value = input[field];
+
+        if (!value || typeof value !== "object" || Array.isArray(value)) {
+            throw new Error(`${field} must be a JSON object.`);
+        }
+
+        changes[field] = value;
+    });
 
     return changes;
 }

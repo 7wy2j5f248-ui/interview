@@ -19,6 +19,10 @@ const migrationUrl = new URL(
     "../supabase/migrations/20260717015303_add_session_metadata_and_participant_descriptors.sql",
     import.meta.url
 );
+const backfillMigrationUrl = new URL(
+    "../supabase/migrations/20260717030000_backfill_session_metadata_and_participant_descriptors.sql",
+    import.meta.url
+);
 
 function sessionClient(sessionRows) {
     return {
@@ -209,7 +213,13 @@ test("one descriptor is created per session and backend reads and updates it", a
             current_country: " Canada ",
             birth_cohort: "post_1990s",
             age: 25,
-            additional_descriptors: { migration_generation: "first" }
+            additional_descriptors: { migration_generation: "first" },
+            descriptor_sources: {
+                age: {
+                    source_message_id: "message-1",
+                    raw_answer: "25"
+                }
+            }
         }
     );
 
@@ -219,6 +229,37 @@ test("one descriptor is created per session and backend reads and updates it", a
     assert.deepEqual(updated.additional_descriptors, {
         migration_generation: "first"
     });
+    assert.deepEqual(updated.descriptor_sources, {
+        age: {
+            source_message_id: "message-1",
+            raw_answer: "25"
+        }
+    });
+});
+
+test("reconciliation migration deterministically links final-question answers", async () => {
+    const migration = await readFile(backfillMigrationUrl, "utf8");
+
+    assert.doesNotMatch(
+        migration,
+        /alter\s+table\s+public\.interview_messages/i
+    );
+    assert.doesNotMatch(
+        migration,
+        /(insert\s+into|update|delete\s+from)\s+public\.interview_messages/i
+    );
+    assert.match(migration, /add column if not exists descriptor_sources jsonb/);
+    assert.match(migration, /cross join eligible_design/);
+    assert.match(migration, /question\.candidate_order = 1/);
+    assert.match(migration, /candidate\.message_order > question\.message_order/);
+    assert.match(migration, /candidate\.speaker in \('user', 'participant'\)/);
+    assert.match(migration, /session\.completed = false/);
+    assert.match(migration, /completed_at = matched\.answer_timestamp/);
+    assert.match(migration, /source_question_message_id/);
+    assert.match(migration, /source_message_id/);
+    assert.match(migration, /raw_answer/);
+    assert.match(migration, /age_and_interview_year_birthday_unknown/);
+    assert.match(migration, /descriptor\.descriptor_sources/);
 });
 
 test("descriptor normalization preserves explicit missing-information states", () => {
