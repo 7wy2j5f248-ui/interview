@@ -1,0 +1,36 @@
+name: Apply session design freeze
+
+on:
+  push:
+    branches:
+      - codex/freeze-session-research-design
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/freeze-session-research-design
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python .github/scripts/apply-freeze-session-design.py
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm install --ignore-scripts
+      - run: node --test tests/*.test.mjs
+      - run: |
+          rm -rf node_modules
+          rm -f package-lock.json
+          rm -f .github/scripts/apply-freeze-session-design.py
+          rm -f .github/workflows/apply-freeze-session-design.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Freeze research design per interview session"
+          git push
