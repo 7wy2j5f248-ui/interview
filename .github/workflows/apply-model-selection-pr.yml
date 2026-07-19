@@ -34,30 +34,24 @@ jobs:
       - name: Install dependencies
         run: npm install --ignore-scripts
       - name: Run tests
-        id: tests
-        continue-on-error: true
+        run: node --test tests/*.test.mjs
+      - name: Remove temporary build files
+        if: always()
         run: |
-          set +e
-          node --test tests/*.test.mjs 2>&1 | tee /tmp/model-selection-tests.log
-          status=${PIPESTATUS[0]}
-          echo "status=$status" >> "$GITHUB_OUTPUT"
-          echo "### Test tail" >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-          tail -n 120 /tmp/model-selection-tests.log >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-          exit $status
+          rm -rf node_modules
+          rm -f package-lock.json
+          rm -f .github/scripts/apply-configurable-model-selection.py
+          rm -f .github/scripts/apply-configurable-model-selection-v2.py
+          rm -f .github/workflows/apply-configurable-model-selection.yml
       - name: Commit generated changes
         if: always()
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .
+          git add -A
           if git diff --cached --quiet; then
             echo "No generated changes to commit."
           else
-            git commit -m "Make interview and analysis models researcher-configurable"
+            git commit -m "Clean model-selection implementation artifacts"
             git push origin HEAD:${{ github.head_ref }}
           fi
-      - name: Enforce test result
-        if: always() && steps.tests.outputs.status != '0'
-        run: exit 1
