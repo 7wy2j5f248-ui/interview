@@ -39,6 +39,24 @@ export function isUsableResearchDesign(design) {
   );
 }
 
+export async function loadResearchDesignById(supabase, designId) {
+  if (typeof designId !== "string" || !designId.trim()) {
+    return null;
+  }
+
+  const result = await supabase
+    .from("research_designs")
+    .select("*")
+    .eq("id", designId.trim())
+    .maybeSingle();
+
+  if (result.error || !isUsableResearchDesign(result.data)) {
+    return null;
+  }
+
+  return normalizedResearchDesign(result.data);
+}
+
 export async function selectUsableResearchDesign(
   supabase,
   { logger = console } = {}
@@ -60,24 +78,15 @@ export async function selectUsableResearchDesign(
   const activeDesignId = activeDesignResult.data?.active_design_id;
 
   if (activeDesignId) {
-    const activeResearchDesignResult = await supabase
-      .from("research_designs")
-      .select("*")
-      .eq("id", activeDesignId)
-      .maybeSingle();
+    const activeDesign = await loadResearchDesignById(supabase, activeDesignId);
 
-    if (activeResearchDesignResult.error) {
-      logger.warn(
-        "Selected research design could not be loaded; trying the latest saved design.",
-        activeResearchDesignResult.error
-      );
-    } else if (isUsableResearchDesign(activeResearchDesignResult.data)) {
-      return normalizedResearchDesign(activeResearchDesignResult.data);
-    } else if (activeResearchDesignResult.data) {
-      logger.warn(
-        "Selected research design is incomplete; trying the latest saved design."
-      );
+    if (activeDesign) {
+      return activeDesign;
     }
+
+    logger.warn(
+      "Selected research design could not be loaded or is incomplete; trying the latest saved design."
+    );
   }
 
   const fallbackResult = await supabase
