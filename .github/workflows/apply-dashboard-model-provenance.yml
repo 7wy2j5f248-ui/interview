@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - codex/dashboard-interview-model-provenance
+  workflow_dispatch:
 
 permissions:
   contents: write
