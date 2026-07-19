@@ -10,6 +10,7 @@
     const workspaceElement = document.getElementById("analysisWorkspace");
     const statusElement = document.getElementById("analysisStatus");
     const runSelect = document.getElementById("analysisRunSelect");
+    const analysisModel = document.getElementById("analysisModel");
     const evidenceDialog = document.getElementById("evidenceDialog");
     const provenanceDialog = document.getElementById("provenanceDialog");
     const completionFilter = document.getElementById(
@@ -862,7 +863,7 @@
         workspace.runs.forEach(run => {
             const option = document.createElement("option");
             option.value = run.id;
-            option.textContent = `${new Date(run.created_at).toLocaleString()} — ${run.status}`;
+            option.textContent = `${new Date(run.created_at).toLocaleString()} — ${run.model} — ${run.status}`;
             option.selected = workspace.run?.id === run.id;
             runSelect.appendChild(option);
         });
@@ -895,6 +896,7 @@
 
         metadata.textContent = [
             completionFilter.selectedOptions[0].textContent,
+            `Model ${workspace.run.model}`,
             `${workspace.run.messages_analyzed} participant messages analysed`,
             `${workspace.run.sessions_analyzed} sessions`,
             `${workspace.run.batches_used} batches`,
@@ -1131,6 +1133,7 @@
             const period = currentPeriod();
             postAction({
                 action: "generate",
+                model: analysisModel.value.trim(),
                 start: period.start,
                 end: period.end,
                 completion: completionFilter.value

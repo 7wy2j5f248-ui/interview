@@ -8,6 +8,8 @@ document.getElementById("saveButton").addEventListener("click", async function (
 
         interviewTopic: document.getElementById("interviewTopic").value,
 
+        interviewModel: document.getElementById("interviewModel").value,
+
         interviewQuestions: document.getElementById("interviewQuestions").value,
 
         aiRole: document.getElementById("aiRole").value,

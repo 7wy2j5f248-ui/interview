@@ -21,6 +21,7 @@ import {
     storedIdentifier
 } from "../server/corpus.js";
 import { authorizeResearcher } from "../server/researcherAuth.js";
+import { normalizeOpenAIModel } from "../server/modelConfiguration.js";
 
 const AI_ACTIONS = new Set(["generate", "collect_evidence"]);
 const KNOWN_ACTIONS = new Set([
@@ -73,6 +74,14 @@ function analysisPeriod(start, end) {
 function analysisCompletionFilter(value) {
     try {
         return normalizeCompletionFilter(value);
+    } catch (error) {
+        throw new AnalysisError(400, error.message);
+    }
+}
+
+function analysisModel(value) {
+    try {
+        return normalizeOpenAIModel(value);
     } catch (error) {
         throw new AnalysisError(400, error.message);
     }
@@ -942,6 +951,7 @@ async function generateAnalysis(
         throw new AnalysisError(500, "Server configuration is incomplete.");
     }
 
+    const model = analysisModel(req.body?.model);
     const period = analysisPeriod(req.body?.start, req.body?.end);
     const completionFilter = analysisCompletionFilter(
         req.body?.completion
@@ -980,7 +990,7 @@ async function generateAnalysis(
                 completionFilter === COMPLETION_FILTERS.completed,
             represented_languages: representedLanguages,
             status: "generating",
-            model: QUALITATIVE_ANALYSIS_MODEL,
+            model,
             analysis_version: QUALITATIVE_ANALYSIS_VERSION,
             messages_analyzed: prepared.messages.length,
             sessions_analyzed: sessions.size,
@@ -1018,7 +1028,8 @@ async function generateAnalysis(
         try {
             const result = await generateSuggestionsForBatch(
                 openaiClient,
-                batches[index].messages
+                batches[index].messages,
+                { model }
             );
             invalidEvidenceIds += result.invalidEvidenceIds;
             skippedItems += result.skippedItems + result.skippedComponents;
@@ -1226,6 +1237,7 @@ async function collectEvidence(
 
     const itemId = safeId(req.body?.itemId, "Analysis item");
     const item = await loadItem(supabaseClient, itemId);
+    const run = await loadRun(supabaseClient, item.analysis_run_id);
 
     if (item.status === "archived") {
         throw new AnalysisError(409, "Archived analysis items cannot collect evidence.");
@@ -1251,7 +1263,8 @@ async function collectEvidence(
             const result = await collectEvidenceForBatch(
                 openaiClient,
                 batches[index].messages,
-                instruction
+                instruction,
+                { model: analysisModel(run.model) }
             );
             invalidEvidenceIds += result.invalidEvidenceIds;
             result.evidence.forEach(evidence => {
@@ -1346,7 +1359,6 @@ async function collectEvidence(
         );
     }
 
-    const run = await loadRun(supabaseClient, item.analysis_run_id);
     await supabaseClient
         .from(ANALYSIS_TABLES.runs)
         .update({
