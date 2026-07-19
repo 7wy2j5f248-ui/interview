@@ -1,5 +1,6 @@
 name: Apply configurable model selection
 
+# Temporary branch workflow; the PR cleanup removes this file.
 on:
   push:
     branches:
