@@ -43,23 +43,102 @@ function languageName(code) {
     return SUPPORTED_LANGUAGE_NAMES[code] || `Other / unrecognized (${code})`;
 }
 
-function summarizeSession(session, completed) {
-    const timestamps = session.timestamps;
-    const startTimestamp = timestamps.length
-        ? timestamps.reduce((earliest, timestamp) =>
-            Math.min(earliest, timestamp)
-        )
-        : null;
-    const endTimestamp = timestamps.length
-        ? timestamps.reduce((latest, timestamp) =>
-            Math.max(latest, timestamp)
-        )
-        : null;
+export function calculateSessionTiming(
+    timestamps,
+    inactivityTimeoutMinutes = 30
+) {
+    const thresholdMs = inactivityTimeoutMinutes * 60 * 1000;
+    const ordered = (Array.isArray(timestamps) ? timestamps : [])
+        .filter(Number.isFinite)
+        .sort((left, right) => left - right);
+
+    if (!ordered.length) {
+        return {
+            startTimestamp: null,
+            endTimestamp: null,
+            activeDurationMs: null,
+            elapsedDurationMs: null,
+            inactivityBreakCount: 0,
+            excludedIdleDurationMs: 0,
+            inactivityBreaks: []
+        };
+    }
+
+    let activeDurationMs = 0;
+    let excludedIdleDurationMs = 0;
+    const inactivityBreaks = [];
+
+    for (let index = 1; index < ordered.length; index += 1) {
+        const previousTimestamp = ordered[index - 1];
+        const nextTimestamp = ordered[index];
+        const intervalMs = nextTimestamp - previousTimestamp;
+
+        if (intervalMs > thresholdMs) {
+            excludedIdleDurationMs += intervalMs;
+            inactivityBreaks.push({
+                previousMessageAt: new Date(previousTimestamp).toISOString(),
+                nextMessageAt: new Date(nextTimestamp).toISOString(),
+                timeoutAt: new Date(
+                    previousTimestamp + thresholdMs
+                ).toISOString(),
+                durationMs: intervalMs,
+                thresholdMinutes: inactivityTimeoutMinutes
+            });
+        } else {
+            activeDurationMs += intervalMs;
+        }
+    }
+
+    return {
+        startTimestamp: ordered[0],
+        endTimestamp: ordered[ordered.length - 1],
+        activeDurationMs,
+        elapsedDurationMs: ordered[ordered.length - 1] - ordered[0],
+        inactivityBreakCount: inactivityBreaks.length,
+        excludedIdleDurationMs,
+        inactivityBreaks
+    };
+}
+
+function normalizedStoredBreaks(value) {
+    return (Array.isArray(value) ? value : []).map(item => ({
+        previousMessageAt: item?.previous_message_at || null,
+        nextMessageAt: item?.next_message_at || null,
+        timeoutAt: item?.timeout_at || null,
+        durationMs: Number(item?.duration_ms),
+        thresholdMinutes: Number(item?.threshold_minutes)
+    }));
+}
+
+function summarizeSession(session, lifecycle = {}) {
+    const fallbackTimeoutMinutes = Number.isInteger(
+        lifecycle.inactivityTimeoutMinutes
+    ) && lifecycle.inactivityTimeoutMinutes > 0
+        ? lifecycle.inactivityTimeoutMinutes
+        : 30;
+    const calculated = calculateSessionTiming(
+        session.timestamps,
+        fallbackTimeoutMinutes
+    );
+    const hasPersistedTiming = lifecycle.durationCalculatedAt
+        && Number.isFinite(lifecycle.activeDurationMs)
+        && Number.isFinite(lifecycle.elapsedDurationMs);
+    const startTimestamp = calculated.startTimestamp;
+    const endTimestamp = calculated.endTimestamp;
+    const activeDurationMs = hasPersistedTiming
+        ? lifecycle.activeDurationMs
+        : calculated.activeDurationMs;
+    const elapsedDurationMs = hasPersistedTiming
+        ? lifecycle.elapsedDurationMs
+        : calculated.elapsedDurationMs;
+    const inactivityBreaks = hasPersistedTiming
+        ? normalizedStoredBreaks(lifecycle.inactivityBreaks)
+        : calculated.inactivityBreaks;
 
     return {
         session: session.session,
         participants: [...session.participants].sort(),
-        completed,
+        completed: lifecycle.completed === true,
         messageCount: session.messageCount,
         startTime: startTimestamp === null
             ? null
@@ -67,9 +146,29 @@ function summarizeSession(session, completed) {
         endTime: endTimestamp === null
             ? null
             : new Date(endTimestamp).toISOString(),
-        durationMs: startTimestamp === null || endTimestamp === null
+        activeDurationMs,
+        elapsedDurationMs,
+        durationMs: activeDurationMs,
+        inactivityBreakCount: hasPersistedTiming
+            ? lifecycle.inactivityBreakCount
+            : calculated.inactivityBreakCount,
+        excludedIdleDurationMs: hasPersistedTiming
+            ? lifecycle.excludedIdleDurationMs
+            : calculated.excludedIdleDurationMs,
+        inactivityBreaks,
+        inactivityTimeoutMinutes: fallbackTimeoutMinutes,
+        lastActivityAt: lifecycle.lastActivityAt || (endTimestamp === null
             ? null
-            : endTimestamp - startTimestamp
+            : new Date(endTimestamp).toISOString()),
+        endedAt: lifecycle.endedAt || null,
+        timedOutAt: lifecycle.timedOutAt || null,
+        sessionStatus: lifecycle.sessionStatus || (
+            lifecycle.completed === true ? "completed" : "active"
+        ),
+        endReason: lifecycle.endReason || null,
+        continuationOfSessionId:
+            lifecycle.continuationOfSessionId || null,
+        durationCalculatedAt: lifecycle.durationCalculatedAt || null
     };
 }
 
@@ -98,7 +197,28 @@ export function buildCorpusStatistics(rows, completionRows = []) {
                 storedIdentifier(row?.session_id),
                 {
                     completed: row?.completed === true,
-                    language: normalizedLanguage(row?.language)
+                    language: normalizedLanguage(row?.language),
+                    lastActivityAt: row?.last_activity_at || null,
+                    endedAt: row?.ended_at || null,
+                    timedOutAt: row?.timed_out_at || null,
+                    sessionStatus: row?.session_status || null,
+                    endReason: row?.end_reason || null,
+                    continuationOfSessionId:
+                        row?.continuation_of_session_id || null,
+                    inactivityTimeoutMinutes: Number(
+                        row?.inactivity_timeout_minutes
+                    ),
+                    activeDurationMs: Number(row?.active_duration_ms),
+                    elapsedDurationMs: Number(row?.elapsed_duration_ms),
+                    inactivityBreakCount: Number(
+                        row?.inactivity_break_count
+                    ),
+                    excludedIdleDurationMs: Number(
+                        row?.excluded_idle_duration_ms
+                    ),
+                    inactivityBreaks: row?.inactivity_breaks,
+                    durationCalculatedAt:
+                        row?.duration_calculated_at || null
                 }
             ])
             .filter(([sessionId]) => sessionId)
@@ -161,7 +281,7 @@ export function buildCorpusStatistics(rows, completionRows = []) {
             sessionId,
             summarizeSession(
                 session,
-                completionBySession.get(sessionId)?.completed === true
+                completionBySession.get(sessionId) || {}
             )
         ])
     );
@@ -172,7 +292,7 @@ export function buildCorpusStatistics(rows, completionRows = []) {
             .filter(Boolean)
             .sort(compareSessions);
         const durations = languageSessions
-            .map(session => session.durationMs)
+            .map(session => session.activeDurationMs)
             .filter(Number.isFinite);
 
         return {
@@ -185,6 +305,12 @@ export function buildCorpusStatistics(rows, completionRows = []) {
                         === language.code
             ).length,
             messageCount: language.messageCount,
+            averageActiveDurationMs: durations.length
+                ? Math.round(
+                    durations.reduce((total, duration) => total + duration, 0)
+                    / durations.length
+                )
+                : null,
             averageSessionDurationMs: durations.length
                 ? Math.round(
                     durations.reduce((total, duration) => total + duration, 0)
@@ -223,7 +349,12 @@ export function buildCorpusStatistics(rows, completionRows = []) {
             messagesWithoutSession: messages.filter(
                 row => !storedIdentifier(row?.Session)
             ).length,
-            invalidTimestampMessages
+            invalidTimestampMessages,
+            durationCalculation: {
+                primaryMetric: "active_interview_duration",
+                rule: "Sum consecutive-message intervals; exclude each interval greater than the session inactivity threshold.",
+                defaultInactivityTimeoutMinutes: 30
+            }
         }
     };
 }
@@ -238,7 +369,7 @@ export async function loadSessionCompletionRows(
     while (true) {
         const { data, error } = await supabaseClient
             .from("interview_sessions")
-            .select("session_id, language, completed")
+            .select("session_id, language, completed, last_activity_at, ended_at, session_status, end_reason, timed_out_at, continuation_of_session_id, inactivity_timeout_minutes, active_duration_ms, elapsed_duration_ms, inactivity_break_count, excluded_idle_duration_ms, inactivity_breaks, duration_calculated_at")
             .order("session_id", { ascending: true })
             .range(from, from + pageSize - 1);
 

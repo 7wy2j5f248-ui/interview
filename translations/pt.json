@@ -31,6 +31,7 @@
   "language_selection": "Seleção de idioma",
   "interview_welcome": "Boas-vindas a esta entrevista.",
   "interview_error": "Não foi possível continuar a entrevista. Tente novamente.",
+  "session_expired": "A sua sessão anterior expirou por inatividade. Uma nova sessão de continuação está pronta; envie novamente a sua mensagem.",
   "participant": "Participante",
   "ai": "IA",
   "return_language": "Voltar à seleção de idioma"

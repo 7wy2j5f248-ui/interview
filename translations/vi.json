@@ -31,6 +31,7 @@
   "language_selection": "Chọn ngôn ngữ",
   "interview_welcome": "Chào mừng bạn đến với cuộc phỏng vấn này.",
   "interview_error": "Không thể tiếp tục cuộc phỏng vấn. Vui lòng thử lại.",
+  "session_expired": "Phiên trước của bạn đã hết hạn do không hoạt động. Một phiên tiếp nối mới đã sẵn sàng; vui lòng gửi lại tin nhắn.",
   "participant": "Người tham gia",
   "ai": "AI",
   "return_language": "Quay lại phần chọn ngôn ngữ"

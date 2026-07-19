@@ -77,26 +77,51 @@ const participantId =
 
 localStorage.setItem("participantId", participantId);
 
-const sessionId = "S" + Date.now();
+const SESSION_ID_STORAGE_KEY = "interviewSessionId";
+const SESSION_PARTICIPANT_STORAGE_KEY = "interviewSessionParticipantId";
+const SESSION_LANGUAGE_STORAGE_KEY = "interviewSessionLanguage";
+const language = localStorage.getItem("language") || "en";
+const storedSessionParticipant = localStorage.getItem(
+    SESSION_PARTICIPANT_STORAGE_KEY
+);
+const storedSessionLanguage = localStorage.getItem(
+    SESSION_LANGUAGE_STORAGE_KEY
+);
+let sessionId = storedSessionParticipant === participantId
+    && storedSessionLanguage === language
+    ? localStorage.getItem(SESSION_ID_STORAGE_KEY)
+    : null;
 
-sessionStorage.setItem("sessionId", sessionId);
-    const language =
-    localStorage.getItem("language") || "en";
+if (!sessionId) {
+    sessionId = "S" + Date.now();
+}
+
+function persistSessionId() {
+    localStorage.setItem(SESSION_ID_STORAGE_KEY, sessionId);
+    localStorage.setItem(
+        SESSION_PARTICIPANT_STORAGE_KEY,
+        participantId
+    );
+    localStorage.setItem(SESSION_LANGUAGE_STORAGE_KEY, language);
+    sessionStorage.setItem("sessionId", sessionId);
+}
+
+persistSessionId();
 async function sendMessage() {
 
     const messageBox = document.getElementById("message");
+    const sendButton = document.getElementById("sendButton");
     const message = messageBox.value.trim();
 
     if (!message) return;
 
-    appendChatMessage(t.participant, message);
-
-    history.push({
+    const requestHistory = [...history, {
         role: "user",
         content: message
-    });
+    }];
 
     messageBox.value = "";
+    sendButton.disabled = true;
 
     try {
         const response = await fetch("/api/chat", {
@@ -110,7 +135,7 @@ async function sendMessage() {
         sessionId,
         language,
         message,
-        history
+        history: requestHistory
     })
         });
 
@@ -126,16 +151,33 @@ async function sendMessage() {
             ? data.reply.trim()
             : "";
 
+        if (response.status === 409
+            && data.code === "SESSION_EXPIRED"
+            && typeof data.sessionId === "string"
+            && data.sessionId.trim()) {
+            sessionId = data.sessionId.trim();
+            persistSessionId();
+            history = [];
+            messageBox.value = message;
+            appendChatMessage(
+                t.ai,
+                t.session_expired ||
+                    "Your previous session expired after a period of inactivity. A new continuation session is ready; please send your message again."
+            );
+            return;
+        }
+
         if (!response.ok || !reply) {
             throw new Error("Interview request did not return a usable reply.");
         }
 
+        appendChatMessage(t.participant, message);
         appendChatMessage(t.ai, reply);
 
-        history.push({
+        history = [...requestHistory, {
             role: "assistant",
             content: reply
-        });
+        }];
     } catch (error) {
         console.error("Interview request failed.", error);
         appendChatMessage(
@@ -143,6 +185,9 @@ async function sendMessage() {
             t.interview_error ||
                 "We could not continue the interview. Please try again."
         );
+        messageBox.value = message;
+    } finally {
+        sendButton.disabled = false;
     }
 }
 

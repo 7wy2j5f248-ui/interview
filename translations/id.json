@@ -31,6 +31,7 @@
   "language_selection": "Pemilihan bahasa",
   "interview_welcome": "Selamat datang di wawancara ini.",
   "interview_error": "Wawancara tidak dapat dilanjutkan. Silakan coba lagi.",
+  "session_expired": "Sesi sebelumnya berakhir karena tidak ada aktivitas. Sesi lanjutan baru sudah siap; silakan kirim ulang pesan Anda.",
   "participant": "Peserta",
   "ai": "AI",
   "return_language": "Kembali ke pemilihan bahasa"

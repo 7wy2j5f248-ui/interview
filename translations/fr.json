@@ -31,6 +31,7 @@
   "language_selection": "Choix de la langue",
   "interview_welcome": "Bienvenue dans cet entretien.",
   "interview_error": "Impossible de poursuivre l’entretien. Veuillez réessayer.",
+  "session_expired": "Votre session précédente a expiré pour cause d’inactivité. Une nouvelle session de continuation est prête ; veuillez renvoyer votre message.",
   "participant": "Participant",
   "ai": "IA",
   "return_language": "Revenir au choix de la langue"

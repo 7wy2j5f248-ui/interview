@@ -323,6 +323,11 @@ function sessionDescriptorPayload(session, descriptor, fallbackSessionId = null)
         language: session?.language || null,
         completed: session?.completed === true,
         completedAt: session?.completed_at || null,
+        sessionStatus: session?.session_status || (
+            session?.completed === true ? "completed" : "active"
+        ),
+        endReason: session?.end_reason || null,
+        timedOutAt: session?.timed_out_at || null,
         descriptors: descriptor ? {
             currentCountry: descriptor.current_country,
             currentRegion: descriptor.current_region,
@@ -446,7 +451,7 @@ async function loadRunProvenance(
         const [sessionResult, descriptorResult] = await Promise.all([
             supabaseClient
                 .from("interview_sessions")
-                .select("session_id, participant_id, language, completed, completed_at")
+                .select("session_id, participant_id, language, completed, completed_at, session_status, end_reason, timed_out_at")
                 .in("session_id", sessionIds),
             supabaseClient
                 .from("participant_descriptors")
@@ -639,6 +644,9 @@ function itemProvenancePayload(item, itemEvidence, provenance) {
             language: session.language,
             completed: session.completed,
             completedAt: session.completedAt,
+            sessionStatus: session.sessionStatus,
+            endReason: session.endReason,
+            timedOutAt: session.timedOutAt,
             descriptors: session.descriptors,
             linkedEvidenceMessageCount:
                 session.linkedEvidenceMessageIds.size

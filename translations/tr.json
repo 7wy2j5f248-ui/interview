@@ -31,6 +31,7 @@
   "language_selection": "Dil seçimi",
   "interview_welcome": "Bu görüşmeye hoş geldiniz.",
   "interview_error": "Görüşmeye devam edilemedi. Lütfen tekrar deneyin.",
+  "session_expired": "Önceki oturumunuz etkinlik olmadığı için zaman aşımına uğradı. Yeni bir devam oturumu hazır; lütfen mesajınızı yeniden gönderin.",
   "participant": "Katılımcı",
   "ai": "Yapay zekâ",
   "return_language": "Dil seçimine dön"
