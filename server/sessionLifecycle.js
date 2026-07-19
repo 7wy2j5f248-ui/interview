@@ -50,6 +50,7 @@ export async function prepareInterviewSession(
         participantId,
         language,
         interviewModel,
+        researchDesignId,
         requestTime,
         inactivityTimeoutMinutes
     }
@@ -58,6 +59,10 @@ export async function prepareInterviewSession(
         inactivityTimeoutMinutes
     );
     const requestedModel = normalizeOpenAIModel(interviewModel);
+    const requestedDesignId = requiredIdentifier(
+        researchDesignId,
+        "Research design"
+    );
     const { data, error } = await supabaseClient.rpc(
         "prepare_interview_session_with_model",
         {
@@ -68,6 +73,7 @@ export async function prepareInterviewSession(
             ),
             p_language: requiredIdentifier(language, "Language"),
             p_interview_model: requestedModel,
+            p_research_design_id: requestedDesignId,
             p_request_at: normalizedRequestTime(requestTime),
             p_timeout_minutes: timeoutMinutes
         }
@@ -91,6 +97,10 @@ export async function prepareInterviewSession(
         interviewModel: normalizeOpenAIModel(
             result.selected_interview_model,
             requestedModel
+        ),
+        researchDesignId: requiredIdentifier(
+            result.selected_research_design_id || requestedDesignId,
+            "Research design"
         )
     };
 }
