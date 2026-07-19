@@ -31,6 +31,7 @@
   "language_selection": "Uchaguzi wa lugha",
   "interview_welcome": "Karibu kwenye mahojiano haya.",
   "interview_error": "Haikuwezekana kuendelea na mahojiano. Tafadhali jaribu tena.",
+  "session_expired": "Kikao chako cha awali kiliisha kwa sababu ya kutotumika. Kikao kipya cha kuendelea kiko tayari; tafadhali tuma ujumbe wako tena.",
   "participant": "Mshiriki",
   "ai": "AI",
   "return_language": "Rudi kwenye uchaguzi wa lugha"

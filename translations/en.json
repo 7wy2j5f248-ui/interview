@@ -53,6 +53,7 @@
   "interview": "Interview",
   "interview_welcome": "Welcome to the interview.",
   "interview_error": "We could not continue the interview. Please try again.",
+  "session_expired": "Your previous session expired after a period of inactivity. A new continuation session is ready; please send your message again.",
   "send": "Send",
   "ai": "AI",
   "participant": "Participant",

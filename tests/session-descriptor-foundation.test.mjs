@@ -399,10 +399,7 @@ test("a final canonical answer persists messages, completion, and a descriptor",
     };
     const sessionClient = {
         from(table) {
-            assert.ok([
-                "interview_sessions",
-                "participant_descriptors"
-            ].includes(table));
+            assert.equal(table, "participant_descriptors");
             return {
                 async upsert(row) {
                     calls.push({ operation: table, row });
@@ -412,6 +409,20 @@ test("a final canonical answer persists messages, completion, and a descriptor",
         },
         async rpc(name, args) {
             calls.push({ operation: "rpc", name, args });
+
+            if (name === "prepare_interview_session") {
+                return {
+                    data: [{
+                        accepted_session_id: "session-1",
+                        previous_session_id: null,
+                        expired: false,
+                        created: true,
+                        timeout_at: null
+                    }],
+                    error: null
+                };
+            }
+
             return { data: true, error: null };
         }
     };
@@ -457,11 +468,14 @@ test("a final canonical answer persists messages, completion, and a descriptor",
     assert.equal(response.statusCode, 200);
     assert.deepEqual(response.payload, { reply: "Thank you." });
     assert.deepEqual(calls.map(call => call.operation), [
-        "interview_sessions",
+        "rpc",
         "participant_descriptors",
         "messages",
+        "rpc",
         "rpc"
     ]);
-    assert.equal(calls[3].name, "complete_interview_session");
-    assert.deepEqual(calls[3].args, { p_session_id: "session-1" });
+    assert.equal(calls[0].name, "prepare_interview_session");
+    assert.equal(calls[3].name, "refresh_interview_session_metrics");
+    assert.equal(calls[4].name, "complete_interview_session");
+    assert.deepEqual(calls[4].args, { p_session_id: "session-1" });
 });

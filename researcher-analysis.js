@@ -82,6 +82,17 @@
         statusElement.className = isError ? "errorMessage" : "";
     }
 
+    function lifecycleLabel(value, fallback = "Not applicable") {
+        if (typeof value !== "string" || !value.trim()) {
+            return fallback;
+        }
+
+        return value
+            .trim()
+            .replaceAll("_", " ")
+            .replace(/^./, character => character.toUpperCase());
+    }
+
     function clearNewItemForm() {
         document.getElementById("newResearcherTheme").value = "";
         document.getElementById("newResearcherCodes").value = "";
@@ -269,6 +280,16 @@
             appendTextBlock(article, "Session", session.sessionId);
             appendTextBlock(article, "Participant", session.participantId);
             appendTextBlock(article, "Language", session.language);
+            appendTextBlock(
+                article,
+                "Session status",
+                lifecycleLabel(session.sessionStatus)
+            );
+            appendTextBlock(
+                article,
+                "End reason",
+                lifecycleLabel(session.endReason)
+            );
             article.appendChild(linkButton("Open complete transcript", () => {
                 openTranscript(session.sessionId);
             }));
@@ -294,6 +315,16 @@
                 article,
                 "Completion status",
                 session.completed ? "Completed" : "Incomplete"
+            );
+            appendTextBlock(
+                article,
+                "Session status",
+                lifecycleLabel(session.sessionStatus)
+            );
+            appendTextBlock(
+                article,
+                "End reason",
+                lifecycleLabel(session.endReason)
             );
             appendTextBlock(
                 article,

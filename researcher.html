@@ -277,11 +277,18 @@
                 <th scope="col">Sessions</th>
                 <th scope="col">Completed sessions</th>
                 <th scope="col">Messages</th>
-                <th scope="col">Average session duration</th>
+                <th scope="col">Average active interview duration</th>
             </tr>
         </thead>
         <tbody id="languageSummaryBody"></tbody>
     </table>
+
+    <p class="muted">
+        Active interview duration sums consecutive-message intervals and
+        excludes any whole interval longer than that session’s inactivity
+        threshold. Elapsed clock span remains available in the session
+        details for transparency.
+    </p>
 
     <p id="legacyNote" class="legacyNote" hidden></p>
 </section>
@@ -411,6 +418,7 @@
     </button>
     <h2 id="languageHeading"></h2>
 
+    <div class="tableScroll">
     <table>
         <thead>
             <tr>
@@ -418,13 +426,21 @@
                 <th scope="col">Participant</th>
                 <th scope="col">Messages</th>
                 <th scope="col">Start time</th>
-                <th scope="col">End time</th>
-                <th scope="col">Duration</th>
+                <th scope="col">Last activity</th>
+                <th scope="col">Active interview duration</th>
+                <th scope="col">Elapsed clock span</th>
+                <th scope="col">Inactivity breaks</th>
+                <th scope="col">Excluded idle time</th>
+                <th scope="col">Timeout threshold</th>
                 <th scope="col">Status</th>
+                <th scope="col">End reason</th>
+                <th scope="col">Ended / timeout time</th>
+                <th scope="col">Continuation of session</th>
             </tr>
         </thead>
         <tbody id="sessionSummaryBody"></tbody>
     </table>
+    </div>
     <p id="noSessionsMessage" hidden>
         These messages do not have a usable stored session identifier.
     </p>
@@ -552,6 +568,60 @@ function participantLabel(participants) {
         : "Unknown / legacy";
 }
 
+function lifecycleLabel(value, fallback = "Not applicable") {
+    if (typeof value !== "string" || !value.trim()) {
+        return fallback;
+    }
+
+    return value
+        .trim()
+        .replaceAll("_", " ")
+        .replace(/^./, character => character.toUpperCase());
+}
+
+function inactivityBreakDetails(session) {
+    const breaks = Array.isArray(session.inactivityBreaks)
+        ? session.inactivityBreaks
+        : [];
+
+    if (!breaks.length) {
+        return "0";
+    }
+
+    const details = document.createElement("details");
+    const summary = document.createElement("summary");
+    summary.textContent = String(session.inactivityBreakCount);
+    details.appendChild(summary);
+
+    const list = document.createElement("ol");
+    breaks.forEach(item => {
+        const listItem = document.createElement("li");
+        listItem.textContent = [
+            `${formatTimestamp(item.previousMessageAt)} to`,
+            formatTimestamp(item.nextMessageAt),
+            `(${formatDuration(item.durationMs)} excluded;`,
+            `timeout at ${formatTimestamp(item.timeoutAt)})`
+        ].join(" ");
+        list.appendChild(listItem);
+    });
+    details.appendChild(list);
+
+    return details;
+}
+
+function continuationSessionLink(sessionId) {
+    if (!sessionId) {
+        return "Not applicable";
+    }
+
+    const button = document.createElement("button");
+    button.className = "linkButton";
+    button.type = "button";
+    button.textContent = sessionId;
+    button.addEventListener("click", () => loadMessages(sessionId));
+    return button;
+}
+
 function clearViews() {
     document.getElementById("summaryView").hidden = true;
     document.getElementById("languageView").hidden = true;
@@ -599,9 +669,16 @@ function showLanguage(languageCode) {
             participantLabel(session.participants),
             session.messageCount,
             formatTimestamp(session.startTime),
-            formatTimestamp(session.endTime),
-            formatDuration(session.durationMs),
-            session.completed ? "Completed" : "Incomplete"
+            formatTimestamp(session.lastActivityAt),
+            formatDuration(session.activeDurationMs),
+            formatDuration(session.elapsedDurationMs),
+            inactivityBreakDetails(session),
+            formatDuration(session.excludedIdleDurationMs),
+            `${session.inactivityTimeoutMinutes} min`,
+            lifecycleLabel(session.sessionStatus),
+            lifecycleLabel(session.endReason),
+            formatTimestamp(session.timedOutAt || session.endedAt),
+            continuationSessionLink(session.continuationOfSessionId)
         ].forEach(value => {
             if (value instanceof HTMLElement) {
                 row.appendChild(value);
@@ -650,7 +727,7 @@ function renderSummary(data) {
             language.sessionCount,
             language.completedSessionCount,
             language.messageCount,
-            formatDuration(language.averageSessionDurationMs)
+            formatDuration(language.averageActiveDurationMs)
         ].forEach(value => {
             if (value instanceof HTMLElement) {
                 row.appendChild(value);

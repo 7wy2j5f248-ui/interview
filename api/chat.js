@@ -2,6 +2,11 @@ import OpenAI from "openai";
 import { createClient } from "@supabase/supabase-js";
 import { ensureParticipantDescriptor } from "../server/participantDescriptors.js";
 import { selectUsableResearchDesign } from "../server/researchDesign.js";
+import {
+  prepareInterviewSession,
+  refreshInterviewSessionMetrics,
+  resolveInactivityTimeoutMinutes
+} from "../server/sessionLifecycle.js";
 
 const supportedInterviewLanguages = Object.freeze({
   en: "English",
@@ -102,31 +107,31 @@ export function parseInterviewTurn(response) {
 
 async function initializeInterviewSession(
   supabaseClient,
-  { sessionId, participantId, language }
-) {
-  const { error } = await supabaseClient
-    .from("interview_sessions")
-    .upsert({
-      session_id: sessionId,
-      participant_id: participantId,
-      language,
-      completed: false,
-      completed_at: null
-    }, {
-      onConflict: "session_id",
-      ignoreDuplicates: true
-    });
-
-  if (error) {
-    throw new Error("Interview session initialization failed.", {
-      cause: error
-    });
+  {
+    sessionId,
+    participantId,
+    language,
+    requestTime,
+    inactivityTimeoutMinutes
   }
+) {
+  const preparedSession = await prepareInterviewSession(
+    supabaseClient,
+    {
+      sessionId,
+      participantId,
+      language,
+      requestTime,
+      inactivityTimeoutMinutes
+    }
+  );
 
   await ensureParticipantDescriptor(supabaseClient, {
-    sessionId,
+    sessionId: preparedSession.sessionId,
     participantId
   });
+
+  return preparedSession;
 }
 
 async function markInterviewSessionCompleted(supabaseClient, sessionId) {
@@ -145,7 +150,13 @@ async function markInterviewSessionCompleted(supabaseClient, sessionId) {
 export async function handleChat(
   req,
   res,
-  { openaiClient, supabaseClient, sessionSupabaseClient }
+  {
+    openaiClient,
+    supabaseClient,
+    sessionSupabaseClient,
+    inactivityTimeoutMinutes = 30,
+    now = () => new Date()
+  }
 ) {
   try {
     if (req.method && req.method !== "POST") {
@@ -168,17 +179,35 @@ export async function handleChat(
     const sessionId = valueOrFallback(body.sessionId, "unknown");
     const language = normalizeInterviewLanguage(body.language);
     const languageName = supportedInterviewLanguages[language];
+    const requestTime = now();
+    const preparedSession = await initializeInterviewSession(
+      sessionSupabaseClient,
+      {
+        sessionId,
+        participantId,
+        language,
+        requestTime,
+        inactivityTimeoutMinutes
+      }
+    );
+
+    if (preparedSession.expired) {
+      return res.status(409).json({
+        code: "SESSION_EXPIRED",
+        sessionId: preparedSession.sessionId,
+        previousSessionId: preparedSession.previousSessionId,
+        timeoutAt: preparedSession.timeoutAt,
+        inactivityTimeoutMinutes:
+          preparedSession.inactivityTimeoutMinutes
+      });
+    }
+
+    const activeSessionId = preparedSession.sessionId;
     const design = await selectUsableResearchDesign(supabaseClient);
 
     if (!design) {
       throw new Error("No usable research design is available.");
     }
-
-    await initializeInterviewSession(sessionSupabaseClient, {
-      sessionId,
-      participantId,
-      language
-    });
 
     const lastHistoryItem = history[history.length - 1];
     const requestHistory =
@@ -312,13 +341,13 @@ const interviewHistoryText = retrievedHistory
 
     const { reply, finalQuestionAnswered } = parseInterviewTurn(response);
 
-    const timestamp = new Date().toISOString();
+    const timestamp = new Date(requestTime).toISOString();
     const { error: persistenceError } = await supabaseClient
       .from("interview_messages")
       .insert([
         {
           Participant: participantId,
-          Session: sessionId,
+          Session: activeSessionId,
           Language: language,
           Speaker: "user",
           Message: message,
@@ -326,7 +355,7 @@ const interviewHistoryText = retrievedHistory
         },
         {
           Participant: participantId,
-          Session: sessionId,
+          Session: activeSessionId,
           Language: language,
           Speaker: "ai",
           Message: reply,
@@ -340,8 +369,17 @@ const interviewHistoryText = retrievedHistory
       });
     }
 
+    await refreshInterviewSessionMetrics(
+      sessionSupabaseClient,
+      activeSessionId,
+      inactivityTimeoutMinutes
+    );
+
     if (finalQuestionAnswered) {
-      await markInterviewSessionCompleted(sessionSupabaseClient, sessionId);
+      await markInterviewSessionCompleted(
+        sessionSupabaseClient,
+        activeSessionId
+      );
     }
 
     return res.status(200).json({
@@ -371,6 +409,17 @@ export default async function handler(req, res) {
   const openaiClient = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY
   });
+  let inactivityTimeoutMinutes;
+
+  try {
+    inactivityTimeoutMinutes = resolveInactivityTimeoutMinutes(
+      process.env.INTERVIEW_INACTIVITY_TIMEOUT_MINUTES
+    );
+  } catch {
+    return res.status(500).json({
+      error: "Server configuration is incomplete."
+    });
+  }
   const supabaseClient = createClient(
     process.env.SUPABASE_URL,
     process.env.SUPABASE_ANON_KEY
@@ -389,6 +438,7 @@ export default async function handler(req, res) {
   return handleChat(req, res, {
     openaiClient,
     supabaseClient,
-    sessionSupabaseClient
+    sessionSupabaseClient,
+    inactivityTimeoutMinutes
   });
 }

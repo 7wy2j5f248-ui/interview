@@ -61,7 +61,7 @@ export async function loadEligibleSessionRows(
     while (true) {
         let query = supabaseClient
             .from("interview_sessions")
-            .select("session_id, participant_id, language, completed, completed_at, created_at, updated_at")
+            .select("session_id, participant_id, language, completed, completed_at, created_at, updated_at, last_activity_at, ended_at, session_status, end_reason, timed_out_at, continuation_of_session_id, inactivity_timeout_minutes, active_duration_ms, elapsed_duration_ms, inactivity_break_count, excluded_idle_duration_ms, inactivity_breaks, duration_calculated_at")
             .order("session_id", { ascending: true });
 
         if (filter === COMPLETION_FILTERS.completed) {
