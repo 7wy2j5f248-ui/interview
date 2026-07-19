@@ -347,7 +347,8 @@ test("a final canonical answer persists messages, completion, and a descriptor",
         ending_message: "Thank the participant.",
         interview_questions: "1. What happened?",
         interview_question_count: 1,
-        maximum_interviewer_questions: 3
+        maximum_interviewer_questions: 3,
+        interview_model: "gpt-5.1"
     };
     const messageClient = {
         from(table) {
@@ -410,14 +411,15 @@ test("a final canonical answer persists messages, completion, and a descriptor",
         async rpc(name, args) {
             calls.push({ operation: "rpc", name, args });
 
-            if (name === "prepare_interview_session") {
+            if (name === "prepare_interview_session_with_model") {
                 return {
                     data: [{
                         accepted_session_id: "session-1",
                         previous_session_id: null,
                         expired: false,
                         created: true,
-                        timeout_at: null
+                        timeout_at: null,
+                        selected_interview_model: "gpt-5.1"
                     }],
                     error: null
                 };
@@ -451,7 +453,8 @@ test("a final canonical answer persists messages, completion, and a descriptor",
     }, response, {
         openaiClient: {
             responses: {
-                async create() {
+                async create(options) {
+                    assert.equal(options.model, "gpt-5.1");
                     return {
                         output_text: JSON.stringify({
                             reply: "Thank you.",
@@ -474,7 +477,8 @@ test("a final canonical answer persists messages, completion, and a descriptor",
         "rpc",
         "rpc"
     ]);
-    assert.equal(calls[0].name, "prepare_interview_session");
+    assert.equal(calls[0].name, "prepare_interview_session_with_model");
+    assert.equal(calls[0].args.p_interview_model, "gpt-5.1");
     assert.equal(calls[3].name, "refresh_interview_session_metrics");
     assert.equal(calls[4].name, "complete_interview_session");
     assert.deepEqual(calls[4].args, { p_session_id: "session-1" });

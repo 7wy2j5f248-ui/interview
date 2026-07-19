@@ -1,6 +1,7 @@
 import { storedIdentifier } from "./corpus.js";
+import { DEFAULT_OPENAI_MODEL } from "./modelConfiguration.js";
 
-export const QUALITATIVE_ANALYSIS_MODEL = "gpt-5.1";
+export const QUALITATIVE_ANALYSIS_MODEL = DEFAULT_OPENAI_MODEL;
 export const QUALITATIVE_ANALYSIS_VERSION = "task-014-v3-batch-traceability";
 export const DEFAULT_ANALYSIS_BATCH_SIZE = 40;
 

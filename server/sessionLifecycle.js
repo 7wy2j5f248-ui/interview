@@ -1,3 +1,5 @@
+import { normalizeOpenAIModel } from "./modelConfiguration.js";
+
 export const DEFAULT_INTERVIEW_INACTIVITY_TIMEOUT_MINUTES = 30;
 
 const MINIMUM_TIMEOUT_MINUTES = 1;
@@ -47,6 +49,7 @@ export async function prepareInterviewSession(
         sessionId,
         participantId,
         language,
+        interviewModel,
         requestTime,
         inactivityTimeoutMinutes
     }
@@ -54,8 +57,9 @@ export async function prepareInterviewSession(
     const timeoutMinutes = resolveInactivityTimeoutMinutes(
         inactivityTimeoutMinutes
     );
+    const requestedModel = normalizeOpenAIModel(interviewModel);
     const { data, error } = await supabaseClient.rpc(
-        "prepare_interview_session",
+        "prepare_interview_session_with_model",
         {
             p_session_id: requiredIdentifier(sessionId, "Session"),
             p_participant_id: requiredIdentifier(
@@ -63,6 +67,7 @@ export async function prepareInterviewSession(
                 "Participant"
             ),
             p_language: requiredIdentifier(language, "Language"),
+            p_interview_model: requestedModel,
             p_request_at: normalizedRequestTime(requestTime),
             p_timeout_minutes: timeoutMinutes
         }
@@ -82,7 +87,11 @@ export async function prepareInterviewSession(
         expired: result.expired === true,
         created: result.created === true,
         timeoutAt: result.timeout_at || null,
-        inactivityTimeoutMinutes: timeoutMinutes
+        inactivityTimeoutMinutes: timeoutMinutes,
+        interviewModel: normalizeOpenAIModel(
+            result.selected_interview_model,
+            requestedModel
+        )
     };
 }
 

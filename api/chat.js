@@ -111,6 +111,7 @@ async function initializeInterviewSession(
     sessionId,
     participantId,
     language,
+    interviewModel,
     requestTime,
     inactivityTimeoutMinutes
   }
@@ -121,6 +122,7 @@ async function initializeInterviewSession(
       sessionId,
       participantId,
       language,
+      interviewModel,
       requestTime,
       inactivityTimeoutMinutes
     }
@@ -180,12 +182,19 @@ export async function handleChat(
     const language = normalizeInterviewLanguage(body.language);
     const languageName = supportedInterviewLanguages[language];
     const requestTime = now();
+    const design = await selectUsableResearchDesign(supabaseClient);
+
+    if (!design) {
+      throw new Error("No usable research design is available.");
+    }
+
     const preparedSession = await initializeInterviewSession(
       sessionSupabaseClient,
       {
         sessionId,
         participantId,
         language,
+        interviewModel: design.interview_model,
         requestTime,
         inactivityTimeoutMinutes
       }
@@ -203,11 +212,6 @@ export async function handleChat(
     }
 
     const activeSessionId = preparedSession.sessionId;
-    const design = await selectUsableResearchDesign(supabaseClient);
-
-    if (!design) {
-      throw new Error("No usable research design is available.");
-    }
 
     const lastHistoryItem = history[history.length - 1];
     const requestHistory =
@@ -302,7 +306,7 @@ const interviewHistoryText = retrievedHistory
 
     
     const response = await openaiClient.responses.create({
-      model: "gpt-5.1",
+      model: preparedSession.interviewModel,
       text: {
         format: {
           type: "json_schema",

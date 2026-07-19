@@ -110,14 +110,15 @@ test("an expired request creates a distinct continuation before any AI call", as
         },
         async rpc(name) {
             calls.push({ type: "rpc", name });
-            assert.equal(name, "prepare_interview_session");
+            assert.equal(name, "prepare_interview_session_with_model");
             return {
                 data: [{
                     accepted_session_id: "session-continuation",
                     previous_session_id: "session-old",
                     expired: true,
                     created: true,
-                    timeout_at: "2026-07-18T12:30:00.000Z"
+                    timeout_at: "2026-07-18T12:30:00.000Z",
+                    selected_interview_model: "gpt-5.1"
                 }],
                 error: null
             };

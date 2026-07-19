@@ -1,3 +1,5 @@
+import { normalizeOpenAIModel } from "./modelConfiguration.js";
+
 function hasTextField(design, field) {
   return typeof design?.[field] === "string";
 }
@@ -7,16 +9,33 @@ function hasPositiveInteger(value) {
   return Number.isInteger(number) && number > 0;
 }
 
+function normalizedResearchDesign(design) {
+  if (!design) {
+    return null;
+  }
+
+  try {
+    return {
+      ...design,
+      interview_model: normalizeOpenAIModel(design.interview_model)
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function isUsableResearchDesign(design) {
+  const normalized = normalizedResearchDesign(design);
+
   return Boolean(
-    design &&
-    hasTextField(design, "research_goal") &&
-    hasTextField(design, "ai_role") &&
-    hasTextField(design, "ending_message") &&
-    typeof design.interview_questions === "string" &&
-    design.interview_questions.trim() &&
-    hasPositiveInteger(design.interview_question_count) &&
-    hasPositiveInteger(design.maximum_interviewer_questions)
+    normalized &&
+    hasTextField(normalized, "research_goal") &&
+    hasTextField(normalized, "ai_role") &&
+    hasTextField(normalized, "ending_message") &&
+    typeof normalized.interview_questions === "string" &&
+    normalized.interview_questions.trim() &&
+    hasPositiveInteger(normalized.interview_question_count) &&
+    hasPositiveInteger(normalized.maximum_interviewer_questions)
   );
 }
 
@@ -53,7 +72,7 @@ export async function selectUsableResearchDesign(
         activeResearchDesignResult.error
       );
     } else if (isUsableResearchDesign(activeResearchDesignResult.data)) {
-      return activeResearchDesignResult.data;
+      return normalizedResearchDesign(activeResearchDesignResult.data);
     } else if (activeResearchDesignResult.data) {
       logger.warn(
         "Selected research design is incomplete; trying the latest saved design."
@@ -73,5 +92,7 @@ export async function selectUsableResearchDesign(
     });
   }
 
-  return (fallbackResult.data || []).find(isUsableResearchDesign) || null;
+  return (fallbackResult.data || [])
+    .map(normalizedResearchDesign)
+    .find(isUsableResearchDesign) || null;
 }

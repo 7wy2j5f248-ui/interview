@@ -22,6 +22,10 @@
 <div style="border:1px solid #ddd;border-radius:8px;padding:20px;margin-bottom:24px;">
 <h2>AI Interview Configuration</h2>
 
+<label for="interviewModel"><strong>Interview Model</strong></label>
+<p>Enter the exact OpenAI model ID to use for interviews. The selected model is stored with this research design.</p>
+<input type="text" id="interviewModel" value="gpt-5.1" autocomplete="off" style="width:100%;padding:10px;margin-bottom:16px;box-sizing:border-box;">
+
 <label for="aiRole"><strong>AI Role</strong></label>
 <p>Describe the role the AI interviewer should perform.</p>
 <textarea id="aiRole" rows="6" placeholder="Example: You are a neutral qualitative interviewer..." style="width:100%;padding:10px;margin-bottom:16px;box-sizing:border-box;"></textarea>
