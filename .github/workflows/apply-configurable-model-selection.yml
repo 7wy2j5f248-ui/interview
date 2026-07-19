@@ -1,0 +1,39 @@
+name: Apply configurable model selection
+
+on:
+  push:
+    branches:
+      - codex/configurable-model-selection
+    paths:
+      - .github/scripts/apply-configurable-model-selection.py
+      - .github/workflows/apply-configurable-model-selection.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/configurable-model-selection
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Apply patch
+        run: python .github/scripts/apply-configurable-model-selection.py
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install dependencies
+        run: npm install --ignore-scripts
+      - name: Run tests
+        run: node --test tests/*.test.mjs
+      - name: Commit generated changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -m "Make interview and analysis models researcher-configurable"
+          git push
