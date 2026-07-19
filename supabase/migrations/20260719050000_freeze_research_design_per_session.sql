@@ -38,6 +38,7 @@ begin
      or nullif(btrim(p_participant_id), '') is null
      or nullif(btrim(p_language), '') is null
      or nullif(normalized_model, '') is null
+     or normalized_model !~ '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'
      or p_research_design_id is null
      or not exists (
        select 1
