@@ -1,7 +1,10 @@
 import OpenAI from "openai";
 import { createClient } from "@supabase/supabase-js";
 import { ensureParticipantDescriptor } from "../server/participantDescriptors.js";
-import { selectUsableResearchDesign } from "../server/researchDesign.js";
+import {
+  loadResearchDesignById,
+  selectUsableResearchDesign
+} from "../server/researchDesign.js";
 import {
   prepareInterviewSession,
   refreshInterviewSessionMetrics,
@@ -112,6 +115,7 @@ async function initializeInterviewSession(
     participantId,
     language,
     interviewModel,
+    researchDesignId,
     requestTime,
     inactivityTimeoutMinutes
   }
@@ -123,6 +127,7 @@ async function initializeInterviewSession(
       participantId,
       language,
       interviewModel,
+      researchDesignId,
       requestTime,
       inactivityTimeoutMinutes
     }
@@ -182,9 +187,9 @@ export async function handleChat(
     const language = normalizeInterviewLanguage(body.language);
     const languageName = supportedInterviewLanguages[language];
     const requestTime = now();
-    const design = await selectUsableResearchDesign(supabaseClient);
+    const activeDesign = await selectUsableResearchDesign(supabaseClient);
 
-    if (!design) {
+    if (!activeDesign) {
       throw new Error("No usable research design is available.");
     }
 
@@ -194,7 +199,8 @@ export async function handleChat(
         sessionId,
         participantId,
         language,
-        interviewModel: design.interview_model,
+        interviewModel: activeDesign.interview_model,
+        researchDesignId: activeDesign.id,
         requestTime,
         inactivityTimeoutMinutes
       }
@@ -212,6 +218,14 @@ export async function handleChat(
     }
 
     const activeSessionId = preparedSession.sessionId;
+    const design = await loadResearchDesignById(
+      supabaseClient,
+      preparedSession.researchDesignId
+    );
+
+    if (!design) {
+      throw new Error("The interview session's research design is unavailable.");
+    }
 
     const lastHistoryItem = history[history.length - 1];
     const requestHistory =
@@ -222,35 +236,28 @@ export async function handleChat(
 
     let retrievedHistory = [];
 
-try {
+    try {
+      const { data, error } = await supabaseClient
+        .from("interview_messages")
+        .select("*")
+        .eq("Participant", participantId)
+        .order("Timestamp", { ascending: true });
 
-  const { data, error } = await supabaseClient
-    .from("interview_messages")
-    .select("*")
-    .eq("Participant", participantId)
-    .order("Timestamp", { ascending: true });
+      if (error) {
+        console.error("Supabase retrieval error:", error);
+      } else {
+        retrievedHistory = data || [];
+      }
+    } catch (err) {
+      console.error("History retrieval failed:", err);
+    }
 
-  if (error) {
-    console.error("Supabase retrieval error:", error);
-  } else {
-    retrievedHistory = data || [];
-
-  }
-
-} catch (err) {
-
-  console.error("History retrieval failed:", err);
-
-}
-    
     const interviewProtocol = `
 You are an AI interviewer conducting an interview on behalf of a researcher.
 
 Conduct the interview in the selected interview language. Use that language for all questions and responses unless the participant explicitly requests another language.
 
-
 ${design.research_goal}
-
 
 Do not introduce yourself.
 
@@ -271,7 +278,6 @@ Do not invent introductory interview questions before the Interview Sequence.
 The Interview Sequence provided by the researcher is the official interview protocol. Follow it in order unless a follow-up question or interview resumption is required.
 When asking an interview question, ask only the question text. Do not say or display labels such as "Question 1", "Question 2", or any other question number.
 
-
 If the participant is returning after a previous session and has not yet resumed the interview:
 
 For a resumed interview, once at the beginning: welcome the participant back, summarize prior topics in no more than 3 bullet points, ask whether they wish to continue, and wait. If they agree, resume from the next unanswered question; otherwise do not continue. Never restart from Question 1.
@@ -282,10 +288,8 @@ ${design.ending_message}
 Interview Sequence
 ${design.interview_questions}
 
-
 Interview Principles:
 Ask one short question at a time. Follow the sequence in order. Use follow-ups, elaboration, or clarification when appropriate. Use conversation history to avoid repetition and determine progress.
-
 
 Restrictions:
 Do not advise, teach, debate, answer unrelated questions, or give long explanations. Remain an interviewer.
@@ -300,11 +304,10 @@ The Interview Sequence contains ${design.interview_question_count} canonical que
 Return final_question_answered as true when the participant's current message answers that final canonical question. Return it as false when the current message answers any earlier canonical question or any follow-up, clarification, resumption, or final-comments question. Base this value only on whether the participant's current message answers the structurally final canonical question. Do not base it on the tone or wording of your reply, whether your reply sounds conclusive, the ending-message wording, whether you thank the participant, or whether you invite final comments. This value is internal machine-readable state and must never be mentioned, labelled, or exposed in the participant-facing reply.
 `;
 
-const interviewHistoryText = retrievedHistory
-  .map(item => `${item.Speaker}: ${item.Message}`)
-  .join("\n");
+    const interviewHistoryText = retrievedHistory
+      .map(item => `${item.Speaker}: ${item.Message}`)
+      .join("\n");
 
-    
     const response = await openaiClient.responses.create({
       model: preparedSession.interviewModel,
       text: {
@@ -332,7 +335,7 @@ const interviewHistoryText = retrievedHistory
       input: [
         {
           role: "system",
-                  content:
+          content:
             interviewProtocol +
             "\n\nSelected interview language: " + languageName +
             " (" + language + ")" +
@@ -386,18 +389,13 @@ const interviewHistoryText = retrievedHistory
       );
     }
 
-    return res.status(200).json({
-      reply
-    });
-
+    return res.status(200).json({ reply });
   } catch (error) {
-
     console.error("Interview request failed:", error);
 
     return res.status(500).json({
       error: "Unable to complete the interview request."
     });
-
   }
 }
 
@@ -424,6 +422,7 @@ export default async function handler(req, res) {
       error: "Server configuration is incomplete."
     });
   }
+
   const supabaseClient = createClient(
     process.env.SUPABASE_URL,
     process.env.SUPABASE_ANON_KEY

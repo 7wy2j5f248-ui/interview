@@ -4,6 +4,10 @@ document.getElementById("saveButton").addEventListener("click", async function (
 
         researchTitle: document.getElementById("researchTitle").value,
 
+        protocolVersion: document.getElementById("protocolVersion").value,
+
+        versionNotes: document.getElementById("versionNotes").value,
+
         researchPurpose: document.getElementById("researchPurpose").value,
 
         interviewTopic: document.getElementById("interviewTopic").value,
@@ -34,6 +38,6 @@ document.getElementById("saveButton").addEventListener("click", async function (
 
 const result = await response.json();
 
-alert(result.message);
+alert(result.message || result.error);
 
 });

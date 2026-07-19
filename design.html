@@ -8,13 +8,18 @@
 <p>Name of your research project.</p>
 <input type="text" id="researchTitle" placeholder="Enter the research title" style="width:100%;padding:10px;margin-bottom:16px;box-sizing:border-box;">
 
+<label for="protocolVersion"><strong>Protocol Version</strong></label>
+<p>Enter the researcher-defined version for this exact interview protocol, such as 1.0, 1.2, or 2.0.</p>
+<input type="text" id="protocolVersion" placeholder="Example: 1.0" autocomplete="off" style="width:100%;padding:10px;margin-bottom:16px;box-sizing:border-box;">
 
-
+<label for="versionNotes"><strong>Version Notes</strong></label>
+<p>Record what changed in this version so the design history can be understood without comparing every question manually.</p>
+<textarea id="versionNotes" rows="4" placeholder="Example: Clarified Question 4 and added a probe about waking during the night." style="width:100%;padding:10px;margin-bottom:16px;box-sizing:border-box;"></textarea>
 
 <label for="researchPurpose"><strong>Research Purpose</strong></label>
 <p>Briefly describe the purpose of this research. This is for documentation and future reference.</p>
 <textarea id="researchPurpose" rows="4" placeholder="Describe the purpose of the research." style="width:100%;padding:10px;margin-bottom:16px;box-sizing:border-box;"></textarea>
- 
+  
 <label for="interviewTopic"><strong>Interview Topic</strong></label>
 <p>State the topic that the interview will explore.</p>
 <input type="text" id="interviewTopic" placeholder="Enter the interview topic" style="width:100%;padding:10px;margin-bottom:16px;box-sizing:border-box;">
@@ -40,8 +45,6 @@
 <p>Enter the main interview questions in order. The AI will ask one question at a time.</p>
 <textarea id="interviewQuestions" rows="12" placeholder="Enter the interview questions." style="width:100%;padding:10px;margin-bottom:16px;box-sizing:border-box;"></textarea>
 
-
-
 <label for="endingMessage"><strong>Ending Message</strong></label>
 <p>Write the message the AI should use to conclude the interview.</p>
 <textarea id="endingMessage" rows="4" placeholder="Thank the participant and conclude the interview." style="width:100%;padding:10px;margin-bottom:16px;box-sizing:border-box;"></textarea>
@@ -63,4 +66,3 @@
  </div>
  </div>
 <script src="design.js"></script>
-
