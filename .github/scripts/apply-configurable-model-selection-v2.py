@@ -1,5 +1,6 @@
 from pathlib import Path
 
+# This wrapper narrows one ambiguous source replacement before executing the patch.
 original = Path(__file__).with_name("apply-configurable-model-selection.py")
 source = original.read_text(encoding="utf-8")
 
