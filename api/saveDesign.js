@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { normalizeOpenAIModel } from "../server/modelConfiguration.js";
+import { authorizeResearcher } from "../server/researcherAuth.js";
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -13,8 +14,16 @@ function requiredProtocolVersion(value) {
 
   const version = value.trim();
 
-  if (version.length > 50) {
-    throw new Error("Protocol version must be 50 characters or fewer.");
+  if (!/^\d+\.\d+\.\d+$/.test(version)) {
+    throw new Error(
+      "Protocol version must use Topic.Version.Progress format, for example 2.1.4."
+    );
+  }
+
+  const parts = version.split(".").map(Number);
+
+  if (parts.some(part => !Number.isSafeInteger(part) || part < 1)) {
+    throw new Error("Every protocol version number must be 1 or greater.");
   }
 
   return version;
@@ -24,6 +33,15 @@ export default async function handler(req, res) {
   if (req.method && req.method !== "POST") {
     res.setHeader("Allow", "POST");
     return res.status(405).json({ error: "Method not allowed." });
+  }
+
+  const authorization = authorizeResearcher(
+    req,
+    process.env.RESEARCHER_DASHBOARD_TOKEN
+  );
+
+  if (!authorization.authorized) {
+    return res.status(authorization.status).json({ error: authorization.error });
   }
 
   const design = req.body || {};

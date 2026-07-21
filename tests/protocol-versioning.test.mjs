@@ -11,17 +11,26 @@ const freezeMigrationUrl = new URL(
   import.meta.url
 );
 
-test("design interface records protocol version and change notes", async () => {
+test("design interface uses review, PIN protection, and Topic.Version.Progress", async () => {
   const [html, script, endpoint] = await Promise.all([
     readFile(new URL("../design.html", import.meta.url), "utf8"),
     readFile(new URL("../design.js", import.meta.url), "utf8"),
     readFile(new URL("../api/saveDesign.js", import.meta.url), "utf8")
   ]);
 
-  assert.match(html, /id="protocolVersion"/);
-  assert.match(html, /id="versionNotes"/);
-  assert.match(script, /protocolVersion:/);
-  assert.match(script, /versionNotes:/);
+  assert.match(html, /id="topicNumber"/);
+  assert.match(html, /id="versionNumber"/);
+  assert.match(html, /id="progressNumber"/);
+  assert.match(html, /2\.1\.4/);
+  assert.match(html, /id="reviewButton"/);
+  assert.match(html, /id="reviewDialog"/);
+  assert.match(html, /id="savePin"/);
+  assert.match(script, /values\.join\("\."\)/);
+  assert.match(script, /Authorization.*Bearer/);
+  assert.match(script, /reviewedDesign/);
+  assert.match(endpoint, /authorizeResearcher/);
+  assert.match(endpoint, /RESEARCHER_DASHBOARD_TOKEN/);
+  assert.match(endpoint, /Topic\.Version\.Progress/);
   assert.match(endpoint, /protocol_version: protocolVersion/);
   assert.match(endpoint, /version_notes:/);
 });

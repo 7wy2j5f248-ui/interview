@@ -4,13 +4,26 @@
 <div style="border:1px solid #ddd;border-radius:8px;padding:20px;margin-bottom:24px;">
 <h2>Research Information</h2>
 
- <label for="researchTitle"><strong>Research Title</strong></label>
+<label for="researchTitle"><strong>Research Title</strong></label>
 <p>Name of your research project.</p>
 <input type="text" id="researchTitle" placeholder="Enter the research title" style="width:100%;padding:10px;margin-bottom:16px;box-sizing:border-box;">
 
-<label for="protocolVersion"><strong>Protocol Version</strong></label>
-<p>Enter the researcher-defined version for this exact interview protocol, such as 1.0, 1.2, or 2.0.</p>
-<input type="text" id="protocolVersion" placeholder="Example: 1.0" autocomplete="off" style="width:100%;padding:10px;margin-bottom:16px;box-sizing:border-box;">
+<fieldset style="border:1px solid #ddd;border-radius:6px;margin:0 0 16px;padding:16px;">
+<legend><strong>Protocol Version</strong></legend>
+<p>Use three numbers in the format <strong>Topic.Version.Progress</strong>. For example, <strong>2.1.4</strong> means topic 2, version 1, progress stage 4.</p>
+<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;">
+<label for="topicNumber"><strong>Topic number</strong>
+<input type="number" id="topicNumber" min="1" step="1" placeholder="2" inputmode="numeric" style="width:100%;padding:10px;box-sizing:border-box;">
+</label>
+<label for="versionNumber"><strong>Version number</strong>
+<input type="number" id="versionNumber" min="1" step="1" placeholder="1" inputmode="numeric" style="width:100%;padding:10px;box-sizing:border-box;">
+</label>
+<label for="progressNumber"><strong>Progress number</strong>
+<input type="number" id="progressNumber" min="1" step="1" placeholder="4" inputmode="numeric" style="width:100%;padding:10px;box-sizing:border-box;">
+</label>
+</div>
+<p style="margin-bottom:0;"><strong>Suggested format:</strong> <span id="protocolVersionPreview">2.1.4</span></p>
+</fieldset>
 
 <label for="versionNotes"><strong>Version Notes</strong></label>
 <p>Record what changed in this version so the design history can be understood without comparing every question manually.</p>
@@ -19,11 +32,11 @@
 <label for="researchPurpose"><strong>Research Purpose</strong></label>
 <p>Briefly describe the purpose of this research. This is for documentation and future reference.</p>
 <textarea id="researchPurpose" rows="4" placeholder="Describe the purpose of the research." style="width:100%;padding:10px;margin-bottom:16px;box-sizing:border-box;"></textarea>
-  
+
 <label for="interviewTopic"><strong>Interview Topic</strong></label>
 <p>State the topic that the interview will explore.</p>
 <input type="text" id="interviewTopic" placeholder="Enter the interview topic" style="width:100%;padding:10px;margin-bottom:16px;box-sizing:border-box;">
- </div>
+</div>
 <div style="border:1px solid #ddd;border-radius:8px;padding:20px;margin-bottom:24px;">
 <h2>AI Interview Configuration</h2>
 
@@ -38,7 +51,7 @@
 <label for="researchGoal"><strong>Research Goal</strong></label>
 <p>Describe the objectives and interview principles the AI should follow.</p>
 <textarea id="researchGoal" rows="8" placeholder="Describe the research goals and interviewing principles." style="width:100%;padding:10px;margin-bottom:16px;box-sizing:border-box;"></textarea>
- </div>
+</div>
 <div style="border:1px solid #ddd;border-radius:8px;padding:20px;margin-bottom:24px;">
 <h2>Interview Content</h2>
 <label for="interviewQuestions"><strong>Interview Questions</strong></label>
@@ -48,10 +61,9 @@
 <label for="endingMessage"><strong>Ending Message</strong></label>
 <p>Write the message the AI should use to conclude the interview.</p>
 <textarea id="endingMessage" rows="4" placeholder="Thank the participant and conclude the interview." style="width:100%;padding:10px;margin-bottom:16px;box-sizing:border-box;"></textarea>
-
-   </div>
+</div>
 <div style="border:1px solid #ddd;border-radius:8px;padding:20px;margin-bottom:24px;">
-  <h2>Interview Limits</h2>
+<h2>Interview Limits</h2>
 
 <label for="interviewQuestionCount"><strong>Interview Question Count</strong></label>
 <p>Number of main interview questions.</p>
@@ -62,7 +74,25 @@
 <input type="number" id="maximumInterviewerQuestions" placeholder="30" style="width:100%;padding:10px;margin-bottom:16px;box-sizing:border-box;">
 
 <br><br>
-<button id="saveButton" style="padding:12px 24px;font-size:16px;">Save Research Design</button>
- </div>
- </div>
+<button id="reviewButton" type="button" style="padding:12px 24px;font-size:16px;">Review Research Design</button>
+</div>
+</div>
+
+<dialog id="reviewDialog" style="border:1px solid #999;border-radius:8px;max-height:85vh;max-width:760px;overflow:auto;width:calc(100% - 32px);">
+<form method="dialog">
+<button type="submit" style="float:right;">Close</button>
+</form>
+<h2>Review Research Design</h2>
+<p>Review every field before saving. Saving creates a new protocol version for future interview sessions.</p>
+<div id="reviewSummary"></div>
+<hr>
+<label for="savePin"><strong>PIN security code</strong></label>
+<p>Enter the same researcher PIN used to unlock the data-analysis workspace.</p>
+<input id="savePin" type="password" autocomplete="current-password" style="width:100%;padding:10px;box-sizing:border-box;">
+<p id="saveStatus" role="status"></p>
+<div style="display:flex;gap:12px;justify-content:flex-end;">
+<button id="backToEditButton" type="button">Back to editing</button>
+<button id="confirmSaveButton" type="button" style="padding:10px 18px;">Save Research Design</button>
+</div>
+</dialog>
 <script src="design.js"></script>
