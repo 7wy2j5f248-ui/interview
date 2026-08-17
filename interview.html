@@ -151,19 +151,98 @@ startRecordingButton.addEventListener("click", async () => {
             }
         });
 
-        mediaRecorder.addEventListener("stop", () => {
-            recordedAudioBlob = new Blob(
-                audioChunks,
-                { type: mediaRecorder.mimeType }
-            );
+const speechLanguageCodes = {
+    en: "en-US",
+    zh: "cmn-Hans-CN"
+};
 
-            stream.getTracks().forEach(track => track.stop());
+function blobToBase64(blob) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
 
-            console.log(
-                "Recording completed:",
-                recordedAudioBlob
-            );
-        });
+        reader.onloadend = () => {
+            const result = reader.result;
+
+            if (typeof result !== "string") {
+                reject(
+                    new Error(
+                        "Audio could not be converted."
+                    )
+                );
+                return;
+            }
+
+            resolve(result.split(",")[1]);
+        };
+
+        reader.onerror = reject;
+
+        reader.readAsDataURL(blob);
+    });
+}
+
+async function transcribeRecordedAudio() {
+    if (!recordedAudioBlob) {
+        return;
+    }
+
+    const selectedLanguage =
+        localStorage.getItem("language") || "en";
+
+    const languageCode =
+        speechLanguageCodes[selectedLanguage];
+
+    if (!languageCode) {
+        throw new Error(
+            "Speech recognition is not configured for this language yet."
+        );
+    }
+
+    const audioBase64 =
+        await blobToBase64(recordedAudioBlob);
+
+    const response = await fetch("/api/transcribe", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            audioBase64,
+            languageCode,
+            mimeType: recordedAudioBlob.type
+        })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+        throw new Error(
+            data.error || "Transcription failed."
+        );
+    }
+
+    document.getElementById(
+        "transcriptionBox"
+    ).value = data.transcript || "";
+}
+        
+      mediaRecorder.addEventListener("stop", async () => {
+    recordedAudioBlob = new Blob(
+        audioChunks,
+        { type: mediaRecorder.mimeType }
+    );
+
+    stream.getTracks().forEach(track => track.stop());
+
+    try {
+        await transcribeRecordedAudio();
+    } catch (error) {
+        console.error(
+            "Transcription request failed:",
+            error
+        );
+    }
+});
 
         mediaRecorder.start();
 
