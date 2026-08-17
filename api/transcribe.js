@@ -1,4 +1,4 @@
-import { v1 as speech } from "@google-cloud/speech";
+import { v2 as speech } from "@google-cloud/speech";
 import { getVercelOidcToken } from "@vercel/oidc";
 import { ExternalAccountClient } from "google-auth-library";
 
@@ -75,51 +75,62 @@ export default async function handler(req, res) {
 
     try {
         const {
-    audioBase64,
-    languageCode,
-    encoding
-} = req.body || {};
-        
-if (!audioBase64) {
-    return res.status(400).json({
-        error: "No audio was provided."
-    });
-}
-        
-      if (!languageCode) {
-    return res.status(400).json({
-        error: "No language code was provided."
-    });
-}
+            audioBase64,
+            languageCode
+        } = req.body || {};
 
-if (!encoding) {
-    return res.status(400).json({
-        error: "No audio encoding was provided."
-    });
-}
+        if (!audioBase64) {
+            return res.status(400).json({
+                error: "No audio was provided."
+            });
+        }
 
-        const client = getSpeechClient();
+        if (!languageCode) {
+            return res.status(400).json({
+                error: "No language code was provided."
+            });
+        }
+
+        const GCP_PROJECT_ID =
+            process.env.GCP_PROJECT_ID;
+
+        const client =
+            getSpeechClient();
 
         const request = {
-            audio: {
-                content: audioBase64
-            },
+            recognizer:
+                `projects/${GCP_PROJECT_ID}` +
+                `/locations/global/recognizers/_`,
+
             config: {
-    encoding,
-    languageCode,
-    enableAutomaticPunctuation: true
-}
+                autoDecodingConfig: {},
+                languageCodes: [
+                    languageCode
+                ],
+                model: "short",
+                features: {
+                    enableAutomaticPunctuation: true
+                }
+            },
+
+            content:
+                Buffer.from(
+                    audioBase64,
+                    "base64"
+                )
         };
 
         const [response] =
             await client.recognize(request);
 
-        const transcript = (response.results || [])
-            .map(result =>
-                result.alternatives?.[0]?.transcript || ""
-            )
-            .filter(Boolean)
-            .join(" ");
+        const transcript =
+            (response.results || [])
+                .map(result =>
+                    result.alternatives?.[0]
+                        ?.transcript || ""
+                )
+                .filter(Boolean)
+                .join(" ");
 
         return res.status(200).json({
             transcript
@@ -127,7 +138,7 @@ if (!encoding) {
 
     } catch (error) {
         console.error(
-            "Google Speech-to-Text error:",
+            "Google Speech-to-Text V2 error:",
             error
         );
 
