@@ -79,7 +79,13 @@ export default async function handler(req, res) {
     languageCode,
     encoding
 } = req.body || {};
-
+        
+if (!audioBase64) {
+    return res.status(400).json({
+        error: "No audio was provided."
+    });
+}
+        
       if (!languageCode) {
     return res.status(400).json({
         error: "No language code was provided."
