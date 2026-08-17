@@ -68,9 +68,21 @@ button {
 <button id="sendButton" onclick="sendMessage()">Send</button>
 <!-- Voice transcription section goes here -->
  <div id="voiceTranscriptionSection">
-    <p>🎙 Speak your answer</p>
+    <p id="voiceSpeakTitle">🎙 Speak your answer</p>
 
-    <button id="startRecordingButton">Start recording</button>
+<div id="voiceDisclosure">
+    <p id="voiceDisclosureText"></p>
+
+    <label>
+        <input
+            type="checkbox"
+            id="voiceDisclosureAcknowledgement"
+        >
+        <span id="voiceDisclosureAgree"></span>
+    </label>
+</div>
+
+    <button id="startRecordingButton" disabled>Start recording</button>
     <button id="stopRecordingButton" disabled>Stop</button>
 
     <br><br>
@@ -83,7 +95,7 @@ button {
 
     <br>
 
-    <button id="readBackButton">▶ Read back</button>
+    <button id="readBackButton" disabled>▶ Read back</button>
     <button id="insertTranscriptButton">Insert into interview</button>
 </div>
     
@@ -101,6 +113,28 @@ const startRecordingButton =
 const stopRecordingButton =
     document.getElementById("stopRecordingButton");
 
+const readBackButton =
+    document.getElementById("readBackButton");
+
+const voiceDisclosureAcknowledgement =
+    document.getElementById(
+        "voiceDisclosureAcknowledgement"
+    );
+
+voiceDisclosureAcknowledgement.addEventListener(
+    "change",
+    () => {
+        const acknowledged =
+            voiceDisclosureAcknowledgement.checked;
+
+        startRecordingButton.disabled =
+            !acknowledged;
+
+        readBackButton.disabled =
+            !acknowledged;
+    }
+);
+    
 startRecordingButton.addEventListener("click", async () => {
     try {
         const stream = await navigator.mediaDevices.getUserMedia({
