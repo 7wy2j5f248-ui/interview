@@ -58,6 +58,6 @@
 "stop_recording": "停止",
 "read_back": "▶ 朗读",
 "insert_transcript": "插入访谈回答",
-
+"transcription_placeholder": "您的语音转录文字将显示在这里……",
 "return_language": "返回语言选择"
 }
