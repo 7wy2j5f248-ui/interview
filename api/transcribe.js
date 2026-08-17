@@ -75,15 +75,22 @@ export default async function handler(req, res) {
 
     try {
         const {
-            audioBase64,
-            languageCode = "en-US"
-        } = req.body || {};
+    audioBase64,
+    languageCode,
+    encoding
+} = req.body || {};
 
-        if (!audioBase64) {
-            return res.status(400).json({
-                error: "No audio was provided."
-            });
-        }
+      if (!languageCode) {
+    return res.status(400).json({
+        error: "No language code was provided."
+    });
+}
+
+if (!encoding) {
+    return res.status(400).json({
+        error: "No audio encoding was provided."
+    });
+}
 
         const client = getSpeechClient();
 
@@ -92,10 +99,10 @@ export default async function handler(req, res) {
                 content: audioBase64
             },
             config: {
-                encoding: "WEBM_OPUS",
-                languageCode,
-                enableAutomaticPunctuation: true
-            }
+    encoding,
+    languageCode,
+    enableAutomaticPunctuation: true
+}
         };
 
         const [response] =
