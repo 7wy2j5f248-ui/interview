@@ -6,6 +6,7 @@
     "openai": "^5.0.0",
     "@supabase/supabase-js": "^2.50.0",
     "@google-cloud/speech": "^7.0.0",
+    "@google-cloud/text-to-speech": "^6.4.1",
     "google-auth-library": "^11.0.0",
     "@vercel/oidc": "^3.8.1"
   }
