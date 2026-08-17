@@ -1,20 +1,68 @@
 import { v1 as speech } from "@google-cloud/speech";
+import { getVercelOidcToken } from "@vercel/oidc";
+import { ExternalAccountClient } from "google-auth-library";
 
 function getSpeechClient() {
-    const credentialsJson =
-        process.env.GOOGLE_CLOUD_CREDENTIALS;
+    const GCP_PROJECT_ID =
+        process.env.GCP_PROJECT_ID;
 
-    if (!credentialsJson) {
+    const GCP_PROJECT_NUMBER =
+        process.env.GCP_PROJECT_NUMBER;
+
+    const GCP_SERVICE_ACCOUNT_EMAIL =
+        process.env.GCP_SERVICE_ACCOUNT_EMAIL;
+
+    const GCP_WORKLOAD_IDENTITY_POOL_ID =
+        process.env.GCP_WORKLOAD_IDENTITY_POOL_ID;
+
+    const GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID =
+        process.env.GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID;
+
+    if (
+        !GCP_PROJECT_ID ||
+        !GCP_PROJECT_NUMBER ||
+        !GCP_SERVICE_ACCOUNT_EMAIL ||
+        !GCP_WORKLOAD_IDENTITY_POOL_ID ||
+        !GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID
+    ) {
         throw new Error(
-            "GOOGLE_CLOUD_CREDENTIALS is not configured."
+            "Google Cloud OIDC environment variables are not fully configured."
         );
     }
 
-    const credentials = JSON.parse(credentialsJson);
+    const GCP_AUDIENCE =
+        `//iam.googleapis.com/projects/${GCP_PROJECT_NUMBER}` +
+        `/locations/global/workloadIdentityPools/${GCP_WORKLOAD_IDENTITY_POOL_ID}` +
+        `/providers/${GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID}`;
+
+    const authClient =
+        ExternalAccountClient.fromJSON({
+            type: "external_account",
+            audience: GCP_AUDIENCE,
+            subject_token_type:
+                "urn:ietf:params:oauth:token-type:jwt",
+            token_url:
+                "https://sts.googleapis.com/v1/token",
+            service_account_impersonation_url:
+                `https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${GCP_SERVICE_ACCOUNT_EMAIL}:generateAccessToken`,
+            subject_token_supplier: {
+                getSubjectToken: getVercelOidcToken
+            }
+        });
+
+    if (!authClient) {
+        throw new Error(
+            "Unable to create Google Cloud authentication client."
+        );
+    }
+
+    authClient.scopes = [
+        "https://www.googleapis.com/auth/cloud-platform"
+    ];
 
     return new speech.SpeechClient({
-        credentials,
-        projectId: credentials.project_id
+        projectId: GCP_PROJECT_ID,
+        authClient
     });
 }
 
