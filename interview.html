@@ -66,11 +66,102 @@ button {
 <textarea id="message" rows="4" style="width:100%; box-sizing:border-box; font-size:16px;"></textarea>
 
 <button id="sendButton" onclick="sendMessage()">Send</button>
+<!-- Voice transcription section goes here -->
+ <div id="voiceTranscriptionSection">
+    <p>🎙 Speak your answer</p>
 
+    <button id="startRecordingButton">Start recording</button>
+    <button id="stopRecordingButton" disabled>Stop</button>
+
+    <br><br>
+
+    <textarea
+        id="transcriptionBox"
+        rows="6"
+        placeholder="Your transcription will appear here..."
+    ></textarea>
+
+    <br>
+
+    <button id="readBackButton">▶ Read back</button>
+    <button id="insertTranscriptButton">Insert into interview</button>
+</div>
+    
 <script>
 
 let history = [];
+    
+let mediaRecorder;
+let audioChunks = [];
+let recordedAudioBlob = null;
 
+const startRecordingButton =
+    document.getElementById("startRecordingButton");
+
+const stopRecordingButton =
+    document.getElementById("stopRecordingButton");
+
+startRecordingButton.addEventListener("click", async () => {
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+            audio: true
+        });
+
+        audioChunks = [];
+
+        mediaRecorder = new MediaRecorder(stream);
+
+        mediaRecorder.addEventListener("dataavailable", event => {
+            if (event.data.size > 0) {
+                audioChunks.push(event.data);
+            }
+        });
+
+        mediaRecorder.addEventListener("stop", () => {
+            recordedAudioBlob = new Blob(
+                audioChunks,
+                { type: mediaRecorder.mimeType }
+            );
+
+            stream.getTracks().forEach(track => track.stop());
+
+            console.log(
+                "Recording completed:",
+                recordedAudioBlob
+            );
+        });
+
+        mediaRecorder.start();
+
+        startRecordingButton.disabled = true;
+        stopRecordingButton.disabled = false;
+
+        startRecordingButton.textContent = "Recording...";
+
+    } catch (error) {
+        console.error("Microphone access failed:", error);
+
+        alert(
+            "Microphone access could not be started. Please allow microphone access and try again."
+        );
+    }
+});
+
+stopRecordingButton.addEventListener("click", () => {
+    if (
+        mediaRecorder &&
+        mediaRecorder.state === "recording"
+    ) {
+        mediaRecorder.stop();
+
+        startRecordingButton.disabled = false;
+        stopRecordingButton.disabled = true;
+
+        startRecordingButton.textContent = "Start recording";
+    }
+});
+    
+    
 const participantId =
     localStorage.getItem("participantId") ||
     ("P" + Date.now());
@@ -275,6 +366,8 @@ async function loadTranslations() {
     document.getElementById("sendButton").textContent =
         t.send;
 
+
+    
     document.getElementById("returnLanguageButton").textContent =
         t.return_language;
 
