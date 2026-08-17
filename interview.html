@@ -352,7 +352,8 @@ async function transcribeRecordedAudio() {
         startRecordingButton.disabled = true;
         stopRecordingButton.disabled = false;
 
-        startRecordingButton.textContent = "Recording...";
+       startRecordingButton.textContent =
+    t.recording;
 
     } catch (error) {
         console.error("Microphone access failed:", error);
@@ -373,7 +374,8 @@ stopRecordingButton.addEventListener("click", () => {
         startRecordingButton.disabled = false;
         stopRecordingButton.disabled = true;
 
-        startRecordingButton.textContent = "Start recording";
+        startRecordingButton.textContent =
+    t.start_recording;
     }
 });
     
