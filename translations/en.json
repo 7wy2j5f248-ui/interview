@@ -63,6 +63,7 @@
 "voice_disclosure_agree": "I understand and want to use the voice tools.",
 "start_recording": "Start recording",
 "stop_recording": "Stop",
+  "recording": "Recording...",
 "read_back": "▶ Read back",
 "insert_transcript": "Insert into interview",
   "transcription_placeholder": "Your transcription will appear here...",
