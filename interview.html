@@ -116,6 +116,12 @@ const stopRecordingButton =
 const readBackButton =
     document.getElementById("readBackButton");
 
+    const insertTranscriptButton =
+    document.getElementById("insertTranscriptButton");
+
+const transcriptionBox =
+    document.getElementById("transcriptionBox");
+
 const voiceDisclosureAcknowledgement =
     document.getElementById(
         "voiceDisclosureAcknowledgement"
@@ -132,6 +138,24 @@ voiceDisclosureAcknowledgement.addEventListener(
 
         readBackButton.disabled =
             !acknowledged;
+    }
+);
+
+insertTranscriptButton.addEventListener(
+    "click",
+    () => {
+        const transcript =
+            transcriptionBox.value.trim();
+
+        if (!transcript) {
+            return;
+        }
+
+        const messageBox =
+            document.getElementById("message");
+
+        messageBox.value = transcript;
+        messageBox.focus();
     }
 );
     
