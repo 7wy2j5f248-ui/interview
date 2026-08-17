@@ -65,7 +65,7 @@
 "stop_recording": "Stop",
 "read_back": "▶ Read back",
 "insert_transcript": "Insert into interview",
-  
+  "transcription_placeholder": "Your transcription will appear here...",
   "research_dashboard": "Research Dashboard",
   "participants": "Participants",
   "sessions": "Sessions",
