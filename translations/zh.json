@@ -46,10 +46,9 @@
 
 "interview_welcome": "欢迎参加本次访谈。",
 "interview_error": "无法继续访谈。请重试。",
-"session_expired": "您之前的会话因长时间无操作而已过期。新的继续会话已准备好；请再次发送您的消息。",
+
+  "session_expired": "您之前的会话因长时间无操作而已过期。新的继续会话已准备好；请再次发送您的消息。",
 "participant": "参与者",
-"ai": "AI",
-  "participant": "参与者",
 "ai": "AI",
 
 "voice_speak_title": "🎙 说出您的回答",
@@ -60,6 +59,5 @@
 "read_back": "▶ 朗读",
 "insert_transcript": "插入访谈回答",
 
-"return_language": "返回语言选择"
 "return_language": "返回语言选择"
 }
