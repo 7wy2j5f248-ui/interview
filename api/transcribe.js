@@ -45,9 +45,9 @@ function getSpeechClient() {
                 "https://sts.googleapis.com/v1/token",
             service_account_impersonation_url:
                 `https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${GCP_SERVICE_ACCOUNT_EMAIL}:generateAccessToken`,
-            subject_token_supplier: {
-                getSubjectToken: getVercelOidcToken
-            }
+           subject_token_supplier: {
+    getSubjectToken: () => getVercelOidcToken()
+}
         });
 
     if (!authClient) {
