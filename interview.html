@@ -158,6 +158,85 @@ insertTranscriptButton.addEventListener(
         messageBox.focus();
     }
 );
+
+const textToSpeechLanguageCodes = {
+    en: "en-US",
+    zh: "cmn-CN"
+};
+
+let currentPlaybackAudio = null;
+
+readBackButton.addEventListener(
+    "click",
+    async () => {
+        const text =
+            transcriptionBox.value.trim();
+
+        if (!text) {
+            return;
+        }
+
+        const selectedLanguage =
+            localStorage.getItem("language") || "en";
+
+        const languageCode =
+            textToSpeechLanguageCodes[selectedLanguage];
+
+        if (!languageCode) {
+            console.error(
+                "Text-to-Speech is not configured for this language yet."
+            );
+            return;
+        }
+
+        try {
+            readBackButton.disabled = true;
+
+            const response =
+                await fetch("/api/synthesize", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        text,
+                        languageCode
+                    })
+                });
+
+            const data =
+                await response.json();
+
+            if (!response.ok) {
+                throw new Error(
+                    data.error ||
+                    "Speech playback failed."
+                );
+            }
+
+            if (currentPlaybackAudio) {
+                currentPlaybackAudio.pause();
+                currentPlaybackAudio = null;
+            }
+
+            currentPlaybackAudio =
+                new Audio(
+                    `data:${data.mimeType};base64,${data.audioBase64}`
+                );
+
+            await currentPlaybackAudio.play();
+
+        } catch (error) {
+            console.error(
+                "Read-back failed:",
+                error
+            );
+        } finally {
+            readBackButton.disabled =
+                !voiceDisclosureAcknowledgement.checked;
+        }
+    }
+);
     
 startRecordingButton.addEventListener("click", async () => {
     try {
