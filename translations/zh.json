@@ -49,5 +49,17 @@
 "session_expired": "您之前的会话因长时间无操作而已过期。新的继续会话已准备好；请再次发送您的消息。",
 "participant": "参与者",
 "ai": "AI",
+  "participant": "参与者",
+"ai": "AI",
+
+"voice_speak_title": "🎙 说出您的回答",
+"voice_disclosure": "可选的语音工具使用 Google Cloud 服务。如果您使用语音转文字功能，您的音频将发送至 Google Cloud Speech-to-Text 以生成文字记录。如果您使用“朗读”功能，转录框中的文字将发送至 Google Cloud Text-to-Speech 以生成音频。您也可以选择不使用这些工具，直接输入您的回答。",
+"voice_disclosure_agree": "我已了解，并希望使用语音工具。",
+"start_recording": "开始录音",
+"stop_recording": "停止",
+"read_back": "▶ 朗读",
+"insert_transcript": "插入访谈回答",
+
+"return_language": "返回语言选择"
 "return_language": "返回语言选择"
 }
