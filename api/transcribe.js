@@ -45,9 +45,9 @@ function getSpeechClient() {
                 "https://sts.googleapis.com/v1/token",
             service_account_impersonation_url:
                 `https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${GCP_SERVICE_ACCOUNT_EMAIL}:generateAccessToken`,
-           subject_token_supplier: {
-    getSubjectToken: () => getVercelOidcToken()
-}
+            subject_token_supplier: {
+                getSubjectToken: () => getVercelOidcToken()
+            }
         });
 
     if (!authClient) {
@@ -100,14 +100,14 @@ export default async function handler(req, res) {
         const request = {
             recognizer:
                 `projects/${GCP_PROJECT_ID}` +
-                `/locations/global/recognizers/_`,
+                `/locations/us-central1/recognizers/_`,
 
             config: {
                 autoDecodingConfig: {},
                 languageCodes: [
                     languageCode
                 ],
-                model: "short",
+                model: "chirp_2",
                 features: {
                     enableAutomaticPunctuation: true
                 }
