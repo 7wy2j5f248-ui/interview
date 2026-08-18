@@ -34,5 +34,14 @@
   "session_expired": "Önceki oturumunuz etkinlik olmadığı için zaman aşımına uğradı. Yeni bir devam oturumu hazır; lütfen mesajınızı yeniden gönderin.",
   "participant": "Katılımcı",
   "ai": "Yapay zekâ",
+  "voice_speak_title": "🎙 Yanıtınızı söyleyin",
+  "voice_disclosure": "İsteğe bağlı ses araçları Google Cloud hizmetlerini kullanır. Konuşmayı metne dönüştürmeyi kullanırsanız sesiniz bir transkript oluşturmak için Google Cloud Speech-to-Text'e gönderilir. Sesli okuma özelliğini kullanırsanız transkripsiyon kutusundaki metin ses oluşturmak için Google Cloud Text-to-Speech'e gönderilir. Bu araçları kullanmayıp yanıtınızı yazmayı da seçebilirsiniz.",
+  "voice_disclosure_agree": "Anlıyorum ve ses araçlarını kullanmak istiyorum.",
+  "start_recording": "Kaydı başlat",
+  "recording": "Kaydediliyor...",
+  "stop_recording": "Durdur",
+  "read_back": "▶ Sesli oku",
+  "insert_transcript": "Görüşmeye ekle",
+  "transcription_placeholder": "Transkripsiyonunuz burada görünecek...",
   "return_language": "Dil seçimine dön"
 }
