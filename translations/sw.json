@@ -34,5 +34,14 @@
   "session_expired": "Kikao chako cha awali kiliisha kwa sababu ya kutotumika. Kikao kipya cha kuendelea kiko tayari; tafadhali tuma ujumbe wako tena.",
   "participant": "Mshiriki",
   "ai": "AI",
+  "voice_speak_title": "🎙 Sema jibu lako",
+  "voice_disclosure": "Zana za sauti za hiari hutumia huduma za Google Cloud. Ukitumia kubadilisha sauti kuwa maandishi, sauti yako hutumwa kwa Google Cloud Speech-to-Text ili kutengeneza nakala ya maandishi. Ukitumia Soma tena, maandishi kwenye kisanduku cha nakala hutumwa kwa Google Cloud Text-to-Speech ili kutengeneza sauti. Unaweza pia kuchagua kutotumia zana hizi na kuandika jibu lako.",
+  "voice_disclosure_agree": "Ninaelewa na ninataka kutumia zana za sauti.",
+  "start_recording": "Anza kurekodi",
+  "recording": "Inarekodi...",
+  "stop_recording": "Simamisha",
+  "read_back": "▶ Soma tena",
+  "insert_transcript": "Ingiza kwenye mahojiano",
+  "transcription_placeholder": "Nakala yako itaonekana hapa...",
   "return_language": "Rudi kwenye uchaguzi wa lugha"
 }
