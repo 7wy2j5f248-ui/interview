@@ -107,6 +107,42 @@ let mediaRecorder;
 let audioChunks = [];
 let recordedAudioBlob = null;
 
+const speechLanguageCodes = {
+    en: "en-US",
+    ar: "ar-EG",
+    ur: "ur-PK",
+    zh: "cmn-Hans-CN",
+    es: "es-ES",
+    fr: "fr-FR",
+    pt: "pt-BR",
+    tr: "tr-TR",
+    hi: "hi-IN",
+    bn: "bn-IN",
+    vi: "vi-VN",
+    ta: "ta-IN",
+    sw: "sw-KE",
+    id: "id-ID",
+    so: "so-SO",
+    my: "my-MM",
+    fa: "fa-IR"
+};
+
+const textToSpeechLanguageCodes = {
+    en: "en-US",
+    ar: "ar-XA",
+    ur: "ur-IN",
+    zh: "cmn-CN",
+    es: "es-ES",
+    fr: "fr-FR",
+    pt: "pt-BR",
+    tr: "tr-TR",
+    hi: "hi-IN",
+    bn: "bn-IN",
+    vi: "vi-VN",
+    ta: "ta-IN",
+    id: "id-ID"
+};
+
 const startRecordingButton =
     document.getElementById("startRecordingButton");
 
@@ -116,7 +152,7 @@ const stopRecordingButton =
 const readBackButton =
     document.getElementById("readBackButton");
 
-    const insertTranscriptButton =
+const insertTranscriptButton =
     document.getElementById("insertTranscriptButton");
 
 const transcriptionBox =
@@ -127,18 +163,25 @@ const voiceDisclosureAcknowledgement =
         "voiceDisclosureAcknowledgement"
     );
 
+function updateVoiceButtonAvailability() {
+    const selectedLanguage =
+        localStorage.getItem("language") || "en";
+
+    const acknowledged =
+        voiceDisclosureAcknowledgement.checked;
+
+    startRecordingButton.disabled =
+        !acknowledged ||
+        !speechLanguageCodes[selectedLanguage];
+
+    readBackButton.disabled =
+        !acknowledged ||
+        !textToSpeechLanguageCodes[selectedLanguage];
+}
+
 voiceDisclosureAcknowledgement.addEventListener(
     "change",
-    () => {
-        const acknowledged =
-            voiceDisclosureAcknowledgement.checked;
-
-        startRecordingButton.disabled =
-            !acknowledged;
-
-        readBackButton.disabled =
-            !acknowledged;
-    }
+    updateVoiceButtonAvailability
 );
 
 insertTranscriptButton.addEventListener(
@@ -158,11 +201,6 @@ insertTranscriptButton.addEventListener(
         messageBox.focus();
     }
 );
-
-const textToSpeechLanguageCodes = {
-    en: "en-US",
-    zh: "cmn-CN"
-};
 
 let currentPlaybackAudio = null;
 
@@ -232,32 +270,10 @@ readBackButton.addEventListener(
                 error
             );
         } finally {
-            readBackButton.disabled =
-                !voiceDisclosureAcknowledgement.checked;
+            updateVoiceButtonAvailability();
         }
     }
 );
-    
-startRecordingButton.addEventListener("click", async () => {
-    try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-            audio: true
-        });
-
-        audioChunks = [];
-
-        mediaRecorder = new MediaRecorder(stream);
-
-        mediaRecorder.addEventListener("dataavailable", event => {
-            if (event.data.size > 0) {
-                audioChunks.push(event.data);
-            }
-        });
-
-const speechLanguageCodes = {
-    en: "en-US",
-    zh: "cmn-Hans-CN"
-};
 
 function blobToBase64(blob) {
     return new Promise((resolve, reject) => {
@@ -324,36 +340,51 @@ async function transcribeRecordedAudio() {
         );
     }
 
-    document.getElementById(
-        "transcriptionBox"
-    ).value = data.transcript || "";
+    transcriptionBox.value =
+        data.transcript || "";
 }
-        
-      mediaRecorder.addEventListener("stop", async () => {
-    recordedAudioBlob = new Blob(
-        audioChunks,
-        { type: mediaRecorder.mimeType }
-    );
-
-    stream.getTracks().forEach(track => track.stop());
-
+    
+startRecordingButton.addEventListener("click", async () => {
     try {
-        await transcribeRecordedAudio();
-    } catch (error) {
-        console.error(
-            "Transcription request failed:",
-            error
-        );
-    }
-});
+        const stream = await navigator.mediaDevices.getUserMedia({
+            audio: true
+        });
+
+        audioChunks = [];
+
+        mediaRecorder = new MediaRecorder(stream);
+
+        mediaRecorder.addEventListener("dataavailable", event => {
+            if (event.data.size > 0) {
+                audioChunks.push(event.data);
+            }
+        });
+        
+        mediaRecorder.addEventListener("stop", async () => {
+            recordedAudioBlob = new Blob(
+                audioChunks,
+                { type: mediaRecorder.mimeType }
+            );
+
+            stream.getTracks().forEach(track => track.stop());
+
+            try {
+                await transcribeRecordedAudio();
+            } catch (error) {
+                console.error(
+                    "Transcription request failed:",
+                    error
+                );
+            }
+        });
 
         mediaRecorder.start();
 
         startRecordingButton.disabled = true;
         stopRecordingButton.disabled = false;
 
-       startRecordingButton.textContent =
-    t.recording;
+        startRecordingButton.textContent =
+            t.recording;
 
     } catch (error) {
         console.error("Microphone access failed:", error);
@@ -371,11 +402,12 @@ stopRecordingButton.addEventListener("click", () => {
     ) {
         mediaRecorder.stop();
 
-        startRecordingButton.disabled = false;
         stopRecordingButton.disabled = true;
 
         startRecordingButton.textContent =
-    t.start_recording;
+            t.start_recording;
+
+        updateVoiceButtonAvailability();
     }
 });
     
@@ -584,32 +616,34 @@ async function loadTranslations() {
     document.getElementById("sendButton").textContent =
         t.send;
 
-document.getElementById("voiceSpeakTitle").textContent =
-    t.voice_speak_title;
+    document.getElementById("voiceSpeakTitle").textContent =
+        t.voice_speak_title;
 
-document.getElementById("voiceDisclosureText").textContent =
-    t.voice_disclosure;
+    document.getElementById("voiceDisclosureText").textContent =
+        t.voice_disclosure;
 
-document.getElementById("voiceDisclosureAgree").textContent =
-    t.voice_disclosure_agree;
+    document.getElementById("voiceDisclosureAgree").textContent =
+        t.voice_disclosure_agree;
 
-document.getElementById("startRecordingButton").textContent =
-    t.start_recording;
+    document.getElementById("startRecordingButton").textContent =
+        t.start_recording;
 
-document.getElementById("stopRecordingButton").textContent =
-    t.stop_recording;
+    document.getElementById("stopRecordingButton").textContent =
+        t.stop_recording;
 
-document.getElementById("readBackButton").textContent =
-    t.read_back;
+    document.getElementById("readBackButton").textContent =
+        t.read_back;
 
-document.getElementById("insertTranscriptButton").textContent =
-    t.insert_transcript;
+    document.getElementById("insertTranscriptButton").textContent =
+        t.insert_transcript;
 
- document.getElementById("transcriptionBox").placeholder =
-    t.transcription_placeholder;   
+    document.getElementById("transcriptionBox").placeholder =
+        t.transcription_placeholder;
+
     document.getElementById("returnLanguageButton").textContent =
         t.return_language;
 
+    updateVoiceButtonAvailability();
 }
 
 loadTranslations();
