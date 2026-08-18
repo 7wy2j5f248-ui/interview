@@ -62,7 +62,8 @@ function getSpeechClient() {
 
     return new speech.SpeechClient({
         projectId: GCP_PROJECT_ID,
-        authClient
+        authClient,
+        apiEndpoint: "us-central1-speech.googleapis.com"
     });
 }
 
