@@ -34,5 +34,14 @@
   "session_expired": "Phiên trước của bạn đã hết hạn do không hoạt động. Một phiên tiếp nối mới đã sẵn sàng; vui lòng gửi lại tin nhắn.",
   "participant": "Người tham gia",
   "ai": "AI",
+  "voice_speak_title": "🎙 Nói câu trả lời của bạn",
+  "voice_disclosure": "Các công cụ giọng nói tùy chọn sử dụng dịch vụ Google Cloud. Nếu bạn dùng chuyển giọng nói thành văn bản, âm thanh của bạn được gửi đến Google Cloud Speech-to-Text để tạo bản chép lời. Nếu bạn dùng chức năng đọc lại, văn bản trong ô chép lời được gửi đến Google Cloud Text-to-Speech để tạo âm thanh. Bạn cũng có thể không dùng các công cụ này và nhập câu trả lời.",
+  "voice_disclosure_agree": "Tôi hiểu và muốn sử dụng các công cụ giọng nói.",
+  "start_recording": "Bắt đầu ghi âm",
+  "recording": "Đang ghi âm...",
+  "stop_recording": "Dừng",
+  "read_back": "▶ Đọc lại",
+  "insert_transcript": "Chèn vào cuộc phỏng vấn",
+  "transcription_placeholder": "Bản chép lời của bạn sẽ xuất hiện ở đây...",
   "return_language": "Quay lại phần chọn ngôn ngữ"
 }
