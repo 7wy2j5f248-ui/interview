@@ -34,5 +34,14 @@
   "session_expired": "Kulankaagii hore wuxuu dhammaaday hawl-la’aan darteed. Kulan cusub oo sii-wadid ah ayaa diyaar ah; fadlan farriintaada mar kale dir.",
   "participant": "Ka-qaybgale",
   "ai": "AI",
+  "voice_speak_title": "🎙 Ku sheeg jawaabtaada",
+  "voice_disclosure": "Qalabka codka ee ikhtiyaariga ah wuxuu adeegsadaa adeegyada Google Cloud. Haddii aad isticmaasho hadal-u-qoraal, codkaaga waxaa loo diraa Google Cloud Speech-to-Text si qoraal loo sameeyo. Haddii aad isticmaasho Akhri mar kale, qoraalka ku jira sanduuqa qoraalka waxaa loo diraa Google Cloud Text-to-Speech si cod loo sameeyo. Waxaad sidoo kale dooran kartaa inaadan isticmaalin qalabkan oo aad jawaabtaada qorto.",
+  "voice_disclosure_agree": "Waan fahmay, waxaana rabaa inaan isticmaalo qalabka codka.",
+  "start_recording": "Bilow duubista",
+  "recording": "Waa la duubayaa...",
+  "stop_recording": "Jooji",
+  "read_back": "▶ Akhri mar kale",
+  "insert_transcript": "Ku geli wareysiga",
+  "transcription_placeholder": "Qoraalka codkaaga wuxuu halkan ka muuqan doonaa...",
   "return_language": "Ku noqo xulashada luqadda"
 }
