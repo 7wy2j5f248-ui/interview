@@ -34,5 +34,14 @@
   "session_expired": "Votre session précédente a expiré pour cause d’inactivité. Une nouvelle session de continuation est prête ; veuillez renvoyer votre message.",
   "participant": "Participant",
   "ai": "IA",
+  "voice_speak_title": "🎙 Dictez votre réponse",
+  "voice_disclosure": "Les outils vocaux facultatifs utilisent des services Google Cloud. Si vous utilisez la transcription vocale, votre audio est envoyé à Google Cloud Speech-to-Text afin de créer une transcription. Si vous utilisez la lecture, le texte de la zone de transcription est envoyé à Google Cloud Text-to-Speech afin de générer un audio. Vous pouvez choisir de ne pas utiliser ces outils et de saisir votre réponse à la place.",
+  "voice_disclosure_agree": "Je comprends et je souhaite utiliser les outils vocaux.",
+  "start_recording": "Démarrer l’enregistrement",
+  "recording": "Enregistrement en cours...",
+  "stop_recording": "Arrêter",
+  "read_back": "▶ Lire à voix haute",
+  "insert_transcript": "Insérer dans l’entretien",
+  "transcription_placeholder": "Votre transcription apparaîtra ici...",
   "return_language": "Revenir au choix de la langue"
 }
