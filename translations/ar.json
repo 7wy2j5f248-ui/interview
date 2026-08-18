@@ -59,5 +59,14 @@
 "participant": "المشارك",
 
 "ai": "AI",
+"voice_speak_title": "🎙 انطق إجابتك",
+"voice_disclosure": "تستخدم أدوات الصوت الاختيارية خدمات Google Cloud. إذا استخدمت تحويل الكلام إلى نص، فسيتم إرسال الصوت إلى Google Cloud Speech-to-Text لإنشاء نص مكتوب. وإذا استخدمت «الاستماع»، فسيتم إرسال النص الموجود في مربع التفريغ إلى Google Cloud Text-to-Speech لإنشاء صوت. ويمكنك اختيار عدم استخدام هذه الأدوات وكتابة إجابتك بدلًا من ذلك.",
+"voice_disclosure_agree": "أفهم ذلك وأرغب في استخدام أدوات الصوت.",
+"start_recording": "بدء التسجيل",
+"recording": "جارٍ التسجيل...",
+"stop_recording": "إيقاف",
+"read_back": "▶ الاستماع",
+"insert_transcript": "إدراج في إجابة المقابلة",
+"transcription_placeholder": "سيظهر النص المفرغ هنا...",
 "return_language": "العودة إلى اختيار اللغة"
 }
