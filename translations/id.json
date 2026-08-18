@@ -34,5 +34,14 @@
   "session_expired": "Sesi sebelumnya berakhir karena tidak ada aktivitas. Sesi lanjutan baru sudah siap; silakan kirim ulang pesan Anda.",
   "participant": "Peserta",
   "ai": "AI",
+  "voice_speak_title": "🎙 Ucapkan jawaban Anda",
+  "voice_disclosure": "Alat suara opsional menggunakan layanan Google Cloud. Jika Anda menggunakan ucapan-ke-teks, audio Anda dikirim ke Google Cloud Speech-to-Text untuk membuat transkrip. Jika Anda menggunakan Baca ulang, teks di kotak transkripsi dikirim ke Google Cloud Text-to-Speech untuk menghasilkan audio. Anda juga dapat memilih untuk tidak menggunakan alat ini dan mengetik jawaban Anda.",
+  "voice_disclosure_agree": "Saya memahami dan ingin menggunakan alat suara.",
+  "start_recording": "Mulai merekam",
+  "recording": "Sedang merekam...",
+  "stop_recording": "Hentikan",
+  "read_back": "▶ Baca ulang",
+  "insert_transcript": "Masukkan ke wawancara",
+  "transcription_placeholder": "Transkripsi Anda akan muncul di sini...",
   "return_language": "Kembali ke pemilihan bahasa"
 }
