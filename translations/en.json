@@ -84,5 +84,6 @@
   "generate": "Generate",
   "translation": "Translation",
 
+  "interview_complete": "Interview complete.",
   "return_language": "Return to Language Selection"
 }

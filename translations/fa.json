@@ -43,5 +43,6 @@
   "read_back": "▶ بازخوانی",
   "insert_transcript": "درج در مصاحبه",
   "transcription_placeholder": "رونویسی شما اینجا نمایش داده می‌شود...",
+  "interview_complete": "مصاحبه به پایان رسید.",
   "return_language": "بازگشت به انتخاب زبان"
 }

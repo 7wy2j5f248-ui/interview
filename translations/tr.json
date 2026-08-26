@@ -43,5 +43,6 @@
   "read_back": "▶ Sesli oku",
   "insert_transcript": "Görüşmeye ekle",
   "transcription_placeholder": "Transkripsiyonunuz burada görünecek...",
+  "interview_complete": "Görüşme tamamlandı.",
   "return_language": "Dil seçimine dön"
 }

@@ -68,5 +68,6 @@
 "read_back": "▶ الاستماع",
 "insert_transcript": "إدراج في إجابة المقابلة",
 "transcription_placeholder": "سيظهر النص المفرغ هنا...",
+"interview_complete": "اكتملت المقابلة.",
 "return_language": "العودة إلى اختيار اللغة"
 }

@@ -389,7 +389,10 @@ Return final_question_answered as true when the participant's current message an
       );
     }
 
-    return res.status(200).json({ reply });
+    return res.status(200).json({
+      reply,
+      completed: finalQuestionAnswered
+    });
   } catch (error) {
     console.error("Interview request failed:", error);
 

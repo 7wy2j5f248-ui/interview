@@ -469,7 +469,10 @@ test("a final canonical answer persists messages, completion, and a descriptor",
     });
 
     assert.equal(response.statusCode, 200);
-    assert.deepEqual(response.payload, { reply: "Thank you." });
+    assert.deepEqual(response.payload, {
+        reply: "Thank you.",
+        completed: true
+    });
     assert.deepEqual(calls.map(call => call.operation), [
         "rpc",
         "participant_descriptors",

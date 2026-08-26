@@ -43,5 +43,6 @@
   "read_back": "▶ Lire à voix haute",
   "insert_transcript": "Insérer dans l’entretien",
   "transcription_placeholder": "Votre transcription apparaîtra ici...",
+  "interview_complete": "Entretien terminé.",
   "return_language": "Revenir au choix de la langue"
 }

@@ -46,11 +46,20 @@ textarea {
 button {
     margin-top: 10px;
 }
+
+#interviewCompletionStatus {
+    margin: 16px 0;
+    padding: 12px;
+    border: 2px solid #237a3b;
+    background: #edf8f0;
+    color: #164d28;
+    font-weight: 700;
+}
 </style>
 
 </head>
 
-<body>
+<body data-interview-status="active">
 
 <h1 id="interviewTitle">AI Interview</h1>
 
@@ -66,6 +75,13 @@ button {
 <textarea id="message" rows="4" style="width:100%; box-sizing:border-box; font-size:16px;"></textarea>
 
 <button id="sendButton" onclick="sendMessage()">Send</button>
+<p
+    id="interviewCompletionStatus"
+    role="status"
+    aria-live="polite"
+    data-completion-signal="INTERVIEW_COMPLETE"
+    hidden
+></p>
 <!-- Voice transcription section goes here -->
  <div id="voiceTranscriptionSection">
     <p id="voiceSpeakTitle">🎙 Speak your answer</p>
@@ -102,6 +118,7 @@ button {
 <script>
 
 let history = [];
+let interviewCompleted = false;
     
 let mediaRecorder;
 let audioChunks = [];
@@ -448,13 +465,29 @@ function persistSessionId() {
 }
 
 persistSessionId();
+
+function markInterviewCompleted() {
+    interviewCompleted = true;
+    document.body.dataset.interviewStatus = "completed";
+
+    const completionStatus =
+        document.getElementById("interviewCompletionStatus");
+    completionStatus.textContent =
+        t.interview_complete || "Interview complete.";
+    completionStatus.hidden = false;
+
+    document.getElementById("message").disabled = true;
+    document.getElementById("sendButton").disabled = true;
+    document.getElementById("voiceTranscriptionSection").hidden = true;
+}
+
 async function sendMessage() {
 
     const messageBox = document.getElementById("message");
     const sendButton = document.getElementById("sendButton");
     const message = messageBox.value.trim();
 
-    if (!message) return;
+    if (interviewCompleted || !message) return;
 
     const requestHistory = [...history, {
         role: "user",
@@ -519,6 +552,10 @@ async function sendMessage() {
             role: "assistant",
             content: reply
         }];
+
+        if (data.completed === true) {
+            markInterviewCompleted();
+        }
     } catch (error) {
         console.error("Interview request failed.", error);
         appendChatMessage(
@@ -528,7 +565,7 @@ async function sendMessage() {
         );
         messageBox.value = message;
     } finally {
-        sendButton.disabled = false;
+        sendButton.disabled = interviewCompleted;
     }
 }
 
