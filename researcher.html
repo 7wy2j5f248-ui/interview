@@ -130,6 +130,293 @@
             min-width: 76rem;
         }
 
+        .analysisOverview {
+            display: grid;
+            gap: 0.75rem;
+            grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+            margin-block: 1rem;
+        }
+
+        .analysisMetric {
+            background: #f7f9fc;
+            border: 1px solid #d7dfeb;
+            border-radius: 0.5rem;
+            padding: 0.8rem 1rem;
+        }
+
+        .analysisMetric strong {
+            color: #193a70;
+            display: block;
+            font-size: 1.45rem;
+        }
+
+        .analysisViewTabs {
+            align-items: end;
+            background: #eef1f5;
+            border: 1px solid #c7d0dc;
+            border-block-end: 0;
+            border-radius: 0.55rem 0.55rem 0 0;
+            display: flex;
+            gap: 0.2rem;
+            margin-block-start: 1.25rem;
+            padding: 0.45rem 0.55rem 0;
+        }
+
+        .analysisViewTabs button {
+            background: #dfe5ec;
+            border: 1px solid #b9c4d1;
+            border-block-end: 0;
+            border-radius: 0.4rem 0.4rem 0 0;
+            color: #38516f;
+            font: inherit;
+            font-weight: 700;
+            padding: 0.65rem 1rem;
+        }
+
+        .analysisViewTabs button[aria-pressed="true"] {
+            background: #ffffff;
+            box-shadow: inset 0 3px 0 #2d6a4f;
+            color: #173968;
+        }
+
+        .analysisBreadcrumb {
+            color: #38516f;
+            font-weight: 700;
+            margin-block: 1rem 0.25rem;
+        }
+
+        .analysisHierarchyView {
+            border: 1px solid #c7d0dc;
+            border-radius: 0 0 0.45rem 0.45rem;
+            margin-block: 0.85rem 1.25rem;
+            max-height: 38rem;
+            overflow: auto;
+        }
+
+        .analysisMatrix {
+            font-size: 0.92rem;
+            min-width: 72rem;
+        }
+
+        .analysisMatrix th {
+            background: #edf3fb;
+            min-width: 5rem;
+        }
+
+        .analysisMatrix thead th {
+            inset-block-start: 0;
+            position: sticky;
+            z-index: 3;
+        }
+
+        .analysisMatrix th:nth-child(3),
+        .analysisMatrix th:nth-child(4),
+        .analysisMatrix th:nth-child(7),
+        .analysisMatrix th:nth-child(8) {
+            min-width: 7rem;
+        }
+
+        .analysisMatrix th:nth-child(6) {
+            min-width: 3rem;
+        }
+
+        .analysisMatrix th:nth-child(n + 9) {
+            min-width: 11rem;
+        }
+
+        .analysisMatrix th:first-child,
+        .analysisMatrix td:first-child {
+            background: #ffffff;
+            inset-inline-start: 0;
+            min-width: 8rem;
+            position: sticky;
+            z-index: 1;
+        }
+
+        .analysisMatrix thead th:first-child {
+            background: #e5edf8;
+            z-index: 4;
+        }
+
+        .themeWorksheet {
+            min-width: 92rem;
+        }
+
+        .codeWorksheet,
+        .keywordWorksheet {
+            min-width: 64rem;
+        }
+
+        .themeWorksheet th:nth-child(2) {
+            min-width: 9rem;
+        }
+
+        .codeWorksheet th:nth-child(3),
+        .keywordWorksheet th:nth-child(3) {
+            min-width: 15rem;
+        }
+
+        .analysisColumnId {
+            color: #245fbd;
+            display: block;
+            font-size: 0.78rem;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+        }
+
+        .analysisColumnDetail {
+            color: #526579;
+            display: block;
+            font-size: 0.78rem;
+            font-weight: 400;
+            margin-block-start: 0.2rem;
+        }
+
+        .analysisCodeContext {
+            background: #edf3fb;
+            border-block-end: 1px solid #cbd7e7;
+            color: #173968;
+            padding: 0.8rem 1rem;
+        }
+
+        .analysisCodeContext p {
+            margin-block: 0.35rem 0;
+        }
+
+        .analysisHierarchyCell {
+            color: #173968;
+            font-weight: 700;
+        }
+
+        .analysisPresenceButton,
+        .keywordEvidenceButton {
+            background: #f3f7fd;
+            border: 1px solid #9db9df;
+            border-radius: 999px;
+            color: #174f96;
+            font: inherit;
+            padding: 0.25rem 0.6rem;
+        }
+
+        .keywordEvidenceButton {
+            background: #fff7e8;
+            border-color: #d6a44a;
+            color: #6c4703;
+            text-decoration: underline;
+        }
+
+        .analysisEmptyCell {
+            color: #9aa3af;
+        }
+
+        .analysisEmptyRow {
+            color: #667085;
+            padding: 1.5rem;
+            text-align: center;
+        }
+
+        .analysisIdentifierCell {
+            color: #245fbd;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .analysisRelationCell {
+            background: #f1f8f4;
+            color: #205c40;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .worksheetTranscriptButton,
+        .worksheetExpressionButton {
+            background: none;
+            border: 0;
+            color: #1457a6;
+            font: inherit;
+            padding: 0;
+            text-align: start;
+            text-decoration: underline;
+        }
+
+        .worksheetExpressionButton {
+            color: #244f84;
+            font-weight: 700;
+        }
+
+        .analysisDiscussion {
+            background: #f8fafc;
+            border: 1px solid #cbd7e7;
+            border-radius: 0.6rem;
+            border-block-start: 1px solid #d7dfeb;
+            margin-block-start: 1.25rem;
+            padding: 1rem;
+        }
+
+        .analysisDiscussion h3 {
+            color: #173968;
+            margin-block: 0 0.25rem;
+        }
+
+        .analysisConversation {
+            display: grid;
+            gap: 0.75rem;
+            margin-block: 1rem;
+            max-height: 28rem;
+            overflow-y: auto;
+        }
+
+        .analysisChatMessage {
+            border-radius: 0.7rem;
+            max-width: 48rem;
+            padding: 0.75rem 0.9rem;
+        }
+
+        .analysisChatMessage p {
+            margin-block: 0.25rem;
+            white-space: pre-wrap;
+        }
+
+        .analysisChatMessage[data-speaker="assistant"] {
+            background: #eaf1fb;
+            border: 1px solid #c4d4ec;
+        }
+
+        .analysisChatMessage[data-speaker="researcher"] {
+            background: #173968;
+            color: #ffffff;
+            justify-self: end;
+        }
+
+        .analysisPromptExamples {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-block: 0.75rem;
+        }
+
+        .analysisPromptExamples button {
+            background: #ffffff;
+            border: 1px solid #9db3d1;
+            border-radius: 999px;
+            color: #244f84;
+            font: inherit;
+            padding: 0.35rem 0.7rem;
+        }
+
+        .analysisDiscussionForm textarea {
+            box-sizing: border-box;
+            width: 100%;
+        }
+
+        .analysisProposal {
+            background: #fff8e8;
+            border: 1px solid #d9b66f;
+            border-radius: 0.45rem;
+            margin-block: 1rem;
+            padding: 0.85rem;
+        }
+
         .tableScroll {
             overflow-x: auto;
         }
@@ -216,13 +503,34 @@
             border: 2px solid #8a6d00;
             padding: 0.75rem;
         }
+
+        @media (max-width: 40rem) {
+            body {
+                margin-block: 1rem;
+            }
+
+            .analysisOverview {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .analysisViewTabs {
+                display: grid;
+                gap: 0;
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+            }
+
+            .analysisViewTabs button {
+                font-size: 0.78rem;
+                padding-inline: 0.25rem;
+            }
+        }
     </style>
 </head>
 <body>
 
 <h1>Researcher Dashboard</h1>
 
-<section class="panel" aria-labelledby="periodHeading">
+<section id="statisticsPeriodSection" class="panel" aria-labelledby="periodHeading">
     <h2 id="periodHeading">Statistics and analysis period</h2>
     <form id="periodForm">
         <div class="fieldRow">
@@ -294,11 +602,12 @@
 </section>
 
 <section id="analysisSection" class="panel" aria-labelledby="analysisHeading">
-    <h2 id="analysisHeading">AI-Assisted Qualitative Analysis</h2>
+    <h2 id="analysisHeading">Researcher Data Analysis Dashboard</h2>
     <p>
-        AI suggestions are provisional. Researcher feedback controls later
-        evidence collection, and only explicitly confirmed snapshots become
-        the analytical foundation.
+        Explore the real interview analysis as one workbook with three named
+        worksheets. Worksheet 1 compares participants and themes and links to
+        each complete transcript. Worksheet 2 maps codes to themes, and
+        Worksheet 3 maps keyword expressions to codes.
     </p>
 
     <label>
@@ -344,6 +653,85 @@
         <p id="analysisRunMetadata" class="muted"></p>
         <p id="analysisStatus" role="status"></p>
 
+        <div class="analysisOverview" aria-label="Analysis overview">
+            <div class="analysisMetric"><strong id="analysisParticipantCount">0</strong>Participants</div>
+            <div class="analysisMetric"><strong id="analysisThemeCount">0</strong>Themes</div>
+            <div class="analysisMetric"><strong id="analysisCodeCount">0</strong>Codes</div>
+            <div class="analysisMetric"><strong id="analysisKeywordCount">0</strong>Keywords</div>
+        </div>
+
+        <nav class="analysisViewTabs" aria-label="Analysis layers">
+            <button type="button" data-analysis-view="themes" aria-pressed="true">
+                1 · Participants &amp; Themes
+            </button>
+            <button type="button" data-analysis-view="codes" aria-pressed="false">
+                2 · Codes &amp; Themes
+            </button>
+            <button type="button" data-analysis-view="keywords" aria-pressed="false">
+                3 · Keywords &amp; Codes
+            </button>
+        </nav>
+        <p id="analysisBreadcrumb" class="analysisBreadcrumb"></p>
+        <p id="analysisViewDescription" class="muted"></p>
+        <div id="analysisHierarchyView" class="analysisHierarchyView tableScroll"></div>
+
+        <section id="analysisDiscussion" class="analysisDiscussion" aria-labelledby="analysisDiscussionHeading">
+            <h3 id="analysisDiscussionHeading">Discuss this analysis with AI</h3>
+            <p id="analysisDiscussionContext" class="muted"></p>
+            <p class="muted">
+                Tell the AI what you notice in the keywords, codes, or theme.
+                It will respond using the selected analysis and its stored
+                evidence, then show any proposed revision before you apply it.
+            </p>
+            <div id="analysisConversation" class="analysisConversation" aria-live="polite"></div>
+            <div class="analysisPromptExamples" aria-label="Example discussion prompts">
+                <button type="button" data-discussion-prompt="Do these keywords belong under the same code? Explain why.">
+                    Do these keywords form one code?
+                </button>
+                <button type="button" data-discussion-prompt="This code name does not fit the keywords. Suggest a clearer code name.">
+                    Suggest a clearer code
+                </button>
+                <button type="button" data-discussion-prompt="Show me which keywords and cases support this code, and identify any weak fit.">
+                    Check keyword fit and cases
+                </button>
+            </div>
+            <form id="analysisDiscussionForm" class="analysisDiscussionForm">
+                <label>
+                    Your feedback or question
+                    <textarea id="analysisDiscussionInput" placeholder="For example: K1, K2, and K3 look like the same idea. Should they form one code?"></textarea>
+                </label>
+                <button id="analysisDiscussionSendButton" type="submit">
+                    Send to AI
+                </button>
+            </form>
+            <div id="analysisProposal" class="analysisProposal" hidden>
+                <strong>Proposed analytical revision</strong>
+                <div id="analysisProposalContent"></div>
+                <div class="actionRow">
+                    <button id="analysisApplyProposalButton" type="button">
+                        Apply this revision
+                    </button>
+                    <button id="analysisDismissProposalButton" type="button">
+                        Keep discussing
+                    </button>
+                </div>
+            </div>
+            <div class="actionRow">
+                <button id="analysisAcceptCurrentButton" type="button">
+                    Accept current theme and codes
+                </button>
+                <button id="analysisRejectCurrentButton" type="button">
+                    Reject current theme
+                </button>
+            </div>
+            <p class="muted">
+                AI responses and proposals are provisional. Only an applied
+                revision changes the working analysis; acceptance stores the
+                confirmed analytical snapshot.
+            </p>
+        </section>
+
+        <div id="analysisLegacyControls" hidden>
         <details>
             <summary>Create a researcher-originated analytical item</summary>
             <div class="fieldRow">
@@ -386,6 +774,7 @@
                 </thead>
                 <tbody id="analysisItemsBody"></tbody>
             </table>
+        </div>
         </div>
     </div>
 </section>

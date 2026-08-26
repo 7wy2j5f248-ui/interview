@@ -5,6 +5,7 @@ import {
     collectEvidenceForBatch,
     commaSeparatedList,
     DEFAULT_ANALYSIS_BATCH_SIZE,
+    discussAnalysisWithResearcher,
     generateSuggestionsForBatch,
     prepareParticipantMessages,
     QUALITATIVE_ANALYSIS_MODEL,
@@ -23,7 +24,7 @@ import {
 import { authorizeResearcher } from "../server/researcherAuth.js";
 import { normalizeOpenAIModel } from "../server/modelConfiguration.js";
 
-const AI_ACTIONS = new Set(["generate", "collect_evidence"]);
+const AI_ACTIONS = new Set(["generate", "collect_evidence", "discuss"]);
 const KNOWN_ACTIONS = new Set([
     "list",
     "confirmed",
@@ -31,6 +32,7 @@ const KNOWN_ACTIONS = new Set([
     "save_feedback",
     "create_item",
     "collect_evidence",
+    "discuss",
     "set_evidence",
     "confirm",
     "archive",
@@ -354,6 +356,20 @@ function sessionDescriptorPayload(session, descriptor, fallbackSessionId = null)
     };
 }
 
+function workspaceMessagePayload(message, batchId = null) {
+    return {
+        messageId: message.id,
+        batchId,
+        session: message.Session || null,
+        participant: message.Participant || null,
+        language: message.Language || null,
+        speaker: message.Speaker || null,
+        timestamp: message.Timestamp || null,
+        originalText: message.Message,
+        englishTranslation: message.EnglishTranslation || null
+    };
+}
+
 function batchLanguageDistribution(messageLinks, corpusById) {
     const distribution = new Map();
 
@@ -450,9 +466,10 @@ async function loadRunProvenance(
         suggestionSources = sourceResult.data || [];
     }
 
-    const sessionIds = [...new Set(
-        batchSessions.map(link => storedIdentifier(link.session_id)).filter(Boolean)
-    )];
+    const sessionIds = [...new Set([
+        ...batchSessions.map(link => storedIdentifier(link.session_id)),
+        ...corpusRows.map(message => storedIdentifier(message?.Session))
+    ].filter(Boolean))];
     let sessionRows = [];
     let descriptorRows = [];
 
@@ -680,6 +697,48 @@ async function loadWorkspace(
         : runs[0];
 
     if (!run) {
+        const eligibleSessions = await loadEligibleSessionRows(
+            supabaseClient,
+            completionFilter
+        );
+        const corpusRows = filterCorpusRows(
+            await loadInterviewMessagesForSessions(
+                supabaseClient,
+                eligibleSessions
+            ),
+            period
+        );
+        const includedSessionIds = new Set(corpusRows.map(message =>
+            storedIdentifier(message?.Session)
+        ).filter(Boolean));
+        const scopedSessions = eligibleSessions.filter(session =>
+            includedSessionIds.has(storedIdentifier(session?.session_id))
+        );
+        const scopedSessionIds = scopedSessions.map(session =>
+            session.session_id
+        );
+        let descriptorRows = [];
+
+        if (scopedSessionIds.length) {
+            const { data, error } = await supabaseClient
+                .from("participant_descriptors")
+                .select("session_id, participant_id, current_country, current_region, country_of_origin, diaspora_status, gender, age, birth_year, birth_cohort, youth_status, education_level, social_identity, additional_descriptors")
+                .in("session_id", scopedSessionIds);
+
+            if (error) {
+                throw new AnalysisError(
+                    500,
+                    "Participant metadata could not be loaded."
+                );
+            }
+            descriptorRows = data || [];
+        }
+
+        const descriptorBySession = new Map(descriptorRows.map(descriptor => [
+            descriptor.session_id,
+            descriptor
+        ]));
+
         return {
             period,
             completionFilter,
@@ -687,7 +746,16 @@ async function loadWorkspace(
             run: null,
             items: [],
             batches: [],
-            corpusMessages: []
+            participants: scopedSessions.map(session =>
+                sessionDescriptorPayload(
+                    session,
+                    descriptorBySession.get(session.session_id),
+                    session.session_id
+                )
+            ),
+            corpusMessages: corpusRows.map(message =>
+                workspaceMessagePayload(message)
+            )
         };
     }
 
@@ -771,17 +839,11 @@ async function loadWorkspace(
         run,
         items: itemPayloads,
         batches: provenance.batches,
-        corpusMessages: corpusRows.map(message => ({
-            messageId: message.id,
-            batchId: provenance.batchIdByMessageId.get(message.id) || null,
-            session: message.Session || null,
-            participant: message.Participant || null,
-            language: message.Language || null,
-            speaker: message.Speaker || null,
-            timestamp: message.Timestamp || null,
-            originalText: message.Message,
-            englishTranslation: message.EnglishTranslation || null
-        }))
+        participants: [...provenance.sessionById.values()],
+        corpusMessages: corpusRows.map(message => workspaceMessagePayload(
+            message,
+            provenance.batchIdByMessageId.get(message.id) || null
+        ))
     };
 }
 
@@ -1147,6 +1209,115 @@ async function saveFeedback(req, supabaseClient, now) {
     }
 
     return item.analysis_run_id;
+}
+
+function safeDiscussionConversation(value) {
+    return (Array.isArray(value) ? value : []).slice(-12).map(message => {
+        const role = message?.role === "assistant"
+            ? "assistant"
+            : "researcher";
+        const content = typeof message?.content === "string"
+            ? message.content.trim().slice(0, 4000)
+            : "";
+        return content ? { role, content } : null;
+    }).filter(Boolean);
+}
+
+function discussionCodeKeywordGroups(item) {
+    const components = item.provenance?.components || [];
+    const codes = workingAnalysisFields(item).codes;
+    const keywordComponents = components.filter(component =>
+        component.type === "keyword" && component.available
+    );
+
+    return codes.map(code => {
+        const codeComponent = components.find(component =>
+            component.type === "code"
+            && component.value?.toLowerCase() === code.toLowerCase()
+        );
+        const codeMessageIds = new Set(codeComponent?.messageIds || []);
+        (item.evidence || []).filter(evidence =>
+            (evidence.codes || []).some(attributedCode =>
+                attributedCode.toLowerCase() === code.toLowerCase()
+            )
+        ).forEach(evidence => codeMessageIds.add(evidence.messageId));
+        return {
+            code,
+            keywords: keywordComponents.filter(keyword =>
+                keyword.messageIds.some(messageId =>
+                    codeMessageIds.has(messageId)
+                )
+            ).map(keyword => ({
+                keyword: keyword.value,
+                supportingPassageCount: keyword.messageIds.length,
+                supportingParticipantCount: new Set(
+                    (item.evidence || []).filter(evidence =>
+                        keyword.messageIds.includes(evidence.messageId)
+                    ).map(evidence => evidence.participant).filter(Boolean)
+                ).size
+            }))
+        };
+    });
+}
+
+async function discussAnalysis(req, supabaseClient, openaiClient) {
+    if (!openaiClient) {
+        throw new AnalysisError(500, "Server configuration is incomplete.");
+    }
+
+    const itemId = safeId(req.body?.itemId, "Analysis item");
+    const message = typeof req.body?.message === "string"
+        ? req.body.message.trim().slice(0, 4000)
+        : "";
+    if (!message) {
+        throw new AnalysisError(400, "A discussion message is required.");
+    }
+
+    const storedItem = await loadItem(supabaseClient, itemId);
+    const run = await loadRun(supabaseClient, storedItem.analysis_run_id);
+    const workspace = await loadWorkspace(
+        supabaseClient,
+        analysisPeriod(run.period_start, run.period_end),
+        runCompletionFilter(run),
+        run.id
+    );
+    const item = workspace.items.find(entry => entry.id === itemId);
+
+    if (!item) {
+        throw new AnalysisError(404, "Analysis item was not found.");
+    }
+
+    const working = workingAnalysisFields(item);
+    const conversation = safeDiscussionConversation(
+        req.body?.conversation
+    );
+    conversation.push({ role: "researcher", content: message });
+
+    return discussAnalysisWithResearcher(
+        openaiClient,
+        {
+            theme: working.theme,
+            codes: working.codes,
+            keywords: working.keywords,
+            focusCode: typeof req.body?.focusCode === "string"
+                ? req.body.focusCode.trim() || null
+                : null,
+            codeKeywordGroups: discussionCodeKeywordGroups(item),
+            evidence: (item.evidence || []).filter(evidence =>
+                evidence.included
+            ).map(evidence => ({
+                messageId: evidence.messageId,
+                participantId: evidence.participant,
+                language: evidence.language,
+                originalText: evidence.originalText,
+                englishTranslation: evidence.englishTranslation,
+                attributedCodes: evidence.codes || [],
+                associatedKeywords:
+                    evidence.associatedSuggestions?.keywords || []
+            }))
+        },
+        conversation
+    );
 }
 
 async function createResearcherItem(req, supabaseClient, now) {
@@ -1786,6 +1957,14 @@ export async function handleAnalysis(
                 supabaseClient,
                 openaiClient,
                 { batchSize, now }
+            ));
+        }
+
+        if (action === "discuss") {
+            return res.status(200).json(await discussAnalysis(
+                req,
+                supabaseClient,
+                openaiClient
             ));
         }
 

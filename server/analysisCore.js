@@ -257,6 +257,55 @@ const evidenceSchema = {
     additionalProperties: false
 };
 
+const discussionSchema = {
+    type: "object",
+    properties: {
+        reply: { type: "string" },
+        proposal: {
+            type: "object",
+            properties: {
+                should_apply: { type: "boolean" },
+                theme: { type: "string" },
+                codes: {
+                    type: "array",
+                    items: { type: "string" }
+                },
+                keywords: {
+                    type: "array",
+                    items: { type: "string" }
+                },
+                code_keyword_groups: {
+                    type: "array",
+                    items: {
+                        type: "object",
+                        properties: {
+                            code: { type: "string" },
+                            keywords: {
+                                type: "array",
+                                items: { type: "string" }
+                            }
+                        },
+                        required: ["code", "keywords"],
+                        additionalProperties: false
+                    }
+                },
+                rationale: { type: "string" }
+            },
+            required: [
+                "should_apply",
+                "theme",
+                "codes",
+                "keywords",
+                "code_keyword_groups",
+                "rationale"
+            ],
+            additionalProperties: false
+        }
+    },
+    required: ["reply", "proposal"],
+    additionalProperties: false
+};
+
 function normalizedAttributionCodes(values, allowedCodes) {
     const allowedByKey = new Map(
         normalizedList(allowedCodes).map(code => [code.toLowerCase(), code])
@@ -636,6 +685,84 @@ export async function collectEvidenceForBatch(
         messages,
         workingInstruction?.codes
     );
+}
+
+export async function discussAnalysisWithResearcher(
+    openaiClient,
+    analysisContext,
+    conversation,
+    { model = QUALITATIVE_ANALYSIS_MODEL } = {}
+) {
+    const response = await openaiClient.responses.create({
+        model,
+        store: false,
+        text: {
+            format: {
+                type: "json_schema",
+                name: "qualitative_analysis_discussion",
+                strict: true,
+                schema: discussionSchema
+            }
+        },
+        input: [
+            {
+                role: "system",
+                content: "You are an analytical collaborator for a qualitative researcher. Discuss the selected theme, code, and keywords using only the supplied stored transcript evidence. Treat keywords as the evidence bridge, codes as groupings of keywords, and themes as groupings of codes. Explicitly name the code when discussing its keywords. Distinguish the number of supporting participants from the number of passages. Never invent a participant, quotation, keyword, code, theme, or factual claim. If the researcher requests a revision, return a complete proposed working theme, code list, keyword list, and explicit code-to-keyword groups. If no analytical revision is warranted, preserve the current values and set should_apply to false. Interface or layout feedback is not an analytical revision. Explain uncertainty and weak fit plainly."
+            },
+            {
+                role: "user",
+                content: [
+                    "Selected analysis context (JSON):",
+                    JSON.stringify(analysisContext),
+                    "Researcher-AI discussion so far (JSON):",
+                    JSON.stringify(conversation)
+                ].join("\n")
+            }
+        ]
+    });
+
+    const value = parseStructuredResponse(
+        response,
+        "AI qualitative-analysis discussion"
+    );
+    const reply = normalizedText(value?.reply);
+    const proposedTheme = normalizedText(value?.proposal?.theme)
+        || normalizedText(analysisContext?.theme)
+        || "";
+    const proposedCodes = normalizedList(value?.proposal?.codes);
+    const proposedKeywords = normalizedList(value?.proposal?.keywords);
+    const allowedCodes = new Map(proposedCodes.map(code => [
+        code.toLowerCase(),
+        code
+    ]));
+    const allowedKeywords = new Map(proposedKeywords.map(keyword => [
+        keyword.toLowerCase(),
+        keyword
+    ]));
+    const codeKeywordGroups = (Array.isArray(
+        value?.proposal?.code_keyword_groups
+    ) ? value.proposal.code_keyword_groups : []).map(group => ({
+        code: allowedCodes.get(normalizedText(group?.code)?.toLowerCase()),
+        keywords: normalizedList(group?.keywords).map(keyword =>
+            allowedKeywords.get(keyword.toLowerCase())
+        ).filter(Boolean)
+    })).filter(group => group.code);
+
+    if (!reply) {
+        throw new Error("AI qualitative-analysis discussion was empty.");
+    }
+
+    return {
+        reply,
+        proposal: {
+            shouldApply: value?.proposal?.should_apply === true,
+            theme: proposedTheme,
+            codes: proposedCodes,
+            keywords: proposedKeywords,
+            codeKeywordGroups,
+            rationale: normalizedText(value?.proposal?.rationale) || ""
+        }
+    };
 }
 
 export function workingAnalysisFields(item) {

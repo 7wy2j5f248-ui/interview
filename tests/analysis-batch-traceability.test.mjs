@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
     buildAnalysisBatches,
+    discussAnalysisWithResearcher,
     generateSuggestionsForBatch,
     validateSuggestedItems,
     workingAnalysisFields
@@ -164,6 +165,58 @@ test("available OpenAI input-token usage is retained for batch persistence", asy
 
     assert.equal(result.inputTokenCount, 4321);
     assert.equal(result.items.length, 1);
+});
+
+test("AI discussion returns an explicit code-to-keyword revision proposal", async () => {
+    let request;
+    const openaiClient = {
+        responses: {
+            async create(value) {
+                request = value;
+                return {
+                    output_text: JSON.stringify({
+                        reply: "The three keywords support one schedule-related code.",
+                        proposal: {
+                            should_apply: true,
+                            theme: "Work disrupts rest",
+                            codes: ["Irregular schedules"],
+                            keywords: [
+                                "night shift",
+                                "rotating schedule",
+                                "overtime"
+                            ],
+                            code_keyword_groups: [{
+                                code: "Irregular schedules",
+                                keywords: [
+                                    "night shift",
+                                    "rotating schedule",
+                                    "overtime"
+                                ]
+                            }],
+                            rationale: "All three describe unstable or extended work time."
+                        }
+                    })
+                };
+            }
+        }
+    };
+    const result = await discussAnalysisWithResearcher(
+        openaiClient,
+        {
+            theme: "Work disrupts rest",
+            codes: ["Irregular schedules"],
+            keywords: ["night shift", "rotating schedule", "overtime"],
+            evidence: [{ messageId: "message-1", participantId: "participant-1" }]
+        },
+        [{ role: "researcher", content: "Do these form one code?" }]
+    );
+
+    assert.equal(request.store, false);
+    assert.equal(result.proposal.shouldApply, true);
+    assert.deepEqual(result.proposal.codeKeywordGroups, [{
+        code: "Irregular schedules",
+        keywords: ["night shift", "rotating schedule", "overtime"]
+    }]);
 });
 
 test("researcher revisions preserve coded phrases through confirmation inputs", () => {
