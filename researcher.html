@@ -386,6 +386,33 @@
             font-weight: 700;
         }
 
+        .analysisWorkbookControls {
+            align-items: center;
+            background: #eef5ff;
+            border: 1px solid #b9cce6;
+            border-radius: 0.6rem;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.65rem;
+            margin-block-end: 1rem;
+            padding: 0.8rem;
+        }
+
+        .analysisWorkbookControls button {
+            margin: 0;
+        }
+
+        .analysisWorkbookStatus {
+            color: #405775;
+            font-size: 0.92rem;
+        }
+
+        .analysisGroupingCell {
+            background: #fff8e8;
+            color: #6c4703;
+            font-weight: 700;
+        }
+
         .analysisDiscussion {
             background: #f8fafc;
             border: 1px solid #cbd7e7;
@@ -649,7 +676,9 @@
         Explore the real interview analysis as one workbook with three named
         worksheets. Worksheet 1 compares participants and themes and links to
         each complete transcript. Worksheet 2 maps codes to themes, and
-        Worksheet 3 maps keyword expressions to codes.
+        Worksheet 3 maps keyword expressions to codes. Each stage can be
+        downloaded to Excel, rearranged and grouped by the researcher, then
+        uploaded as a traceable decision layer for the next worksheet.
     </p>
 
     <label>
@@ -723,7 +752,8 @@
             <p class="muted">
                 Tell the AI what you notice in the keywords, codes, or theme.
                 It will respond using the selected analysis and its stored
-                evidence, then show any proposed revision before you apply it.
+                evidence plus your latest uploaded grouping instructions, then
+                show any proposed revision before you apply it.
             </p>
             <div id="analysisConversation" class="analysisConversation" aria-live="polite"></div>
             <div class="analysisPromptExamples" aria-label="Example discussion prompts">

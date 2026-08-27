@@ -1,0 +1,3 @@
+create index qualitative_analysis_workbook_imports_parent_idx
+on public.qualitative_analysis_workbook_imports (parent_import_id)
+where parent_import_id is not null;

@@ -48,7 +48,8 @@ const ANALYSIS_TABLES = Object.freeze({
     batchSessions: "qualitative_analysis_batch_sessions",
     batchMessages: "qualitative_analysis_batch_messages",
     itemBatches: "qualitative_analysis_item_batches",
-    suggestionSources: "qualitative_analysis_suggestion_sources"
+    suggestionSources: "qualitative_analysis_suggestion_sources",
+    workbookImports: "qualitative_analysis_workbook_imports"
 });
 
 class AnalysisError extends Error {
@@ -269,6 +270,25 @@ async function loadRunsForScope(supabaseClient, period, completionFilter) {
         periodMatches(run, period)
         && runCompletionFilter(run) === completionFilter
     );
+}
+
+async function loadWorkbookImports(supabaseClient, runId) {
+    if (!runId) {
+        return [];
+    }
+    const { data, error } = await supabaseClient
+        .from(ANALYSIS_TABLES.workbookImports)
+        .select("id, analysis_run_id, stage, parent_import_id, source_filename, file_sha256, workbook_format_version, source_selection, row_order, grouping_data, imported_by, imported_at")
+        .eq("analysis_run_id", runId)
+        .order("imported_at", { ascending: false })
+        .limit(100);
+    if (error) {
+        throw new AnalysisError(
+            500,
+            "Researcher workbook decision layers could not be loaded."
+        );
+    }
+    return data || [];
 }
 
 function evidenceMessage(
@@ -789,6 +809,7 @@ async function loadWorkspace(
             run: null,
             items: [],
             batches: [],
+            workbookImports: [],
             participants: scopedSessions.map(session =>
                 sessionDescriptorPayload(
                     session,
@@ -807,13 +828,18 @@ async function loadWorkspace(
         };
     }
 
-    const [{ data: items, error: itemError }, corpusRows] = await Promise.all([
+    const [
+        { data: items, error: itemError },
+        corpusRows,
+        workbookImports
+    ] = await Promise.all([
         supabaseClient
             .from(ANALYSIS_TABLES.items)
             .select("*")
             .eq("analysis_run_id", run.id)
             .order("created_at", { ascending: true }),
-        runMessages(supabaseClient, run.id)
+        runMessages(supabaseClient, run.id),
+        loadWorkbookImports(supabaseClient, run.id)
     ]);
 
     if (itemError) {
@@ -890,6 +916,7 @@ async function loadWorkspace(
         run,
         items: itemPayloads,
         batches: provenance.batches,
+        workbookImports,
         participants: [...provenance.sessionById.values()],
         corpusMessages: corpusRows.map(message => workspaceMessagePayload(
             message,
@@ -1345,6 +1372,30 @@ async function discussAnalysis(req, supabaseClient, openaiClient) {
     );
     conversation.push({ role: "researcher", content: message });
 
+    const latestWorkbookLayers = ["themes", "codes", "keywords"]
+        .map(stage => workspace.workbookImports.find(layer =>
+            layer.stage === stage
+        ))
+        .filter(Boolean)
+        .map(layer => ({
+            id: layer.id,
+            stage: layer.stage,
+            sourceFilename: layer.source_filename,
+            importedAt: layer.imported_at,
+            sourceSelection: layer.source_selection,
+            researcherDecisions: (layer.grouping_data?.items || [])
+                .slice(0, 500)
+                .map(entry => ({
+                    stableId: entry.stableId,
+                    participantCode: entry.participantCode,
+                    content: entry.content,
+                    group: entry.group,
+                    groupOrder: entry.groupOrder,
+                    itemOrder: entry.itemOrder,
+                    note: entry.note
+                }))
+        }));
+
     return discussAnalysisWithResearcher(
         openaiClient,
         {
@@ -1355,6 +1406,7 @@ async function discussAnalysis(req, supabaseClient, openaiClient) {
                 ? req.body.focusCode.trim() || null
                 : null,
             codeKeywordGroups: discussionCodeKeywordGroups(item),
+            researcherWorkbookLayers: latestWorkbookLayers,
             evidence: (item.evidence || []).filter(evidence =>
                 evidence.included
             ).map(evidence => ({

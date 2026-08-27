@@ -131,3 +131,13 @@ test("AI discussion remains grounded server-side and revisions stay explicit", (
     assert.match(script, /action:\s*"confirm"/);
     assert.match(script, /action:\s*"archive"/);
 });
+
+test("each worksheet supports a traceable Excel round-trip", () => {
+    assert.match(script, /Download for Excel/);
+    assert.match(script, /Upload grouping to Worksheet 2/);
+    assert.match(script, /Upload grouping to Worksheet 3/);
+    assert.match(script, /function workbookSnapshot/);
+    assert.match(script, /function uploadWorkbook/);
+    assert.match(api, /workbookImports/);
+    assert.match(html, /traceable decision layer/);
+});

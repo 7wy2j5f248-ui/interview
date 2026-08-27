@@ -1053,6 +1053,47 @@
     const PARTICIPANT_THEME_SLOT_COUNT = 8;
     const PARTICIPANT_CODE_SLOT_COUNT = 10;
     const PARTICIPANT_KEYWORD_SLOT_COUNT = 10;
+    const workbookDetailHeaders = Object.freeze({
+        themes: [
+            "Stable theme ID",
+            "Participant code",
+            "Theme position",
+            "Theme content",
+            "Researcher group",
+            "Group order",
+            "Item order",
+            "Researcher note"
+        ],
+        codes: [
+            "Stable code ID",
+            "Participant code",
+            "Theme position",
+            "Theme content",
+            "Code position",
+            "Code content",
+            "Researcher theme group",
+            "Theme group order",
+            "Researcher code group",
+            "Code group order",
+            "Item order",
+            "Researcher note"
+        ],
+        keywords: [
+            "Stable keyword ID",
+            "Participant code",
+            "Theme position",
+            "Code position",
+            "Code content",
+            "Keyword position",
+            "Keyword content",
+            "Researcher code group",
+            "Code group order",
+            "Researcher keyword group",
+            "Keyword group order",
+            "Item order",
+            "Researcher note"
+        ]
+    });
 
     function participantThemeSlotIdentifier(index) {
         return `T${index + 1}`;
@@ -1068,6 +1109,75 @@
         keywordIndex
     ) {
         return `${participantCodeSlotIdentifier(themeIndex, codeIndex)}-K${keywordIndex + 1}`;
+    }
+
+    function participantStablePrefix(participant) {
+        return participant?.participantCode || "Uncoded-participant";
+    }
+
+    function stableThemeId(participant, themeIndex) {
+        return `${participantStablePrefix(participant)}-${participantThemeSlotIdentifier(themeIndex)}`;
+    }
+
+    function stableCodeId(participant, themeIndex, codeIndex) {
+        return `${participantStablePrefix(participant)}-${participantCodeSlotIdentifier(themeIndex, codeIndex)}`;
+    }
+
+    function stableKeywordId(
+        participant,
+        themeIndex,
+        codeIndex,
+        keywordIndex
+    ) {
+        return `${participantStablePrefix(participant)}-${participantKeywordSlotIdentifier(themeIndex, codeIndex, keywordIndex)}`;
+    }
+
+    function latestWorkbookImport(stage) {
+        return (workspace?.workbookImports || []).find(layer =>
+            layer.stage === stage
+        ) || null;
+    }
+
+    function workbookGroupingItem(stage, stableId) {
+        return (latestWorkbookImport(stage)?.grouping_data?.items || [])
+            .find(item => item.stableId === stableId) || null;
+    }
+
+    function numericOrder(value, fallback = Number.MAX_SAFE_INTEGER) {
+        const number = Number(value);
+        return Number.isFinite(number) && number > 0 ? number : fallback;
+    }
+
+    function orderedParticipants(stage, themeIndex = 0, codeIndex = 0) {
+        const participants = participantRecords();
+        if (stage === "themes") {
+            const rowOrder = latestWorkbookImport("themes")?.row_order || [];
+            const order = new Map(rowOrder.map((code, index) => [code, index]));
+            return participants.sort((first, second) =>
+                (order.get(first.participantCode) ?? Number.MAX_SAFE_INTEGER)
+                - (order.get(second.participantCode) ?? Number.MAX_SAFE_INTEGER)
+            );
+        }
+        const previousStage = stage === "codes" ? "themes" : "codes";
+        return participants.sort((first, second) => {
+            const firstId = stage === "codes"
+                ? stableThemeId(first, themeIndex)
+                : stableCodeId(first, themeIndex, codeIndex);
+            const secondId = stage === "codes"
+                ? stableThemeId(second, themeIndex)
+                : stableCodeId(second, themeIndex, codeIndex);
+            const firstGrouping = workbookGroupingItem(previousStage, firstId);
+            const secondGrouping = workbookGroupingItem(previousStage, secondId);
+            return numericOrder(firstGrouping?.groupOrder)
+                - numericOrder(secondGrouping?.groupOrder)
+                || numericOrder(firstGrouping?.itemOrder)
+                - numericOrder(secondGrouping?.itemOrder)
+                || participantStablePrefix(first).localeCompare(
+                    participantStablePrefix(second),
+                    undefined,
+                    { numeric: true }
+                );
+        });
     }
 
     function participantThemeRecords(participant) {
@@ -1365,8 +1475,382 @@
         renderHierarchyView();
     }
 
+    function groupingDisplay(value) {
+        return value === null || value === undefined || value === ""
+            ? ""
+            : value;
+    }
+
+    function themeWorkbookRows(participants) {
+        const mainRows = participants.map(participant => [
+            participantStablePrefix(participant),
+            ...metadataValues(participant),
+            ...Array.from(
+                { length: PARTICIPANT_THEME_SLOT_COUNT },
+                (_, themeIndex) => participantThemeRecords(participant)[themeIndex]
+                    ?.label || ""
+            )
+        ]);
+        let order = 0;
+        const detailRows = participants.flatMap(participant =>
+            participantThemeRecords(participant).map((theme, themeIndex) => {
+                order += 1;
+                const grouping = workbookGroupingItem(
+                    "themes",
+                    stableThemeId(participant, themeIndex)
+                );
+                return [
+                    stableThemeId(participant, themeIndex),
+                    participantStablePrefix(participant),
+                    theme.identifier,
+                    theme.label,
+                    groupingDisplay(grouping?.group),
+                    groupingDisplay(grouping?.groupOrder),
+                    groupingDisplay(grouping?.itemOrder || order),
+                    groupingDisplay(grouping?.note)
+                ];
+            })
+        );
+        return { mainRows, detailRows };
+    }
+
+    function codeWorkbookRows(participants) {
+        const mainRows = participants.map(participant => {
+            const theme = participantThemeRecords(participant)[
+                selectedThemeSlotIndex
+            ];
+            const themeGrouping = workbookGroupingItem(
+                "themes",
+                stableThemeId(participant, selectedThemeSlotIndex)
+            );
+            return [
+                participantStablePrefix(participant),
+                participantThemeSlotIdentifier(selectedThemeSlotIndex),
+                theme?.label || "",
+                groupingDisplay(themeGrouping?.group),
+                groupingDisplay(themeGrouping?.groupOrder),
+                ...Array.from(
+                    { length: PARTICIPANT_CODE_SLOT_COUNT },
+                    (_, codeIndex) => participantCodeRecords(
+                        participant,
+                        selectedThemeSlotIndex
+                    )[codeIndex]?.label || ""
+                )
+            ];
+        });
+        let order = 0;
+        const detailRows = participants.flatMap(participant =>
+            participantThemeRecords(participant).flatMap((theme, themeIndex) => {
+                const themeGrouping = workbookGroupingItem(
+                    "themes",
+                    stableThemeId(participant, themeIndex)
+                );
+                return participantCodeRecords(participant, themeIndex)
+                    .map((code, codeIndex) => {
+                        order += 1;
+                        const grouping = workbookGroupingItem(
+                            "codes",
+                            stableCodeId(participant, themeIndex, codeIndex)
+                        );
+                        return [
+                            stableCodeId(participant, themeIndex, codeIndex),
+                            participantStablePrefix(participant),
+                            theme.identifier,
+                            theme.label,
+                            code.identifier,
+                            code.label,
+                            groupingDisplay(themeGrouping?.group),
+                            groupingDisplay(themeGrouping?.groupOrder),
+                            groupingDisplay(grouping?.group),
+                            groupingDisplay(grouping?.groupOrder),
+                            groupingDisplay(grouping?.itemOrder || order),
+                            groupingDisplay(grouping?.note)
+                        ];
+                    });
+            })
+        );
+        return { mainRows, detailRows };
+    }
+
+    function keywordWorkbookRows(participants) {
+        const mainRows = participants.map(participant => {
+            const code = participantCodeRecords(
+                participant,
+                selectedThemeSlotIndex
+            )[selectedCodeSlotIndex];
+            const codeGrouping = workbookGroupingItem(
+                "codes",
+                stableCodeId(
+                    participant,
+                    selectedThemeSlotIndex,
+                    selectedCodeSlotIndex
+                )
+            );
+            return [
+                participantStablePrefix(participant),
+                participantCodeSlotIdentifier(
+                    selectedThemeSlotIndex,
+                    selectedCodeSlotIndex
+                ),
+                code?.label || "",
+                groupingDisplay(codeGrouping?.group),
+                groupingDisplay(codeGrouping?.groupOrder),
+                ...Array.from(
+                    { length: PARTICIPANT_KEYWORD_SLOT_COUNT },
+                    (_, keywordIndex) => participantKeywordRecords(
+                        participant,
+                        selectedThemeSlotIndex,
+                        selectedCodeSlotIndex
+                    )[keywordIndex]?.label || ""
+                )
+            ];
+        });
+        let order = 0;
+        const detailRows = participants.flatMap(participant =>
+            participantThemeRecords(participant).flatMap((_, themeIndex) =>
+                participantCodeRecords(participant, themeIndex)
+                    .flatMap((code, codeIndex) => {
+                        const codeGrouping = workbookGroupingItem(
+                            "codes",
+                            stableCodeId(participant, themeIndex, codeIndex)
+                        );
+                        return participantKeywordRecords(
+                            participant,
+                            themeIndex,
+                            codeIndex
+                        ).map((keyword, keywordIndex) => {
+                            order += 1;
+                            const grouping = workbookGroupingItem(
+                                "keywords",
+                                stableKeywordId(
+                                    participant,
+                                    themeIndex,
+                                    codeIndex,
+                                    keywordIndex
+                                )
+                            );
+                            return [
+                                stableKeywordId(
+                                    participant,
+                                    themeIndex,
+                                    codeIndex,
+                                    keywordIndex
+                                ),
+                                participantStablePrefix(participant),
+                                participantThemeSlotIdentifier(themeIndex),
+                                code.identifier,
+                                code.label,
+                                keyword.identifier,
+                                keyword.label,
+                                groupingDisplay(codeGrouping?.group),
+                                groupingDisplay(codeGrouping?.groupOrder),
+                                groupingDisplay(grouping?.group),
+                                groupingDisplay(grouping?.groupOrder),
+                                groupingDisplay(grouping?.itemOrder || order),
+                                groupingDisplay(grouping?.note)
+                            ];
+                        });
+                    })
+            )
+        );
+        return { mainRows, detailRows };
+    }
+
+    function workbookSnapshot(stage) {
+        const participants = orderedParticipants(
+            stage,
+            selectedThemeSlotIndex,
+            selectedCodeSlotIndex
+        );
+        const rows = stage === "themes"
+            ? themeWorkbookRows(participants)
+            : stage === "codes"
+                ? codeWorkbookRows(participants)
+                : keywordWorkbookRows(participants);
+        const mainHeaders = stage === "themes"
+            ? [
+                "Participant code",
+                ...participantMetadataHeadings,
+                ...Array.from(
+                    { length: PARTICIPANT_THEME_SLOT_COUNT },
+                    (_, index) => participantThemeSlotIdentifier(index)
+                )
+            ]
+            : stage === "codes"
+                ? [
+                    "Participant code",
+                    "Theme position",
+                    "Theme content",
+                    "Researcher theme group",
+                    "Theme group order",
+                    ...Array.from(
+                        { length: PARTICIPANT_CODE_SLOT_COUNT },
+                        (_, index) => participantCodeSlotIdentifier(
+                            selectedThemeSlotIndex,
+                            index
+                        )
+                    )
+                ]
+                : [
+                    "Participant code",
+                    "Code position",
+                    "Code content",
+                    "Researcher code group",
+                    "Code group order",
+                    ...Array.from(
+                        { length: PARTICIPANT_KEYWORD_SLOT_COUNT },
+                        (_, index) => participantKeywordSlotIdentifier(
+                            selectedThemeSlotIndex,
+                            selectedCodeSlotIndex,
+                            index
+                        )
+                    )
+                ];
+        return {
+            stage,
+            runId: workspace.run?.id || null,
+            selection: {
+                themePosition: participantThemeSlotIdentifier(
+                    selectedThemeSlotIndex
+                ),
+                codePosition: participantCodeSlotIdentifier(
+                    selectedThemeSlotIndex,
+                    selectedCodeSlotIndex
+                )
+            },
+            mainHeaders,
+            mainRows: rows.mainRows,
+            detailHeaders: workbookDetailHeaders[stage],
+            detailRows: rows.detailRows
+        };
+    }
+
+    async function downloadWorkbook(stage) {
+        setStatus("Preparing the Excel workbook…");
+        try {
+            const response = await fetch("/api/analysis-workbook", {
+                method: "POST",
+                headers: {
+                    Authorization: `Bearer ${researcherToken()}`,
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    action: "export",
+                    snapshot: workbookSnapshot(stage)
+                })
+            });
+            if (!response.ok) {
+                const data = await response.json().catch(() => ({}));
+                throw new Error(data.error || "The workbook could not be downloaded.");
+            }
+            const blob = await response.blob();
+            const disposition = response.headers.get("Content-Disposition") || "";
+            const filename = disposition.match(/filename="([^"]+)"/)?.[1]
+                || `PLI-${stage}.xlsx`;
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            URL.revokeObjectURL(link.href);
+            setStatus("Excel workbook downloaded. Edit the grouping sheet, then upload it here.");
+        } catch (error) {
+            setStatus(error.message, true);
+        }
+    }
+
+    function fileAsBase64(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.addEventListener("load", () => resolve(
+                String(reader.result).split(",")[1] || ""
+            ));
+            reader.addEventListener("error", () => reject(
+                new Error("The selected workbook could not be read.")
+            ));
+            reader.readAsDataURL(file);
+        });
+    }
+
+    async function uploadWorkbook(stage, file) {
+        if (!file) {
+            return;
+        }
+        if (!file.name.toLowerCase().endsWith(".xlsx")) {
+            setStatus("Please upload the .xlsx file downloaded from this dashboard.", true);
+            return;
+        }
+        if (file.size > 3_500_000) {
+            setStatus("The workbook must be smaller than 3.5 MB.", true);
+            return;
+        }
+        setStatus("Uploading and checking the researcher grouping…");
+        try {
+            const result = await authorizedRequest("/api/analysis-workbook", {
+                method: "POST",
+                body: JSON.stringify({
+                    action: "import",
+                    stage,
+                    runId: workspace.run?.id || null,
+                    filename: file.name,
+                    fileBase64: await fileAsBase64(file)
+                })
+            });
+            activeAnalysisView = stage === "themes"
+                ? "codes"
+                : stage === "codes"
+                    ? "keywords"
+                    : "keywords";
+            await loadStoredAnalysis(workspace.run?.id || null);
+            setStatus(result.duplicate
+                ? "This workbook was already uploaded. Its researcher decision layer remains active."
+                : "Researcher grouping uploaded and applied to the next worksheet. The original AI analysis was preserved."
+            );
+        } catch (error) {
+            setStatus(error.message, true);
+        }
+    }
+
+    function renderWorkbookControls(container, stage) {
+        const controls = document.createElement("div");
+        controls.className = "analysisWorkbookControls";
+        const download = actionButton(
+            "Download for Excel",
+            () => downloadWorkbook(stage)
+        );
+        download.disabled = !workspace.run;
+        const input = document.createElement("input");
+        input.type = "file";
+        input.accept = ".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+        input.hidden = true;
+        input.addEventListener("change", () => {
+            uploadWorkbook(stage, input.files?.[0]);
+            input.value = "";
+        });
+        const upload = actionButton(
+            stage === "themes"
+                ? "Upload grouping to Worksheet 2"
+                : stage === "codes"
+                    ? "Upload grouping to Worksheet 3"
+                    : "Upload revised keyword grouping",
+            () => input.click()
+        );
+        upload.disabled = !workspace.run;
+        const status = document.createElement("span");
+        status.className = "analysisWorkbookStatus";
+        const latest = latestWorkbookImport(stage);
+        status.textContent = latest
+            ? `Latest researcher upload: ${latest.source_filename} · ${new Date(latest.imported_at).toLocaleString()}`
+            : workspace.run
+                ? "No researcher workbook uploaded for this stage yet."
+                : "Generate or select an analysis run to use Excel round-trip.";
+        controls.append(download, upload, input, status);
+        container.appendChild(controls);
+    }
+
     function renderThemeWorksheet(container) {
-        const participants = participantRecords();
+        const participants = orderedParticipants("themes");
         const table = worksheetTable("themeWorksheet");
         const head = document.createElement("thead");
         const headingRow = document.createElement("tr");
@@ -1461,7 +1945,10 @@
     }
 
     function renderCodeWorksheet(container) {
-        const participants = participantRecords();
+        const participants = orderedParticipants(
+            "codes",
+            selectedThemeSlotIndex
+        );
         const controls = document.createElement("div");
         controls.className = "analysisSlotControls";
         controls.appendChild(slotSelector(
@@ -1482,6 +1969,8 @@
         const head = document.createElement("thead");
         const headingRow = document.createElement("tr");
         appendHeader(headingRow, "Participant code");
+        appendHeader(headingRow, "Researcher theme group");
+        appendHeader(headingRow, "Group order");
         Array.from({ length: PARTICIPANT_CODE_SLOT_COUNT }).forEach(
             (_, codeSlotIndex) => appendHeader(
                 headingRow,
@@ -1500,6 +1989,20 @@
             appendRowHeading(
                 row,
                 participant.participantCode || "Uncoded participant"
+            );
+            const themeGrouping = workbookGroupingItem(
+                "themes",
+                stableThemeId(participant, selectedThemeSlotIndex)
+            );
+            appendCell(row, themeGrouping?.group || "—", themeGrouping?.group
+                ? "analysisGroupingCell"
+                : "analysisEmptyCell");
+            appendCell(
+                row,
+                themeGrouping?.groupOrder ? String(themeGrouping.groupOrder) : "—",
+                themeGrouping?.groupOrder
+                    ? "analysisGroupingCell"
+                    : "analysisEmptyCell"
             );
             const participantCodes = participantCodeRecords(
                 participant,
@@ -1523,7 +2026,7 @@
         if (!participants.length) {
             appendEmptyRow(
                 body,
-                1 + PARTICIPANT_CODE_SLOT_COUNT,
+                3 + PARTICIPANT_CODE_SLOT_COUNT,
                 "No interview participants are available in this corpus scope."
             );
         }
@@ -1532,7 +2035,11 @@
     }
 
     function renderKeywordWorksheet(container) {
-        const participants = participantRecords();
+        const participants = orderedParticipants(
+            "keywords",
+            selectedThemeSlotIndex,
+            selectedCodeSlotIndex
+        );
         const controls = document.createElement("div");
         controls.className = "analysisSlotControls";
         controls.append(
@@ -1569,6 +2076,8 @@
         const head = document.createElement("thead");
         const headingRow = document.createElement("tr");
         appendHeader(headingRow, "Participant code");
+        appendHeader(headingRow, "Researcher code group");
+        appendHeader(headingRow, "Group order");
         Array.from({ length: PARTICIPANT_KEYWORD_SLOT_COUNT }).forEach(
             (_, keywordSlotIndex) => appendHeader(
                 headingRow,
@@ -1588,6 +2097,24 @@
             appendRowHeading(
                 row,
                 participant.participantCode || "Uncoded participant"
+            );
+            const codeGrouping = workbookGroupingItem(
+                "codes",
+                stableCodeId(
+                    participant,
+                    selectedThemeSlotIndex,
+                    selectedCodeSlotIndex
+                )
+            );
+            appendCell(row, codeGrouping?.group || "—", codeGrouping?.group
+                ? "analysisGroupingCell"
+                : "analysisEmptyCell");
+            appendCell(
+                row,
+                codeGrouping?.groupOrder ? String(codeGrouping.groupOrder) : "—",
+                codeGrouping?.groupOrder
+                    ? "analysisGroupingCell"
+                    : "analysisEmptyCell"
             );
             const participantKeywords = participantKeywordRecords(
                 participant,
@@ -1612,7 +2139,7 @@
         if (!participants.length) {
             appendEmptyRow(
                 body,
-                1 + PARTICIPANT_KEYWORD_SLOT_COUNT,
+                3 + PARTICIPANT_KEYWORD_SLOT_COUNT,
                 "No interview participants are available in this corpus scope."
             );
         }
@@ -1641,6 +2168,7 @@
             breadcrumb.textContent = "Worksheet 1 · Participants & Themes";
             description.textContent =
                 "One row per participant. T1–T8 are participant-specific positions: each cell contains that participant’s own theme, and themes in the same column are not assumed to have the same meaning. This is the only worksheet with a direct link to the complete transcript.";
+            renderWorkbookControls(container, "themes");
             renderThemeWorksheet(container);
             renderDiscussionPanel(item);
             return;
@@ -1650,6 +2178,7 @@
             breadcrumb.textContent = "Worksheet 2 · Codes & Themes";
             description.textContent =
                 "Choose a participant-specific theme position. Tn-C1–Tn-C10 are positional headers only; each cell contains that participant’s own code wording, and matching columns do not imply matching meaning.";
+            renderWorkbookControls(container, "codes");
             renderCodeWorksheet(container);
             renderDiscussionPanel(item);
             return;
@@ -1658,6 +2187,7 @@
         breadcrumb.textContent = "Worksheet 3 · Keywords & Codes";
         description.textContent =
             "Choose participant-specific theme and code positions. Tn-Cn-K1–Tn-Cn-K10 are positional headers only; each cell contains that participant’s own keyword wording.";
+        renderWorkbookControls(container, "keywords");
         renderKeywordWorksheet(container);
         renderDiscussionPanel(item);
     }
@@ -1818,8 +2348,15 @@
         if (!container || !context) {
             return;
         }
+        const activeImport = latestWorkbookImport(
+            activeAnalysisView === "themes"
+                ? "themes"
+                : activeAnalysisView === "codes"
+                    ? "themes"
+                    : "codes"
+        );
         context.textContent = item
-            ? `Current focus: ${themeIdentifier(item)} · ${workingTheme(item)}${selectedCode ? ` → ${codeIdentifier(item, selectedCode)} · ${selectedCode}` : ""}`
+            ? `Current focus: ${themeIdentifier(item)} · ${workingTheme(item)}${selectedCode ? ` → ${codeIdentifier(item, selectedCode)} · ${selectedCode}` : ""}${activeImport ? ` · Researcher grouping: ${activeImport.source_filename}` : ""}`
             : "No analytical item is selected.";
         const messages = currentDiscussionMessages(item);
         if (!messages.length) {
