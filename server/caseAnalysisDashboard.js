@@ -276,6 +276,7 @@ export async function handleCaseAnalysisDashboard(req, res) {
             const sharedCase = {
                 caseNumber: job.case_number,
                 status: job.status,
+                hasReport: Boolean(report),
                 sourceCompletedAt: job.source_completed_at,
                 attemptCount: job.attempt_count,
                 lastError: job.status === "failed" ? job.last_error : null,

@@ -90,7 +90,8 @@
         const requestedCase = new URLSearchParams(window.location.search).get("case");
         if (!requestedCase) return;
         const caseRecord = payload.cases.find(item =>
-            item.caseNumber === requestedCase && item.status === "completed"
+            item.caseNumber === requestedCase
+            && item.transcriptIdentity?.sessionId
         );
         if (!caseRecord) return;
         requestedTranscriptOpened = true;
@@ -142,44 +143,32 @@
         const button = document.createElement("button");
         button.type = "button";
         button.className = "worksheetTranscriptButton";
-        button.textContent = caseRecord.status === "completed"
+        button.textContent = caseRecord.hasReport
             ? "Open case report"
             : caseRecord.status === "processing"
                 ? "Analysing"
                 : caseRecord.status === "failed"
                     ? "Needs attention"
                     : "Waiting";
-        button.disabled = caseRecord.status !== "completed";
+        button.disabled = !caseRecord.hasReport;
         button.addEventListener("click", () => openCaseReport(caseRecord));
         return button;
     }
 
     function casesForCaseAndKeywordForm() {
         return [...payload.cases].sort((left, right) => {
-            const leftCompleted = left.status === "completed";
-            const rightCompleted = right.status === "completed";
+            const leftCompleted = left.hasReport;
+            const rightCompleted = right.hasReport;
 
             if (leftCompleted !== rightCompleted) {
                 return leftCompleted ? -1 : 1;
             }
 
-            if (leftCompleted) {
-                return new Date(
-                    right.analysisCompletedAt || right.sourceCompletedAt || 0
-                ) - new Date(
-                    left.analysisCompletedAt || left.sourceCompletedAt || 0
-                );
-            }
-
-            if (left.status === "processing" && right.status !== "processing") {
-                return -1;
-            }
-            if (right.status === "processing" && left.status !== "processing") {
-                return 1;
-            }
-
-            return new Date(left.sourceCompletedAt || 0)
-                - new Date(right.sourceCompletedAt || 0);
+            return String(left.caseNumber).localeCompare(
+                String(right.caseNumber),
+                undefined,
+                { numeric: true }
+            );
         });
     }
 
@@ -215,7 +204,9 @@
     }
 
     function renderMatrix(kind) {
-        const completed = payload.cases.filter(item => item.status === "completed");
+        const completed = casesForCaseAndKeywordForm().filter(
+            item => item.hasReport
+        );
         const recordsKey = kind === "codes" ? "codes" : "themes";
         const prefix = kind === "codes" ? "C" : "T";
         const numberKey = kind === "codes" ? "code_number" : "theme_number";
@@ -313,17 +304,19 @@
 
     function render() {
         const counts = payload.counts || {};
-        const completedCases = payload.cases.filter(
-            caseRecord => caseRecord.status === "completed"
+        const completedCases = casesForCaseAndKeywordForm().filter(
+            caseRecord => caseRecord.hasReport
         );
         const casesWithMarkedKeywords = completedCases.filter(
             caseRecord => (caseRecord.highlights || []).length > 0
         ).length;
-        ["pending", "processing", "completed", "failed"].forEach(key => {
+        ["pending", "processing", "failed"].forEach(key => {
             document.getElementById(
                 `automaticAnalysis${key[0].toUpperCase()}${key.slice(1)}Count`
             ).textContent = counts[key] || 0;
         });
+        document.getElementById("automaticAnalysisCompletedCount").textContent =
+            completedCases.length;
 
         if (activeView === "archive") {
             renderArchive();
@@ -342,7 +335,7 @@
             });
         document.getElementById("automaticAnalysisDescription").textContent =
             activeView === "cases"
-                ? `Form 1: ${completedCases.length} completed case reports are shown first, newest first, so this table visibly advances with the counter. ${casesWithMarkedKeywords} completed cases currently have marked keywords. All other active transcripts remain available below them while their reports wait or process.`
+                ? `Form 1: ${completedCases.length} available case reports are shown first in permanent participant-code order, matching Forms 2 and 3. ${casesWithMarkedKeywords} reports currently have marked keywords. Transcripts awaiting their first report remain available below them in the same stable order.`
                 : activeView === "codes"
                     ? "Form 2: each case starts at C1. Headers are positional only; participant-specific code content stays inside cells."
                     : activeView === "themes"
@@ -396,7 +389,8 @@
             legend.appendChild(item);
         });
         const messages = document.getElementById("automaticTranscriptMessages");
-        messages.textContent = "Loading transcript…";
+        messages.textContent =
+            "Loading the full transcript and completing any missing English translations…";
         dialog.showModal();
 
         try {
@@ -435,7 +429,10 @@
                 article.className = "message";
                 const paragraph = document.createElement("p");
                 const speaker = document.createElement("strong");
-                speaker.textContent = `${message.Speaker}: `;
+                const messageLanguage = String(message.Language || "").toLowerCase();
+                speaker.textContent = messageLanguage === "en"
+                    ? `${message.Speaker} · English original: `
+                    : `${message.Speaker} · Original (${messageLanguage || "language not recorded"}): `;
                 paragraph.appendChild(speaker);
                 paragraph.appendChild(highlightedText(message, caseRecord));
                 article.appendChild(paragraph);
@@ -445,6 +442,11 @@
                     translation.className = "englishTranslation";
                     translation.textContent = `English translation: ${message.EnglishTranslation}`;
                     article.appendChild(translation);
+                } else if (message.TranslationState === "translation_unavailable") {
+                    const unavailable = document.createElement("p");
+                    unavailable.className = "errorMessage";
+                    unavailable.textContent = "English translation unavailable.";
+                    article.appendChild(unavailable);
                 }
 
                 messages.appendChild(article);
@@ -556,7 +558,9 @@
     }
 
     function downloadCurrentForm() {
-        const completed = payload.cases.filter(item => item.status === "completed");
+        const completed = casesForCaseAndKeywordForm().filter(
+            item => item.hasReport
+        );
         let rows;
 
         if (activeView === "archive") {
@@ -587,7 +591,7 @@
                     ...FORM_ONE_DEMOGRAPHIC_COLUMNS.map(([key]) =>
                         demographicValue(item, key)
                     ),
-                    item.status === "completed" ? "Available" : item.status
+                    item.hasReport ? "Available" : item.status
                 ])];
         } else {
             const recordsKey = activeView;
@@ -675,7 +679,7 @@
         setStatus(
             requestedScope === "archived"
                 ? `${cases.length} archived cases.`
-                : `${firstPage.counts.completed || 0} complete active case reports. The queue always processes the earliest completed transcript first.`
+                : `${cases.filter(item => item.hasReport).length} active case reports are available. The queue always processes the earliest completed transcript first.`
         );
     }
 

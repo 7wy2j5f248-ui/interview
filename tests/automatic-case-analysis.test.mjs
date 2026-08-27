@@ -226,6 +226,10 @@ test("researcher dashboard uses cases, positional codes, and positional themes",
         new URL("../researcher-automatic-analysis.js", import.meta.url),
         "utf8"
     );
+    const dashboard = await readFile(
+        new URL("../server/caseAnalysisDashboard.js", import.meta.url),
+        "utf8"
+    );
 
     assert.match(html, /1 · Cases &amp; keywords/);
     assert.match(html, /2 · Codes/);
@@ -261,8 +265,10 @@ test("researcher dashboard uses cases, positional codes, and positional themes",
     assert.match(script, /action: shouldArchive \? "archive" : "restore"/);
     assert.match(script, /function casesForCaseAndKeywordForm/);
     assert.match(script, /leftCompleted \? -1 : 1/);
-    assert.match(script, /analysisCompletedAt/);
-    assert.match(script, /completed case reports are shown first, newest first/);
+    assert.match(script, /caseNumber\)\.localeCompare/);
+    assert.match(script, /permanent participant-code order/);
+    assert.match(script, /caseRecord\.hasReport/);
+    assert.match(dashboard, /hasReport: Boolean\(report\)/);
     assert.doesNotMatch(script, /"Demographic data",\s*"Case report"/);
 });
 
@@ -398,6 +404,16 @@ test("atomic replacement grants only its two lineage columns", async () => {
     assert.doesNotMatch(migration, /to anon|to authenticated/);
 });
 
+test("new automatic reports use English while preserving original keyword evidence", async () => {
+    const core = await readFile(
+        new URL("../server/analysisCore.js", import.meta.url),
+        "utf8"
+    );
+
+    assert.match(core, /entire analytical report must be written in English/);
+    assert.match(core, /exact_text keyword evidence remains verbatim/);
+});
+
 test("automatic dashboard exposes every transcript independently of analysis completion", async () => {
     const dashboard = await readFile(
         new URL("../server/caseAnalysisDashboard.js", import.meta.url),
@@ -445,8 +461,8 @@ test("Cases and keywords loads every case and every stored highlight", async () 
     assert.match(script, /async function fetchDashboardPage/);
     assert.match(script, /const remainingPages = await Promise\.all/);
     assert.match(script, /casesWithMarkedKeywords/);
-    assert.match(script, /completed cases currently have marked keywords/);
-    assert.match(html, /researcher-automatic-analysis\.js\?version=20260827-completed-first-v3/);
+    assert.match(script, /reports currently have marked keywords/);
+    assert.match(html, /researcher-automatic-analysis\.js\?version=20260827-stable-report-order-v4/);
     assert.match(html, /automaticAnalysisGateStatus/);
     assert.match(script, /cache: "no-store"/);
     assert.match(script, /searchParams\.set\("fresh"/);
