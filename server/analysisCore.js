@@ -969,7 +969,6 @@ export async function generateAutomaticCaseAnalysis(
     }
 
     if (!validated.complete
-        && validated.droppedCodes === 0
         && validated.codes.length
     ) {
         const themeResponse = await openaiClient.responses.create({
