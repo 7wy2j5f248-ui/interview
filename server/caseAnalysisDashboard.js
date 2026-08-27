@@ -6,10 +6,16 @@ const PAGE_SIZE = 100;
 const DATABASE_PAGE_SIZE = 1000;
 const DEMOGRAPHIC_FIELDS = Object.freeze([
     "current_country",
+    "current_region",
     "country_of_origin",
+    "diaspora_status",
     "gender",
     "age",
+    "birth_year",
+    "birth_cohort",
+    "youth_status",
     "education_level",
+    "social_identity",
     "additional_descriptors"
 ]);
 
@@ -167,7 +173,7 @@ export async function handleCaseAnalysisDashboard(req, res) {
                 requireData(
                     supabase
                         .from("participant_descriptors")
-                        .select("session_id, current_country, country_of_origin, gender, age, education_level, additional_descriptors")
+                        .select("session_id, current_country, current_region, country_of_origin, diaspora_status, gender, age, birth_year, birth_cohort, youth_status, education_level, social_identity, additional_descriptors")
                         .in("session_id", sessionIds),
                     "Case demographic details could not be loaded."
                 ),

@@ -163,6 +163,12 @@ test("researcher dashboard uses cases, positional codes, and positional themes",
         script,
         /\["current_country", "Country of residence"\][\s\S]*\["country_of_origin", "Country of origin"\][\s\S]*\["gender", "Gender"\][\s\S]*\["age", "Age"\][\s\S]*\["occupation", "Occupation"\][\s\S]*\["education_level", "Education"\]/
     );
+    assert.match(script, /\["current_region", "Region of residence"\]/);
+    assert.match(script, /\["diaspora_status", "Diaspora status"\]/);
+    assert.match(script, /\["birth_year", "Year of birth"\]/);
+    assert.match(script, /\["birth_cohort", "Birth cohort"\]/);
+    assert.match(script, /\["youth_status", "Youth status"\]/);
+    assert.match(script, /\["social_identity", "Social identity"\]/);
     assert.match(
         script,
         /"Participant code",\s*"Link to transcript",\s*"Language",\s*\.\.\.FORM_ONE_DEMOGRAPHIC_COLUMNS/
@@ -257,11 +263,30 @@ test("Cases and keywords loads every case and every stored highlight", async () 
     assert.match(dashboard, /DATABASE_PAGE_SIZE = 1000/);
     assert.match(
         dashboard,
+        /current_country, current_region, country_of_origin, diaspora_status, gender, age, birth_year, birth_cohort, youth_status, education_level, social_identity, additional_descriptors/
+    );
+    assert.match(
+        dashboard,
         /qualitative_case_keyword_highlights[\s\S]*\.order\("report_id"[\s\S]*\.order\("keyword_number"/
     );
     assert.match(script, /async function fetchDashboardPage/);
     assert.match(script, /for \(let page = 2; page <= pageCount; page \+= 1\)/);
     assert.match(script, /casesWithMarkedKeywords/);
     assert.match(script, /completed cases currently have marked keywords/);
-    assert.match(html, /researcher-automatic-analysis\.js\?version=20260827-keyword-refresh/);
+    assert.match(html, /researcher-automatic-analysis\.js\?version=20260827-demographics-live/);
+});
+
+test("researcher analysis assets cannot be held on a stale cached version", async () => {
+    const config = JSON.parse(await readFile(
+        new URL("../vercel.json", import.meta.url),
+        "utf8"
+    ));
+    const bySource = new Map(config.headers.map(rule => [rule.source, rule.headers]));
+
+    ["/researcher.html", "/researcher-automatic-analysis.js"].forEach(source => {
+        const cacheHeader = bySource.get(source)?.find(
+            header => header.key.toLowerCase() === "cache-control"
+        );
+        assert.match(cacheHeader?.value || "", /no-store/);
+    });
 });

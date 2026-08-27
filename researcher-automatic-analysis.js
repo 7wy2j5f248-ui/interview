@@ -4,11 +4,17 @@
     const TOKEN_STORAGE_KEY = "researcherDashboardToken";
     const FORM_ONE_DEMOGRAPHIC_COLUMNS = Object.freeze([
         ["current_country", "Country of residence"],
+        ["current_region", "Region of residence"],
         ["country_of_origin", "Country of origin"],
+        ["diaspora_status", "Diaspora status"],
         ["gender", "Gender"],
         ["age", "Age"],
+        ["birth_year", "Year of birth"],
+        ["birth_cohort", "Birth cohort"],
+        ["youth_status", "Youth status"],
         ["occupation", "Occupation"],
-        ["education_level", "Education"]
+        ["education_level", "Education"],
+        ["social_identity", "Social identity"]
     ]);
     let payload = { counts: {}, cases: [] };
     let activeView = "cases";
