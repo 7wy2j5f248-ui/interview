@@ -5,6 +5,7 @@ import {
     buildAnalysisBatches,
     discussAnalysisWithResearcher,
     generateSuggestionsForBatch,
+    isShortThemeSubject,
     validateSuggestedItems,
     workingAnalysisFields
 } from "../server/analysisCore.js";
@@ -47,7 +48,7 @@ const messages = [
 function completeSuggestion() {
     return {
         items: [{
-            theme: "Work and technology disrupt rest",
+            theme: "Sleep",
             codes: ["Work pressure", "Phone checking"],
             coded_phrases: [
                 {
@@ -114,6 +115,20 @@ test("every stored AI suggestion component has exact message provenance", () => 
     });
 });
 
+test("themes are one- or two-word subject headings rather than findings", () => {
+    assert.equal(isShortThemeSubject("Work"), true);
+    assert.equal(isShortThemeSubject("Sleep"), true);
+    assert.equal(isShortThemeSubject("Work disrupts rest"), false);
+    assert.equal(isShortThemeSubject("Sleep pressure."), false);
+
+    const suggestion = completeSuggestion();
+    suggestion.items[0].theme = "Work pressure affects sleep";
+    const result = validateSuggestedItems(suggestion, messages);
+
+    assert.equal(result.items.length, 0);
+    assert.equal(result.skippedItems, 1);
+});
+
 test("untraceable components and non-verbatim coded phrases are not persisted", () => {
     const suggestion = completeSuggestion();
     suggestion.items[0].codes.push("No source code");
@@ -178,7 +193,7 @@ test("AI discussion returns an explicit code-to-keyword revision proposal", asyn
                         reply: "The three keywords support one schedule-related code.",
                         proposal: {
                             should_apply: true,
-                            theme: "Work disrupts rest",
+                            theme: "Work",
                             codes: ["Irregular schedules"],
                             keywords: [
                                 "night shift",
@@ -203,7 +218,7 @@ test("AI discussion returns an explicit code-to-keyword revision proposal", asyn
     const result = await discussAnalysisWithResearcher(
         openaiClient,
         {
-            theme: "Work disrupts rest",
+            theme: "Work",
             codes: ["Irregular schedules"],
             keywords: ["night shift", "rotating schedule", "overtime"],
             evidence: [{ messageId: "message-1", participantId: "participant-1" }]
@@ -212,11 +227,53 @@ test("AI discussion returns an explicit code-to-keyword revision proposal", asyn
     );
 
     assert.equal(request.store, false);
+    assert.match(
+        request.input[0].content,
+        /under 'Work'.*'Long hours'.*'Overtime'/
+    );
     assert.equal(result.proposal.shouldApply, true);
     assert.deepEqual(result.proposal.codeKeywordGroups, [{
         code: "Irregular schedules",
         keywords: ["night shift", "rotating schedule", "overtime"]
     }]);
+});
+
+test("AI discussion cannot apply a sentence-style theme proposal", async () => {
+    const openaiClient = {
+        responses: {
+            async create() {
+                return {
+                    output_text: JSON.stringify({
+                        reply: "The codes remain useful, but the theme is too specific.",
+                        proposal: {
+                            should_apply: true,
+                            theme: "Work pressure disrupts sleep",
+                            codes: ["Irregular schedules"],
+                            keywords: ["night shift"],
+                            code_keyword_groups: [{
+                                code: "Irregular schedules",
+                                keywords: ["night shift"]
+                            }],
+                            rationale: "The participant links work timing to sleep."
+                        }
+                    })
+                };
+            }
+        }
+    };
+    const result = await discussAnalysisWithResearcher(
+        openaiClient,
+        {
+            theme: "Work",
+            codes: ["Irregular schedules"],
+            keywords: ["night shift"],
+            evidence: [{ messageId: "message-1" }]
+        },
+        [{ role: "researcher", content: "Please revise this theme." }]
+    );
+
+    assert.equal(result.proposal.shouldApply, false);
+    assert.equal(result.proposal.theme, "Work");
 });
 
 test("researcher revisions preserve coded phrases through confirmation inputs", () => {

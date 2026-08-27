@@ -53,6 +53,10 @@ test("theme workbook keeps content in cells and stable positional headers", asyn
     );
     assert.equal(main.getCell("C2").value, "Stable routine");
     assert.equal(main.getCell("D2").value, "Night waking");
+    assert.match(
+        workbook.getWorksheet("Read me").getCell("B8").value,
+        /broadest one- or two-word concept/
+    );
     assert.equal(workbook.getWorksheet("PLI Metadata").state, "veryHidden");
 });
 

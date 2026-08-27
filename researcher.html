@@ -679,6 +679,10 @@
         Worksheet 3 maps keyword expressions to codes. Each stage can be
         downloaded to Excel, rearranged and grouped by the researcher, then
         uploaded as a traceable decision layer for the next worksheet.
+        Themes are the broadest concepts, preferably one word, such as Work.
+        Differences such as Overtime or Long hours belong under concise codes;
+        fuller interpretations remain in the rationale or individual case
+        report.
     </p>
 
     <label>
@@ -808,8 +812,14 @@
             <summary>Create a researcher-originated analytical item</summary>
             <div class="fieldRow">
                 <label>
-                    Theme
-                    <input id="newResearcherTheme" type="text">
+                    Theme concept (1–2 words)
+                    <input
+                        id="newResearcherTheme"
+                        type="text"
+                        maxlength="60"
+                        placeholder="Work"
+                        title="Use the broadest concept, preferably one word."
+                    >
                 </label>
                 <label>
                     Codes (comma separated)

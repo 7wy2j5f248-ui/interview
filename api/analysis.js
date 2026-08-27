@@ -7,6 +7,7 @@ import {
     DEFAULT_ANALYSIS_BATCH_SIZE,
     discussAnalysisWithResearcher,
     generateSuggestionsForBatch,
+    isShortThemeSubject,
     prepareParticipantMessages,
     QUALITATIVE_ANALYSIS_MODEL,
     QUALITATIVE_ANALYSIS_VERSION,
@@ -65,6 +66,19 @@ function safeId(value, label) {
     }
 
     return value.trim();
+}
+
+function themeSubject(value) {
+    const theme = typeof value === "string" ? value.trim() : "";
+
+    if (!isShortThemeSubject(theme)) {
+        throw new AnalysisError(
+            400,
+            "Theme must be a broad one- or two-word concept, preferably one word, such as ‘Work’. Put differences such as ‘Overtime’ or ‘Long hours’ under codes."
+        );
+    }
+
+    return theme;
 }
 
 function analysisPeriod(start, end) {
@@ -1249,6 +1263,7 @@ async function generateAnalysis(
 async function saveFeedback(req, supabaseClient, now) {
     const itemId = safeId(req.body?.itemId, "Analysis item");
     const item = await loadItem(supabaseClient, itemId);
+    const theme = themeSubject(req.body?.theme);
 
     if (item.status === "archived") {
         throw new AnalysisError(409, "Archived analysis items cannot be edited.");
@@ -1257,9 +1272,7 @@ async function saveFeedback(req, supabaseClient, now) {
     const { error } = await supabaseClient
         .from(ANALYSIS_TABLES.items)
         .update({
-            researcher_theme: typeof req.body?.theme === "string"
-                ? req.body.theme.trim() || null
-                : null,
+            researcher_theme: theme,
             researcher_codes: commaSeparatedList(req.body?.codes),
             researcher_coded_phrases: commaSeparatedList(
                 req.body?.codedPhrases
@@ -1427,16 +1440,10 @@ async function discussAnalysis(req, supabaseClient, openaiClient) {
 async function createResearcherItem(req, supabaseClient, now) {
     const runId = safeId(req.body?.runId, "Analysis run");
     const run = await loadRun(supabaseClient, runId);
-    const theme = typeof req.body?.theme === "string"
-        ? req.body.theme.trim()
-        : "";
+    const theme = themeSubject(req.body?.theme);
 
     if (run.status === "archived") {
         throw new AnalysisError(409, "Archived analysis runs cannot be edited.");
-    }
-
-    if (!theme) {
-        throw new AnalysisError(400, "A researcher theme is required.");
     }
 
     const { error } = await supabaseClient

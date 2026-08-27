@@ -2,13 +2,27 @@ import { storedIdentifier } from "./corpus.js";
 import { DEFAULT_OPENAI_MODEL } from "./modelConfiguration.js";
 
 export const QUALITATIVE_ANALYSIS_MODEL = DEFAULT_OPENAI_MODEL;
-export const QUALITATIVE_ANALYSIS_VERSION = "task-014-v3-batch-traceability";
+export const QUALITATIVE_ANALYSIS_VERSION = "task-014-v4-short-theme-subjects";
 export const DEFAULT_ANALYSIS_BATCH_SIZE = 40;
+export const MAX_THEME_SUBJECT_WORDS = 2;
+export const MAX_THEME_SUBJECT_LENGTH = 60;
 
 function normalizedText(value) {
     return typeof value === "string" && value.trim()
         ? value.trim()
         : null;
+}
+
+export function isShortThemeSubject(value) {
+    const theme = normalizedText(value)?.replace(/\s+/gu, " ");
+
+    if (!theme || theme.length > MAX_THEME_SUBJECT_LENGTH) {
+        return false;
+    }
+
+    const words = theme.split(" ").filter(Boolean);
+    return words.length <= MAX_THEME_SUBJECT_WORDS
+        && !/[.!?;:]$/u.test(theme);
 }
 
 function normalizedList(value) {
@@ -349,7 +363,10 @@ export function validateSuggestedItems(value, availableMessages) {
             }
         });
 
-        if (!theme || !rationale || evidenceIds.length === 0) {
+        if (!isShortThemeSubject(theme)
+            || !rationale
+            || evidenceIds.length === 0
+        ) {
             skippedItems += 1;
             return;
         }
@@ -629,7 +646,7 @@ export async function generateSuggestionsForBatch(
         input: [
             {
                 role: "system",
-                content: "You are assisting a qualitative researcher. Analyse only the participant messages supplied. Return provisional themes, qualitative codes, exact verbatim coded phrases, keywords, exact supporting participant message IDs, explicit code-to-message attribution, explicit keyword-to-message attribution, and concise English rationales. Link every suggested component to the exact supporting messages. A coded phrase must appear verbatim in the original message or its supplied English translation. Never cite an ID that is not in the supplied evidence set. Do not invent or rewrite evidence."
+                content: "You are assisting a qualitative researcher. Analyse only the participant messages supplied. Return provisional themes, qualitative codes, exact verbatim coded phrases, keywords, exact supporting participant message IDs, explicit code-to-message attribution, explicit keyword-to-message attribution, and concise English rationales. A theme is the broadest abstract subject domain. It must be exactly one or two words, preferably one word, such as 'Work', 'Sleep', 'Family', or 'Health'. Do not include the participant's condition, experience, cause, effect, or position in the theme: for example, use the theme 'Work', then use concise codes such as 'Long hours', 'Overtime', 'Weekend work', or 'Overwork'. Codes must be short labels rather than sentences. Never write a theme as a statement, finding, cause-and-effect interpretation, or participant-specific claim. Put variations in participants' experiences under codes, and put the full analytical interpretation in the rationale. Link every suggested component to the exact supporting messages. A coded phrase must appear verbatim in the original message or its supplied English translation. Never cite an ID that is not in the supplied evidence set. Do not invent or rewrite evidence."
             },
             {
                 role: "user",
@@ -707,7 +724,7 @@ export async function discussAnalysisWithResearcher(
         input: [
             {
                 role: "system",
-                content: "You are an analytical collaborator for a qualitative researcher. Discuss the selected theme, code, and keywords using only the supplied stored transcript evidence. Treat keywords as the evidence bridge, codes as groupings of keywords, and themes as groupings of codes. Explicitly name the code when discussing its keywords. Distinguish the number of supporting participants from the number of passages. Researcher workbook layers are researcher-authored ordering and grouping decisions: follow them as analytical instructions, but do not present them as transcript evidence. Never invent a participant, quotation, keyword, code, theme, group, or factual claim. If the researcher requests a revision, return a complete proposed working theme, code list, keyword list, and explicit code-to-keyword groups. If no analytical revision is warranted, preserve the current values and set should_apply to false. Interface or layout feedback is not an analytical revision. Explain uncertainty and weak fit plainly."
+                content: "You are an analytical collaborator for a qualitative researcher. Discuss the selected theme, code, and keywords using only the supplied stored transcript evidence. Treat keywords as the evidence bridge, codes as groupings of keywords, and themes as groupings of codes. A theme is the broadest abstract subject domain. It must be exactly one or two words, preferably one word, such as 'Work', 'Sleep', 'Family', or 'Health'. Do not include a condition or experience in the theme: under 'Work', place differences such as 'Long hours', 'Overtime', 'Weekend work', or 'Overwork' in concise codes. Never write a theme or code as a sentence or finding; put the full interpretation in the rationale. Explicitly name the code when discussing its keywords. Distinguish the number of supporting participants from the number of passages. Researcher workbook layers are researcher-authored ordering and grouping decisions: follow them as analytical instructions, but do not present them as transcript evidence. Never invent a participant, quotation, keyword, code, theme, group, or factual claim. If the researcher requests a revision, return a complete proposed working theme, code list, keyword list, and explicit code-to-keyword groups. If no analytical revision is warranted, preserve the current values and set should_apply to false. Interface or layout feedback is not an analytical revision. Explain uncertainty and weak fit plainly."
             },
             {
                 role: "user",
@@ -726,9 +743,11 @@ export async function discussAnalysisWithResearcher(
         "AI qualitative-analysis discussion"
     );
     const reply = normalizedText(value?.reply);
-    const proposedTheme = normalizedText(value?.proposal?.theme)
-        || normalizedText(analysisContext?.theme)
-        || "";
+    const requestedTheme = normalizedText(value?.proposal?.theme);
+    const proposedThemeIsValid = isShortThemeSubject(requestedTheme);
+    const proposedTheme = proposedThemeIsValid
+        ? requestedTheme
+        : normalizedText(analysisContext?.theme) || "";
     const proposedCodes = normalizedList(value?.proposal?.codes);
     const proposedKeywords = normalizedList(value?.proposal?.keywords);
     const allowedCodes = new Map(proposedCodes.map(code => [
@@ -755,7 +774,8 @@ export async function discussAnalysisWithResearcher(
     return {
         reply,
         proposal: {
-            shouldApply: value?.proposal?.should_apply === true,
+            shouldApply: value?.proposal?.should_apply === true
+                && proposedThemeIsValid,
             theme: proposedTheme,
             codes: proposedCodes,
             keywords: proposedKeywords,

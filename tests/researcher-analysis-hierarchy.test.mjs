@@ -66,6 +66,9 @@ test("Worksheet 1 uses fixed participant-specific T1 to T8 slots", () => {
         script,
         /T1–T8 are participant-specific positions/
     );
+    assert.match(script, /broadest one- or two-word concept/);
+    assert.match(html, /Themes are the broadest concepts/);
+    assert.match(html, /Theme concept \(1–2 words\)/);
 });
 
 test("worksheet rows use private participant codes rather than source IDs", () => {
@@ -130,6 +133,8 @@ test("AI discussion remains grounded server-side and revisions stay explicit", (
     assert.match(script, /action:\s*"save_feedback"/);
     assert.match(script, /action:\s*"confirm"/);
     assert.match(script, /action:\s*"archive"/);
+    assert.match(api, /themeSubject\(req\.body\?\.theme\)/);
+    assert.match(api, /broad one- or two-word concept/);
 });
 
 test("each worksheet supports a traceable Excel round-trip", () => {

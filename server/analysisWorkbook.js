@@ -150,6 +150,7 @@ function addInstructionSheet(workbook, stage, detailSheetName) {
         ["Rearranging", "You may sort or move rows. Physical row order is also recorded when the workbook is uploaded."],
         ["Upload result", `Uploading this workbook creates a new researcher decision layer used in ${nextStage}. It does not overwrite the original AI analysis.`],
         ["Main form", "The first worksheet matches the dashboard form. The grouping worksheet is a long-form editing view designed for Excel filtering, counting, sorting, and grouping."],
+        ["Theme wording", "A theme must be the broadest one- or two-word concept, preferably one word, such as 'Work'. Put differences such as 'Overtime', 'Long hours', or 'Weekend work' under concise codes and the full interpretation in the rationale or case report."],
         ["Privacy", "Only participant codes are exported. Source participant IDs and transcript text are not included."]
     ];
     sheet.addRows(rows);

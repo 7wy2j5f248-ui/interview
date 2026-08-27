@@ -127,6 +127,10 @@
         field.dataset.role = role;
         field.value = value || "";
         field.placeholder = placeholder || "";
+        if (role === "theme") {
+            field.maxLength = 60;
+            field.title = "Use the broadest concept, preferably one word, such as Work.";
+        }
         label.appendChild(field);
         return label;
     }
@@ -762,7 +766,7 @@
         const feedbackCell = document.createElement("td");
         feedbackCell.append(
             createWorkingField(
-                "Theme",
+                "Theme concept (1–2 words)",
                 "theme",
                 item.researcher_theme,
                 item.ai_theme
@@ -2167,7 +2171,7 @@
         if (activeAnalysisView === "themes") {
             breadcrumb.textContent = "Worksheet 1 · Participants & Themes";
             description.textContent =
-                "One row per participant. T1–T8 are participant-specific positions: each cell contains that participant’s own theme, and themes in the same column are not assumed to have the same meaning. This is the only worksheet with a direct link to the complete transcript.";
+                "One row per participant. T1–T8 are participant-specific positions: each cell contains the broadest one- or two-word concept, preferably one word, such as Work. Differences such as Long hours, Overtime, Weekend work, or Overwork belong under codes; full interpretations belong in the rationale or case report. Themes in the same column are not assumed to have the same meaning. This is the only worksheet with a direct link to the complete transcript. Older stored runs may retain statement-style themes for traceability.";
             renderWorkbookControls(container, "themes");
             renderThemeWorksheet(container);
             renderDiscussionPanel(item);
