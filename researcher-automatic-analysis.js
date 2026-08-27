@@ -208,10 +208,10 @@
             "Participant code",
             "Session number",
             "Link to transcript",
-            "Language",
-            ...FORM_ONE_DEMOGRAPHIC_COLUMNS.map(([, label]) => label),
             "Case report",
-            "Archive"
+            "Archive",
+            "Language",
+            ...FORM_ONE_DEMOGRAPHIC_COLUMNS.map(([, label]) => label)
         ]);
         const body = document.createElement("tbody");
 
@@ -222,17 +222,17 @@
             const transcriptCell = document.createElement("td");
             transcriptCell.appendChild(transcriptButton(caseRecord));
             row.appendChild(transcriptCell);
-            createCell(row, caseRecord.language || "—");
-            FORM_ONE_DEMOGRAPHIC_COLUMNS.forEach(([key]) => createCell(
-                row,
-                demographicValue(caseRecord, key)
-            ));
             const reportCell = document.createElement("td");
             reportCell.appendChild(caseReportButton(caseRecord));
             row.appendChild(reportCell);
             const archiveCell = document.createElement("td");
             archiveCell.appendChild(archiveCaseButton(caseRecord));
             row.appendChild(archiveCell);
+            createCell(row, caseRecord.language || "—");
+            FORM_ONE_DEMOGRAPHIC_COLUMNS.forEach(([key]) => createCell(
+                row,
+                demographicValue(caseRecord, key)
+            ));
             body.appendChild(row);
         });
 
