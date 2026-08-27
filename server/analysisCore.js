@@ -319,6 +319,15 @@ const automaticCaseSchema = {
     additionalProperties: false
 };
 
+const automaticThemeSchema = {
+    type: "object",
+    properties: {
+        themes: automaticCaseSchema.properties.themes
+    },
+    required: ["themes"],
+    additionalProperties: false
+};
+
 function exactTextOccurrences(source, phrase) {
     const sourceText = typeof source === "string" ? source : "";
     const exactText = normalizedText(phrase);
@@ -351,6 +360,44 @@ function exactTextOccurrences(source, phrase) {
     }
 
     return occurrences;
+}
+
+function validateAutomaticThemes(rawThemes, codes) {
+    const themes = [];
+    const assignedCodeNumbers = new Set();
+    let invalidThemes = 0;
+
+    (Array.isArray(rawThemes) ? rawThemes : []).forEach(rawTheme => {
+        const label = normalizedText(rawTheme?.label);
+        const rationale = normalizedText(rawTheme?.rationale);
+        const codeNumbers = [...new Set(
+            (Array.isArray(rawTheme?.code_numbers)
+                ? rawTheme.code_numbers
+                : []
+            ).filter(number =>
+                Number.isInteger(number)
+                && number > 0
+                && number <= codes.length
+            )
+        )];
+
+        if (!isShortThemeSubject(label)
+            || !rationale
+            || !codeNumbers.length
+        ) {
+            invalidThemes += 1;
+            return;
+        }
+
+        codeNumbers.forEach(number => assignedCodeNumbers.add(number));
+        themes.push({ label, rationale, codeNumbers });
+    });
+
+    const unassignedCodeNumbers = codes
+        .map((_, index) => index + 1)
+        .filter(number => !assignedCodeNumbers.has(number));
+
+    return { themes, invalidThemes, unassignedCodeNumbers };
 }
 
 export function validateAutomaticCaseAnalysis(value, availableMessages) {
@@ -405,42 +452,12 @@ export function validateAutomaticCaseAnalysis(value, availableMessages) {
         codes.push({ label, rationale, highlights });
     });
 
-    const themes = [];
-    const assignedCodeNumbers = new Set();
-
-    (Array.isArray(value?.themes) ? value.themes : []).forEach(rawTheme => {
-        const label = normalizedText(rawTheme?.label);
-        const rationale = normalizedText(rawTheme?.rationale);
-        const codeNumbers = [...new Set(
-            (Array.isArray(rawTheme?.code_numbers)
-                ? rawTheme.code_numbers
-                : []
-            ).filter(number =>
-                Number.isInteger(number)
-                && number > 0
-                && number <= codes.length
-            )
-        )];
-
-        if (!isShortThemeSubject(label)
-            || !rationale
-            || !codeNumbers.length
-        ) {
-            invalidEvidence += 1;
-            return;
-        }
-
-        codeNumbers.forEach(number => assignedCodeNumbers.add(number));
-        themes.push({ label, rationale, codeNumbers });
-    });
+    const themeValidation = validateAutomaticThemes(value?.themes, codes);
+    const { themes, unassignedCodeNumbers } = themeValidation;
+    invalidEvidence += themeValidation.invalidThemes;
 
     const caseInterpretation = normalizedText(value?.case_interpretation);
-    const allCodesAssigned = codes.every((_, index) =>
-        assignedCodeNumbers.has(index + 1)
-    );
-    const unassignedCodeNumbers = codes
-        .map((_, index) => index + 1)
-        .filter(number => !assignedCodeNumbers.has(number));
+    const allCodesAssigned = unassignedCodeNumbers.length === 0;
 
     return {
         codes,
@@ -948,6 +965,65 @@ export async function generateAutomaticCaseAnalysis(
         if (Number.isInteger(repairResponse?.usage?.input_tokens)) {
             inputTokenCount = (inputTokenCount || 0)
                 + repairResponse.usage.input_tokens;
+        }
+    }
+
+    if (!validated.complete
+        && validated.droppedCodes === 0
+        && validated.codes.length
+    ) {
+        const themeResponse = await openaiClient.responses.create({
+            model,
+            store: false,
+            text: {
+                format: {
+                    type: "json_schema",
+                    name: "automatic_case_theme_assignment",
+                    strict: true,
+                    schema: automaticThemeSchema
+                }
+            },
+            input: [{
+                role: "system",
+                content: "Group the supplied participant-specific codes into broad one- or two-word themes. Use only the numbered codes provided. The union of every code_numbers array must equal the complete integer sequence from 1 through the stated code count; no number may be omitted. Multiple codes may share one theme. Return concise subject labels, never findings or sentences."
+            }, {
+                role: "user",
+                content: JSON.stringify({
+                    codeCount: validated.codes.length,
+                    requiredCodeNumbers: validated.codes.map(
+                        (_, index) => index + 1
+                    ),
+                    codes: validated.codes.map((code, index) => ({
+                        code_number: index + 1,
+                        label: code.label,
+                        rationale: code.rationale
+                    }))
+                })
+            }]
+        });
+        const themeValidation = validateAutomaticThemes(
+            parseStructuredResponse(
+                themeResponse,
+                "Automatic case theme assignment"
+            )?.themes,
+            validated.codes
+        );
+        validated = {
+            ...validated,
+            themes: themeValidation.themes,
+            unassignedCodeNumbers: themeValidation.unassignedCodeNumbers,
+            invalidEvidence: validated.invalidEvidence
+                + themeValidation.invalidThemes,
+            complete: Boolean(
+                themeValidation.themes.length
+                && !themeValidation.unassignedCodeNumbers.length
+                && validated.caseInterpretation
+            )
+        };
+
+        if (Number.isInteger(themeResponse?.usage?.input_tokens)) {
+            inputTokenCount = (inputTokenCount || 0)
+                + themeResponse.usage.input_tokens;
         }
     }
 
