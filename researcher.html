@@ -256,9 +256,29 @@
             vertical-align: top;
         }
 
-        .codeWorksheet th:nth-child(3),
-        .keywordWorksheet th:nth-child(3) {
-            min-width: 15rem;
+        .participantAnalysisCell {
+            min-width: 13rem;
+            vertical-align: top;
+        }
+
+        .analysisSlotControls {
+            align-items: end;
+            background: #f6f9fd;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+            padding: 0.75rem;
+        }
+
+        .analysisSlotControls label {
+            font-weight: 700;
+            margin: 0;
+        }
+
+        .analysisSlotControls select {
+            display: block;
+            margin-block-start: 0.25rem;
+            min-width: 8rem;
         }
 
         .analysisColumnId {
@@ -661,8 +681,8 @@
         <div class="analysisOverview" aria-label="Analysis overview">
             <div class="analysisMetric"><strong id="analysisParticipantCount">0</strong>Participants</div>
             <div class="analysisMetric"><strong id="analysisThemeCount">0</strong>Participant themes</div>
-            <div class="analysisMetric"><strong id="analysisCodeCount">0</strong>Codes</div>
-            <div class="analysisMetric"><strong id="analysisKeywordCount">0</strong>Keywords</div>
+            <div class="analysisMetric"><strong id="analysisCodeCount">0</strong>Participant codes</div>
+            <div class="analysisMetric"><strong id="analysisKeywordCount">0</strong>Participant keywords</div>
         </div>
 
         <nav class="analysisViewTabs" aria-label="Analysis layers">

@@ -68,30 +68,36 @@ test("Worksheet 1 uses fixed participant-specific T1 to T8 slots", () => {
     );
 });
 
-test("Worksheet 2 has one row model for each participant-code relationship", () => {
+test("Worksheet 2 uses content-free participant-specific code slots", () => {
     const source = functionSource("renderCodeWorksheet", "renderKeywordWorksheet");
-    assert.match(source, /participantRecords\(\)\.forEach\(participant/);
-    assert.match(source, /codes\.forEach\(code/);
-    assert.match(source, /"Code #"/);
-    assert.match(source, /"Expression"/);
-    assert.match(source, /themes\.forEach/);
-    assert.match(source, /relations\.some/);
+    assert.match(script, /const PARTICIPANT_CODE_SLOT_COUNT = 10/);
+    assert.match(script, /function participantCodeRecords/);
+    assert.match(script, /function participantCodeSlotIdentifier/);
+    assert.match(source, /participantCodeSlotIdentifier\(/);
+    assert.match(source, /participantCodeRecords\(/);
+    assert.match(source, /appendParticipantAnalysisCell\(/);
+    assert.doesNotMatch(source, /theme\.label|code\.label/);
+    assert.doesNotMatch(source, /"Code #"|"Expression"|relationCell/);
+    assert.match(script, /Tn-C1–Tn-C10 are positional headers only/);
 });
 
-test("Worksheet 3 maps recognizable keyword expressions across code columns", () => {
+test("Worksheet 3 uses content-free participant-specific keyword slots", () => {
     const source = functionSource("renderKeywordWorksheet", "renderHierarchyView");
-    assert.match(source, /keywords\.forEach\(keyword/);
-    assert.match(source, /"Keyword #"/);
-    assert.match(source, /"Expression"/);
-    assert.match(source, /codes\.forEach/);
-    assert.match(source, /codeIds\.has\(messageId\)/);
-    assert.match(script, /worksheetIdentifier\("K", index\)/);
-    assert.match(script, /worksheetIdentifier\("C", index\)/);
+    assert.match(script, /const PARTICIPANT_KEYWORD_SLOT_COUNT = 10/);
+    assert.match(script, /function participantKeywordRecords/);
+    assert.match(script, /function participantKeywordSlotIdentifier/);
+    assert.match(source, /participantKeywordSlotIdentifier\(/);
+    assert.match(source, /participantKeywordRecords\(/);
+    assert.match(source, /appendParticipantAnalysisCell\(/);
+    assert.doesNotMatch(source, /code\.label|keyword\.label/);
+    assert.doesNotMatch(source, /"Keyword #"|"Expression"|relationCell/);
+    assert.match(script, /Tn-Cn-K1–Tn-Cn-K10 are positional headers only/);
 });
 
-test("worksheet identifiers are dynamic concept identifiers rather than fixed rows", () => {
-    assert.match(script, /padStart\(2, "0"\)/);
-    assert.match(script, /const records = new Map\(\)/);
+test("worksheet identifiers preserve participant-specific hierarchy", () => {
+    assert.match(script, /`T\$\{index \+ 1\}`/);
+    assert.match(script, /-C\$\{codeIndex \+ 1\}/);
+    assert.match(script, /-K\$\{keywordIndex \+ 1\}/);
     assert.doesNotMatch(script, /"P06"|previewWorkspace|analysisPreview/);
 });
 

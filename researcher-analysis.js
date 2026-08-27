@@ -8,6 +8,8 @@
     let activeAnalysisView = "themes";
     let selectedThemeItemId = null;
     let selectedCode = null;
+    let selectedThemeSlotIndex = 0;
+    let selectedCodeSlotIndex = 0;
     let pendingDiscussionProposal = null;
     const discussionMessages = new Map();
 
@@ -1017,9 +1019,23 @@
     ];
 
     const PARTICIPANT_THEME_SLOT_COUNT = 8;
+    const PARTICIPANT_CODE_SLOT_COUNT = 10;
+    const PARTICIPANT_KEYWORD_SLOT_COUNT = 10;
 
     function participantThemeSlotIdentifier(index) {
         return `T${index + 1}`;
+    }
+
+    function participantCodeSlotIdentifier(themeIndex, codeIndex) {
+        return `${participantThemeSlotIdentifier(themeIndex)}-C${codeIndex + 1}`;
+    }
+
+    function participantKeywordSlotIdentifier(
+        themeIndex,
+        codeIndex,
+        keywordIndex
+    ) {
+        return `${participantCodeSlotIdentifier(themeIndex, codeIndex)}-K${keywordIndex + 1}`;
     }
 
     function participantThemeRecords(participant) {
@@ -1029,6 +1045,82 @@
             identifier: participantThemeSlotIdentifier(index),
             label: workingTheme(item),
             item
+        }));
+    }
+
+    function participantCodeRecords(participant, themeSlotIndex) {
+        const theme = participantThemeRecords(participant)[themeSlotIndex];
+        if (!theme) {
+            return [];
+        }
+
+        return uniqueValues(workingList(
+            theme.item,
+            "researcher_codes",
+            "ai_codes"
+        )).map(label => {
+            const occurrence = {
+                item: theme.item,
+                component: componentForValue(theme.item, "code", label)
+            };
+            return {
+                label,
+                item: theme.item,
+                messageIds: occurrenceMessageIds(
+                    occurrence,
+                    participant,
+                    "code",
+                    label
+                )
+            };
+        }).filter(record => record.messageIds.length).map((record, index) => ({
+            ...record,
+            identifier: participantCodeSlotIdentifier(themeSlotIndex, index)
+        }));
+    }
+
+    function participantKeywordRecords(
+        participant,
+        themeSlotIndex,
+        codeSlotIndex
+    ) {
+        const code = participantCodeRecords(
+            participant,
+            themeSlotIndex
+        )[codeSlotIndex];
+        if (!code) {
+            return [];
+        }
+
+        const codeMessageIds = new Set(code.messageIds);
+        return uniqueValues(workingList(
+            code.item,
+            "researcher_keywords",
+            "ai_keywords"
+        )).map(label => {
+            const occurrence = {
+                item: code.item,
+                component: componentForValue(code.item, "keyword", label)
+            };
+            const messageIds = occurrenceMessageIds(
+                occurrence,
+                participant,
+                "keyword",
+                label
+            ).filter(messageId => codeMessageIds.has(messageId));
+            return {
+                label,
+                item: code.item,
+                code: code.label,
+                messageIds
+            };
+        }).filter(record => record.messageIds.length).map((record, index) => ({
+            ...record,
+            identifier: participantKeywordSlotIdentifier(
+                themeSlotIndex,
+                codeSlotIndex,
+                index
+            )
         }));
     }
 
@@ -1195,6 +1287,41 @@
         return button;
     }
 
+    function slotSelector(label, options, selectedIndex, onChange) {
+        const wrapper = document.createElement("label");
+        wrapper.textContent = label;
+        const select = document.createElement("select");
+        options.forEach((option, index) => {
+            const element = document.createElement("option");
+            element.value = String(index);
+            element.textContent = option;
+            element.selected = index === selectedIndex;
+            select.appendChild(element);
+        });
+        select.addEventListener("change", () => {
+            onChange(Number(select.value));
+            renderHierarchyView();
+        });
+        wrapper.appendChild(select);
+        return wrapper;
+    }
+
+    function appendParticipantAnalysisCell(row, record, datasetName) {
+        if (!record) {
+            appendCell(row, "—", "analysisEmptyCell");
+            return;
+        }
+        const cell = document.createElement("td");
+        cell.className = "participantAnalysisCell";
+        cell.dataset[datasetName] = record.identifier;
+        cell.appendChild(expressionButton(
+            record.label,
+            record.item,
+            record.code || null
+        ));
+        row.appendChild(cell);
+    }
+
     function switchAnalysisView(view, itemId = null, code = null) {
         const previousContext = `${selectedThemeItemId}:${selectedCode}`;
         activeAnalysisView = view;
@@ -1299,72 +1426,67 @@
     }
 
     function renderCodeWorksheet(container) {
-        const themes = themeRecords();
-        const codes = codeRecords();
-        const rows = [];
-        participantRecords().forEach(participant => {
-            codes.forEach(code => {
-                const relations = themes.map(theme => {
-                    const occurrence = code.occurrences.find(entry =>
-                        entry.item.id === theme.item.id
-                    );
-                    return occurrence
-                        ? occurrenceMessageIds(
-                            occurrence,
-                            participant,
-                            "code",
-                            code.label
-                        )
-                        : [];
-                });
-                if (relations.some(messageIds => messageIds.length)) {
-                    rows.push({ participant, code, relations });
-                }
-            });
-        });
+        const participants = participantRecords();
+        const controls = document.createElement("div");
+        controls.className = "analysisSlotControls";
+        controls.appendChild(slotSelector(
+            "Theme position",
+            Array.from(
+                { length: PARTICIPANT_THEME_SLOT_COUNT },
+                (_, index) => participantThemeSlotIdentifier(index)
+            ),
+            selectedThemeSlotIndex,
+            index => {
+                selectedThemeSlotIndex = index;
+                selectedCodeSlotIndex = 0;
+            }
+        ));
+        container.appendChild(controls);
 
         const table = worksheetTable("codeWorksheet");
         const head = document.createElement("thead");
         const headingRow = document.createElement("tr");
         appendHeader(headingRow, "Participant ID");
-        appendHeader(headingRow, "Code #");
-        appendHeader(headingRow, "Expression");
-        themes.forEach(theme => appendHeader(
-            headingRow,
-            theme.label,
-            theme.identifier
-        ));
+        Array.from({ length: PARTICIPANT_CODE_SLOT_COUNT }).forEach(
+            (_, codeSlotIndex) => appendHeader(
+                headingRow,
+                participantCodeSlotIdentifier(
+                    selectedThemeSlotIndex,
+                    codeSlotIndex
+                )
+            )
+        );
         head.appendChild(headingRow);
         table.appendChild(head);
 
         const body = document.createElement("tbody");
-        rows.forEach(entry => {
+        participants.forEach(participant => {
             const row = document.createElement("tr");
-            appendRowHeading(row, entry.participant.participantId);
-            appendCell(row, entry.code.identifier, "analysisIdentifierCell");
-            const expressionCell = document.createElement("td");
-            const relatedThemeIndex = entry.relations.findIndex(
-                messageIds => messageIds.length
+            appendRowHeading(row, participant.participantId);
+            const participantCodes = participantCodeRecords(
+                participant,
+                selectedThemeSlotIndex
             );
-            const context = entry.code.occurrences.find(occurrence =>
-                occurrence.item.id === themes[relatedThemeIndex]?.item.id
-            ) || entry.code.occurrences[0];
-            expressionCell.appendChild(expressionButton(
-                entry.code.label,
-                context?.item,
-                entry.code.label
-            ));
-            row.appendChild(expressionCell);
-            entry.relations.forEach(messageIds => relationCell(row, messageIds));
+            Array.from({ length: PARTICIPANT_CODE_SLOT_COUNT }).forEach(
+                (_, codeSlotIndex) => appendParticipantAnalysisCell(
+                    row,
+                    participantCodes[codeSlotIndex],
+                    "codeSlot"
+                )
+            );
+            if (participantCodes.length > PARTICIPANT_CODE_SLOT_COUNT) {
+                const overflow = document.createElement("span");
+                overflow.className = "analysisColumnDetail";
+                overflow.textContent = `+${participantCodes.length - PARTICIPANT_CODE_SLOT_COUNT} additional codes in the individual analysis`;
+                row.lastElementChild.appendChild(overflow);
+            }
             body.appendChild(row);
         });
-        if (!rows.length) {
+        if (!participants.length) {
             appendEmptyRow(
                 body,
-                3 + themes.length,
-                workspace?.run
-                    ? "No participant–code relationships are available in this analysis run."
-                    : "Generate an analysis run to populate codes from the stored interviews."
+                1 + PARTICIPANT_CODE_SLOT_COUNT,
+                "No interview participants are available in this corpus scope."
             );
         }
         table.appendChild(body);
@@ -1372,95 +1494,85 @@
     }
 
     function renderKeywordWorksheet(container) {
-        const codes = codeRecords();
-        const keywords = keywordRecords();
-        const rows = [];
-        participantRecords().forEach(participant => {
-            keywords.forEach(keyword => {
-                const keywordSources = keyword.occurrences.map(occurrence => ({
-                    occurrence,
-                    messageIds: occurrenceMessageIds(
-                        occurrence,
-                        participant,
-                        "keyword",
-                        keyword.label
-                    )
-                })).filter(source => source.messageIds.length);
-                if (!keywordSources.length) {
-                    return;
+        const participants = participantRecords();
+        const controls = document.createElement("div");
+        controls.className = "analysisSlotControls";
+        controls.append(
+            slotSelector(
+                "Theme position",
+                Array.from(
+                    { length: PARTICIPANT_THEME_SLOT_COUNT },
+                    (_, index) => participantThemeSlotIdentifier(index)
+                ),
+                selectedThemeSlotIndex,
+                index => {
+                    selectedThemeSlotIndex = index;
+                    selectedCodeSlotIndex = 0;
                 }
-                const relations = codes.map(code => {
-                    const linked = new Set();
-                    keywordSources.forEach(source => {
-                        const codeOccurrence = code.occurrences.find(entry =>
-                            entry.item.id === source.occurrence.item.id
-                        );
-                        if (!codeOccurrence) {
-                            return;
-                        }
-                        const codeIds = new Set(occurrenceMessageIds(
-                            codeOccurrence,
-                            participant,
-                            "code",
-                            code.label
-                        ));
-                        source.messageIds.forEach(messageId => {
-                            if (codeIds.has(messageId)) {
-                                linked.add(messageId);
-                            }
-                        });
-                    });
-                    return [...linked];
-                });
-                rows.push({ participant, keyword, keywordSources, relations });
-            });
-        });
+            ),
+            slotSelector(
+                "Code position",
+                Array.from(
+                    { length: PARTICIPANT_CODE_SLOT_COUNT },
+                    (_, index) => participantCodeSlotIdentifier(
+                        selectedThemeSlotIndex,
+                        index
+                    )
+                ),
+                selectedCodeSlotIndex,
+                index => {
+                    selectedCodeSlotIndex = index;
+                }
+            )
+        );
+        container.appendChild(controls);
 
         const table = worksheetTable("keywordWorksheet");
         const head = document.createElement("thead");
         const headingRow = document.createElement("tr");
         appendHeader(headingRow, "Participant ID");
-        appendHeader(headingRow, "Keyword #");
-        appendHeader(headingRow, "Expression");
-        codes.forEach(code => appendHeader(
-            headingRow,
-            code.label,
-            code.identifier
-        ));
+        Array.from({ length: PARTICIPANT_KEYWORD_SLOT_COUNT }).forEach(
+            (_, keywordSlotIndex) => appendHeader(
+                headingRow,
+                participantKeywordSlotIdentifier(
+                    selectedThemeSlotIndex,
+                    selectedCodeSlotIndex,
+                    keywordSlotIndex
+                )
+            )
+        );
         head.appendChild(headingRow);
         table.appendChild(head);
 
         const body = document.createElement("tbody");
-        rows.forEach(entry => {
+        participants.forEach(participant => {
             const row = document.createElement("tr");
-            appendRowHeading(row, entry.participant.participantId);
-            appendCell(row, entry.keyword.identifier, "analysisIdentifierCell");
-            const expressionCell = document.createElement("td");
-            const relatedCodeIndex = entry.relations.findIndex(
-                messageIds => messageIds.length
+            appendRowHeading(row, participant.participantId);
+            const participantKeywords = participantKeywordRecords(
+                participant,
+                selectedThemeSlotIndex,
+                selectedCodeSlotIndex
             );
-            const relatedCode = codes[relatedCodeIndex];
-            const contextSource = entry.keywordSources.find(source =>
-                relatedCode?.occurrences.some(occurrence =>
-                    occurrence.item.id === source.occurrence.item.id
+            Array.from({ length: PARTICIPANT_KEYWORD_SLOT_COUNT }).forEach(
+                (_, keywordSlotIndex) => appendParticipantAnalysisCell(
+                    row,
+                    participantKeywords[keywordSlotIndex],
+                    "keywordSlot"
                 )
-            ) || entry.keywordSources[0];
-            expressionCell.appendChild(expressionButton(
-                entry.keyword.label,
-                contextSource?.occurrence.item,
-                relatedCode?.label || null
-            ));
-            row.appendChild(expressionCell);
-            entry.relations.forEach(messageIds => relationCell(row, messageIds));
+            );
+            if (participantKeywords.length > PARTICIPANT_KEYWORD_SLOT_COUNT) {
+                const overflow = document.createElement("span");
+                overflow.className = "analysisColumnDetail";
+                overflow.textContent = `+${participantKeywords.length - PARTICIPANT_KEYWORD_SLOT_COUNT} additional keywords in the individual analysis`;
+                row.lastElementChild.appendChild(overflow);
+            }
             body.appendChild(row);
         });
-        if (!rows.length) {
+        if (!participants.length) {
             appendEmptyRow(
                 body,
-                3 + codes.length,
-                workspace?.run
-                    ? "No participant–keyword relationships are available in this analysis run."
-                    : "Generate an analysis run to populate keywords from the stored interviews."
+                1 + PARTICIPANT_KEYWORD_SLOT_COUNT,
+                "No interview participants are available in this corpus scope."
             );
         }
         table.appendChild(body);
@@ -1496,7 +1608,7 @@
         if (activeAnalysisView === "codes") {
             breadcrumb.textContent = "Worksheet 2 · Codes & Themes";
             description.textContent =
-                "Each participant–code combination appears once. Theme columns show where the same code occurs across themes; no transcript link is repeated here.";
+                "Choose a participant-specific theme position. Tn-C1–Tn-C10 are positional headers only; each cell contains that participant’s own code wording, and matching columns do not imply matching meaning.";
             renderCodeWorksheet(container);
             renderDiscussionPanel(item);
             return;
@@ -1504,34 +1616,45 @@
 
         breadcrumb.textContent = "Worksheet 3 · Keywords & Codes";
         description.textContent =
-            "Each participant–keyword expression appears once. Code columns show which code or codes that expression supports; transcript links remain in Worksheet 1.";
+            "Choose participant-specific theme and code positions. Tn-Cn-K1–Tn-Cn-K10 are positional headers only; each cell contains that participant’s own keyword wording.";
         renderKeywordWorksheet(container);
         renderDiscussionPanel(item);
     }
 
     function renderAnalysisOverview() {
-        const items = (workspace.items || []).filter(item =>
-            item.status !== "archived"
-        );
+        const participants = participantRecords();
         document.getElementById("analysisParticipantCount").textContent =
-            String(participantRecords().length);
+            String(participants.length);
         document.getElementById("analysisThemeCount").textContent = String(
-            participantRecords().reduce((total, participant) =>
+            participants.reduce((total, participant) =>
                 total + participantThemeRecords(participant).length, 0)
         );
         document.getElementById("analysisCodeCount").textContent = String(
-            uniqueValues(items.flatMap(item => workingList(
-                item,
-                "researcher_codes",
-                "ai_codes"
-            ))).length
+            participants.reduce((total, participant) =>
+                total + participantThemeRecords(participant).reduce(
+                    (participantTotal, _, themeIndex) => participantTotal
+                        + participantCodeRecords(participant, themeIndex).length,
+                    0
+                ), 0)
         );
         document.getElementById("analysisKeywordCount").textContent = String(
-            uniqueValues(items.flatMap(item => workingList(
-                item,
-                "researcher_keywords",
-                "ai_keywords"
-            ))).length
+            participants.reduce((total, participant) =>
+                total + participantThemeRecords(participant).reduce(
+                    (themeTotal, _, themeIndex) => themeTotal
+                        + participantCodeRecords(
+                            participant,
+                            themeIndex
+                        ).reduce(
+                            (codeTotal, __, codeIndex) => codeTotal
+                                + participantKeywordRecords(
+                                    participant,
+                                    themeIndex,
+                                    codeIndex
+                                ).length,
+                            0
+                        ),
+                    0
+                ), 0)
         );
     }
 
