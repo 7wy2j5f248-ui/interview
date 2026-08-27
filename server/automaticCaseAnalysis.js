@@ -180,7 +180,10 @@ export async function processOldestAutomaticCase(
 
         if (!analysis.complete || !source.participantCode) {
             throw new Error(
-                "The automatic individual case report was incomplete and was not saved."
+                "The automatic individual case report was incomplete and was not saved. "
+                + `Validated ${analysis.codes.length} codes, `
+                + `${analysis.themes.length} themes, and `
+                + `${analysis.invalidEvidence} invalid evidence records.`
             );
         }
 

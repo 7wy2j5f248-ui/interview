@@ -361,6 +361,7 @@ export function validateAutomaticCaseAnalysis(value, availableMessages) {
     const codes = [];
     const usedHighlights = new Set();
     let invalidEvidence = 0;
+    let droppedCodes = 0;
 
     (Array.isArray(value?.codes) ? value.codes : []).forEach(rawCode => {
         const label = normalizedText(rawCode?.label);
@@ -397,6 +398,7 @@ export function validateAutomaticCaseAnalysis(value, availableMessages) {
 
         if (!label || !rationale || !highlights.length) {
             invalidEvidence += 1;
+            droppedCodes += 1;
             return;
         }
 
@@ -446,7 +448,7 @@ export function validateAutomaticCaseAnalysis(value, availableMessages) {
             codes.length
             && themes.length
             && caseInterpretation
-            && invalidEvidence === 0
+            && droppedCodes === 0
             && allCodesAssigned
         )
     };

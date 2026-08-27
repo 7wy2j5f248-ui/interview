@@ -63,6 +63,33 @@ test("automatic case analysis rejects paraphrased evidence and unassigned codes"
     assert.ok(result.invalidEvidence > 0);
 });
 
+test("invalid extra evidence is omitted without discarding an otherwise exact case", () => {
+    const result = validateAutomaticCaseAnalysis({
+        codes: [{
+            label: "Weekend work",
+            rationale: "Work schedule evidence.",
+            keyword_evidence: [
+                { message_id: "message-1", exact_text: "work on weekends" },
+                { message_id: "message-1", exact_text: "unpaid overtime" }
+            ]
+        }],
+        themes: [{
+            label: "Work",
+            rationale: "The code concerns work.",
+            code_numbers: [1]
+        }],
+        case_interpretation: "Weekend work affects this case."
+    }, [{
+        id: "message-1",
+        originalText: "I often work on weekends.",
+        englishText: "I often work on weekends."
+    }]);
+
+    assert.equal(result.complete, true);
+    assert.equal(result.invalidEvidence, 1);
+    assert.equal(result.codes[0].highlights.length, 1);
+});
+
 test("formal completion enqueues a strict FIFO atomic case pipeline", async () => {
     const migration = await readFile(migrationUrl, "utf8");
     const chat = await readFile(new URL("../api/chat.js", import.meta.url), "utf8");
