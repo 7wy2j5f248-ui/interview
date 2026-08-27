@@ -77,6 +77,17 @@
         return displayValue(value);
     }
 
+    function participantCode(caseRecord) {
+        return caseRecord.transcriptIdentity?.participantCode
+            || String(caseRecord.caseNumber || "").split("-S")[0]
+            || "—";
+    }
+
+    function sessionNumber(caseRecord) {
+        const match = String(caseRecord.caseNumber || "").match(/-S(\d+)$/i);
+        return match ? Number.parseInt(match[1], 10) : "—";
+    }
+
     function transcriptUrl(caseRecord) {
         const url = new URL(window.location.href);
         url.search = "";
@@ -164,17 +175,23 @@
                 return leftCompleted ? -1 : 1;
             }
 
-            return String(left.caseNumber).localeCompare(
-                String(right.caseNumber),
+            const participantOrder = participantCode(left).localeCompare(
+                participantCode(right),
                 undefined,
                 { numeric: true }
             );
+            const leftSession = Number(sessionNumber(left));
+            const rightSession = Number(sessionNumber(right));
+            return participantOrder
+                || (Number.isFinite(leftSession) ? leftSession : 0)
+                - (Number.isFinite(rightSession) ? rightSession : 0);
         });
     }
 
     function renderCases() {
         const { scroll, table } = createTable([
             "Participant code",
+            "Session number",
             "Link to transcript",
             "Language",
             ...FORM_ONE_DEMOGRAPHIC_COLUMNS.map(([, label]) => label),
@@ -184,7 +201,8 @@
 
         casesForCaseAndKeywordForm().forEach(caseRecord => {
             const row = document.createElement("tr");
-            createCell(row, caseRecord.caseNumber, "analysisIdentifierCell");
+            createCell(row, participantCode(caseRecord), "analysisIdentifierCell");
+            createCell(row, sessionNumber(caseRecord), "analysisIdentifierCell");
             const transcriptCell = document.createElement("td");
             transcriptCell.appendChild(transcriptButton(caseRecord));
             row.appendChild(transcriptCell);
@@ -215,14 +233,16 @@
             Math.max(0, ...(item[recordsKey] || []).map(record => record[numberKey]))
         ));
         const { scroll, table } = createTable([
-            "Case number",
+            "Participant code",
+            "Session number",
             ...Array.from({ length: maximum }, (_, index) => `${prefix}${index + 1}`)
         ]);
         const body = document.createElement("tbody");
 
         completed.forEach(caseRecord => {
             const row = document.createElement("tr");
-            createCell(row, caseRecord.caseNumber, "analysisIdentifierCell");
+            createCell(row, participantCode(caseRecord), "analysisIdentifierCell");
+            createCell(row, sessionNumber(caseRecord), "analysisIdentifierCell");
             const byNumber = new Map((caseRecord[recordsKey] || []).map(record => [
                 record[numberKey],
                 record
@@ -266,6 +286,7 @@
     function renderArchive() {
         const { scroll, table } = createTable([
             "Participant code",
+            "Session number",
             "Archived",
             "Archive note",
             "Link to transcript",
@@ -276,7 +297,8 @@
 
         payload.cases.forEach(caseRecord => {
             const row = document.createElement("tr");
-            createCell(row, caseRecord.caseNumber, "analysisIdentifierCell");
+            createCell(row, participantCode(caseRecord), "analysisIdentifierCell");
+            createCell(row, sessionNumber(caseRecord), "analysisIdentifierCell");
             createCell(row, formatTimestamp(caseRecord.archivedAt));
             createCell(row, caseRecord.archiveNote || "—");
             const transcriptCell = document.createElement("td");
@@ -566,11 +588,13 @@
         if (activeView === "archive") {
             rows = [[
                 "Participant code",
+                "Session number",
                 "Archived",
                 "Archive note",
                 "Link to transcript"
             ], ...payload.cases.map(item => [
-                item.caseNumber,
+                participantCode(item),
+                sessionNumber(item),
                 item.archivedAt || "",
                 item.archiveNote || "",
                 transcriptUrl(item)
@@ -579,13 +603,15 @@
             const orderedCases = casesForCaseAndKeywordForm();
             rows = [[
                 "Participant code",
+                "Session number",
                 "Link to transcript",
                 "Language",
                 ...FORM_ONE_DEMOGRAPHIC_COLUMNS.map(([, label]) => label),
                 "Case report"
             ],
                 ...orderedCases.map(item => [
-                    item.caseNumber,
+                    participantCode(item),
+                    sessionNumber(item),
                     transcriptUrl(item),
                     item.language || "—",
                     ...FORM_ONE_DEMOGRAPHIC_COLUMNS.map(([key]) =>
@@ -602,10 +628,10 @@
             const maximum = Math.max(0, ...completed.map(item =>
                 Math.max(0, ...(item[recordsKey] || []).map(record => record[numberKey]))
             ));
-            rows = [["Case number", ...Array.from({ length: maximum }, (_, index) => `${prefix}${index + 1}`)],
+            rows = [["Participant code", "Session number", ...Array.from({ length: maximum }, (_, index) => `${prefix}${index + 1}`)],
                 ...completed.map(item => {
                     const records = new Map((item[recordsKey] || []).map(record => [record[numberKey], record[labelKey]]));
-                    return [item.caseNumber, ...Array.from({ length: maximum }, (_, index) => records.get(index + 1) || "")];
+                    return [participantCode(item), sessionNumber(item), ...Array.from({ length: maximum }, (_, index) => records.get(index + 1) || "")];
                 })];
         }
 
