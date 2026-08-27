@@ -756,7 +756,18 @@
             <div class="analysisMetric"><strong id="analysisKeywordCount">0</strong>Participant keywords</div>
         </div>
 
-        <nav class="analysisViewTabs" aria-label="Analysis layers">
+        <section id="individualCaseReportsPanel" aria-labelledby="individualCaseReportsHeading">
+            <h3 id="individualCaseReportsHeading">Individual case reports</h3>
+            <p class="muted">
+                A report becomes readable only after that entire case—themes,
+                codes, keywords, interpretation, demographics, and provenance—
+                has been saved. If a case is incomplete, processing remains on
+                that case and does not move forward.
+            </p>
+            <div id="individualCaseReportsList" class="tableScroll"></div>
+        </section>
+
+        <nav id="analysisViewTabs" class="analysisViewTabs" aria-label="Analysis layers">
             <button type="button" data-analysis-view="themes" aria-pressed="true">
                 1 · Participants &amp; Themes
             </button>

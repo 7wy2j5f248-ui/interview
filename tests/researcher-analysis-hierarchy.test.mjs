@@ -166,6 +166,14 @@ test("analysis generation is resumable one stored individual case at a time", ()
     assert.match(api, /strategy: "individual_case_report"/);
     assert.match(api, /one_transcript_per_case/);
     assert.match(api, /buildIndividualCaseBatches/);
+    assert.match(api, /complete_ai_analysis_case/);
+    assert.match(api, /This individual case report was incomplete and remains the current case/);
+    assert.match(script, /function renderIndividualCaseReports/);
+    assert.match(script, /function formOneReady/);
+    assert.match(script, /Form 1 will be generated only after every case report is complete/);
+    assert.match(script, /Open complete report/);
+    assert.match(html, /id="individualCaseReportsList"/);
+    assert.match(html, /processing remains on\s+that case and does not move forward/);
 });
 
 test("each worksheet supports a traceable Excel round-trip", () => {

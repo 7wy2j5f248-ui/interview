@@ -2,7 +2,7 @@ import { storedIdentifier } from "./corpus.js";
 import { DEFAULT_OPENAI_MODEL } from "./modelConfiguration.js";
 
 export const QUALITATIVE_ANALYSIS_MODEL = DEFAULT_OPENAI_MODEL;
-export const QUALITATIVE_ANALYSIS_VERSION = "task-014-v6-individual-case-reports";
+export const QUALITATIVE_ANALYSIS_VERSION = "task-014-v7-complete-cases-before-summary";
 export const DEFAULT_ANALYSIS_BATCH_SIZE = 40;
 export const MAX_THEME_SUBJECT_WORDS = 2;
 export const MAX_THEME_SUBJECT_LENGTH = 60;

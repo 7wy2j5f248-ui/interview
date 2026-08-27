@@ -1049,41 +1049,49 @@ async function persistFrozenBatches(
     return storedBatches;
 }
 
-async function persistSuggestedItem(
+function completeCaseItems(items) {
+    return items.map(item => ({
+        theme: item.theme,
+        codes: item.codes,
+        coded_phrases: item.codedPhrases,
+        keywords: item.keywords,
+        rationale: item.rationale,
+        evidence: (Array.isArray(item.evidence)
+            ? item.evidence
+            : item.evidenceIds.map(messageId => ({ messageId, codes: [] }))
+        ).map(evidence => ({
+            message_id: evidence.messageId,
+            codes: evidence.codes
+        })),
+        suggestion_sources: item.suggestionSources.map(source => ({
+            suggestion_type: source.suggestionType,
+            suggestion_value: source.suggestionValue,
+            message_id: source.messageId
+        }))
+    }));
+}
+
+async function persistCompleteCase(
     supabaseClient,
     runId,
     batch,
-    item
+    items,
+    inputTokenCount
 ) {
-    const evidenceRecords = Array.isArray(item.evidence)
-        ? item.evidence
-        : item.evidenceIds.map(messageId => ({ messageId, codes: [] }));
     const { data, error } = await supabaseClient.rpc(
-        "create_ai_analysis_item_with_batch",
+        "complete_ai_analysis_case",
         {
             p_analysis_run_id: runId,
             p_batch_id: batch.id,
-            p_theme: item.theme,
-            p_codes: item.codes,
-            p_coded_phrases: item.codedPhrases,
-            p_keywords: item.keywords,
-            p_rationale: item.rationale,
-            p_evidence: evidenceRecords.map(evidence => ({
-                message_id: evidence.messageId,
-                codes: evidence.codes
-            })),
-            p_suggestion_sources: item.suggestionSources.map(source => ({
-                suggestion_type: source.suggestionType,
-                suggestion_value: source.suggestionValue,
-                message_id: source.messageId
-            }))
+            p_items: completeCaseItems(items),
+            p_input_token_count: inputTokenCount
         }
     );
 
-    if (error || !data) {
+    if (error || data !== items.length) {
         throw new AnalysisError(
             500,
-            "AI suggestion and source provenance could not be stored."
+            "The complete individual case report could not be stored atomically."
         );
     }
 }
@@ -1269,11 +1277,6 @@ async function processGenerationBatch(
     const batch = batches.find(entry => entry.input_token_count === null);
 
     if (batch) {
-        let marker = 0;
-        let invalidEvidenceIds = 0;
-        let skippedRecords = 0;
-        let storedItems = 0;
-
         try {
             const messages = await frozenBatchMessages(
                 supabaseClient,
@@ -1285,68 +1288,39 @@ async function processGenerationBatch(
                 messages,
                 { model }
             );
-            marker = Number.isInteger(result.inputTokenCount)
+            const marker = Number.isInteger(result.inputTokenCount)
                 && result.inputTokenCount > 0
                 ? result.inputTokenCount
                 : 1;
-            invalidEvidenceIds = result.invalidEvidenceIds;
-            skippedRecords = result.skippedItems + result.skippedComponents;
 
-            if (!result.items.length) {
-                marker = 0;
-                skippedRecords += batch.message_count;
+            if (!result.items.length
+                || result.invalidEvidenceIds > 0
+                || result.skippedItems > 0
+                || result.skippedComponents > 0) {
+                throw new AnalysisError(
+                    502,
+                    "This individual case report was incomplete and remains the current case. Resume to retry it before any later case is analysed."
+                );
             }
 
-            for (const item of result.items) {
-                try {
-                    await persistSuggestedItem(
-                        supabaseClient,
-                        run.id,
-                        batch,
-                        item
-                    );
-                    storedItems += 1;
-                } catch (error) {
-                    skippedRecords += 1;
-                    logOperationalFailure("suggestion_persistence", {
-                        runId: run.id,
-                        batchNumber: batch.batch_number
-                    }, error);
-                }
-            }
-
-            if (!storedItems) {
-                marker = 0;
-            }
+            await persistCompleteCase(
+                supabaseClient,
+                run.id,
+                batch,
+                result.items,
+                marker
+            );
         } catch (error) {
-            marker = 0;
-            skippedRecords += batch.message_count;
             logOperationalFailure("suggestion_generation", {
                 runId: run.id,
                 batchNumber: batch.batch_number
             }, error);
-        }
-
-        const { error: batchUpdateError } = await supabaseClient
-            .from(ANALYSIS_TABLES.batches)
-            .update({ input_token_count: marker })
-            .eq("id", batch.id);
-
-        if (batchUpdateError) {
-            throw new AnalysisError(500, "Analysis batch progress could not be saved.");
-        }
-
-        const { error: runUpdateError } = await supabaseClient
-            .from(ANALYSIS_TABLES.runs)
-            .update({
-                skipped_records: (run.skipped_records || 0) + skippedRecords,
-                invalid_evidence_ids:
-                    (run.invalid_evidence_ids || 0) + invalidEvidenceIds
-            })
-            .eq("id", run.id);
-
-        if (runUpdateError) {
-            throw new AnalysisError(500, "Analysis generation totals could not be saved.");
+            throw error instanceof AnalysisError
+                ? error
+                : new AnalysisError(
+                    502,
+                    "The current individual case report could not be completed. It remains pending and no later case was analysed."
+                );
         }
     }
 

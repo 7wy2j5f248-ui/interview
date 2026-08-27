@@ -15,6 +15,10 @@ const migrationUrl = new URL(
     "../supabase/migrations/20260717040000_add_analysis_batch_traceability.sql",
     import.meta.url
 );
+const atomicCaseMigrationUrl = new URL(
+    "../supabase/migrations/20260827091845_complete_individual_case_atomically.sql",
+    import.meta.url
+);
 
 const messages = [
     {
@@ -352,6 +356,26 @@ test("migration stores frozen multi-batch provenance with backend-only grants", 
     );
 });
 
+test("individual case completion is atomic and backend-only", async () => {
+    const migration = await readFile(atomicCaseMigrationUrl, "utf8");
+
+    assert.match(migration, /create or replace function public\.complete_ai_analysis_case/);
+    assert.match(migration, /for update/);
+    assert.match(migration, /case_batch\.session_count <> 1/);
+    assert.match(migration, /individual_case_report/);
+    assert.match(migration, /jsonb_array_length\(p_items\) = 0/);
+    assert.match(migration, /create_ai_analysis_item_with_batch/);
+    assert.match(migration, /set input_token_count = greatest/);
+    assert.match(migration, /security invoker/);
+    assert.match(migration, /revoke all on function public\.complete_ai_analysis_case/);
+    assert.match(migration, /grant execute on function public\.complete_ai_analysis_case/);
+    assert.match(migration, /to service_role/);
+    assert.doesNotMatch(
+        migration,
+        /grant[^;]*(anon|authenticated)/i
+    );
+});
+
 test("researcher interface exposes clickable case, session, message, and transcript paths", async () => {
     const [dashboard, analysisScript, messageApi, analysisApi] = await Promise.all([
         readFile(new URL("../researcher.html", import.meta.url), "utf8"),
@@ -369,7 +393,7 @@ test("researcher interface exposes clickable case, session, message, and transcr
     assert.match(analysisScript, /Suggestion-specific sources/);
     assert.match(messageApi, /id: item\.id/);
     assert.match(dashboard, /targetTranscriptMessage/);
-    assert.match(analysisApi, /create_ai_analysis_item_with_batch/);
+    assert.match(analysisApi, /complete_ai_analysis_case/);
     assert.match(analysisApi, /relationship_type: "contributed_to"/);
     assert.match(analysisApi, /async function saveFeedback/);
     assert.match(analysisApi, /async function confirmItem/);

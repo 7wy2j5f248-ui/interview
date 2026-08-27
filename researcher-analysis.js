@@ -1035,11 +1035,13 @@
     }
 
     function participantEvidence(item, participant) {
-        return (item.evidence || []).filter(evidence =>
-            (evidence.participant === participant.participantId
-                || participant.sessionIds.has(evidence.session))
-            && evidence.included !== false
-        );
+        const hasSessionScope = participant.sessionIds.size > 0;
+        return (item.evidence || []).filter(evidence => {
+            const belongsToCase = hasSessionScope
+                ? participant.sessionIds.has(evidence.session)
+                : evidence.participant === participant.participantId;
+            return belongsToCase && evidence.included !== false;
+        });
     }
 
     function sourceIdsForParticipant(item, component, participant) {
@@ -1058,9 +1060,15 @@
             return true;
         }
 
-        return (item.provenance?.supportingSessions || []).some(session =>
+        const supportingSessions = item.provenance?.supportingSessions || [];
+        if (participant.sessionIds.size) {
+            return supportingSessions.some(session =>
+                participant.sessionIds.has(session.sessionId)
+            );
+        }
+
+        return supportingSessions.some(session =>
             session.participantId === participant.participantId
-            || participant.sessionIds.has(session.sessionId)
         );
     }
 
@@ -2282,12 +2290,29 @@
         }
 
         container.replaceChildren();
+        const summaryReady = formOneReady();
+        document.getElementById("analysisDiscussion").hidden = !summaryReady;
         document.querySelectorAll("[data-analysis-view]").forEach(button => {
+            button.disabled = !summaryReady;
             button.setAttribute(
                 "aria-pressed",
                 String(button.dataset.analysisView === activeAnalysisView)
             );
         });
+
+        if (!summaryReady) {
+            const progress = generationProgress();
+            breadcrumb.textContent =
+                "Form 1 · Waiting for completed case reports";
+            description.textContent =
+                `${progress.processed} of ${progress.total} complete individual reports are available above. Form 1 will be generated only after every case report is complete; no partial case output is placed into the summary.`;
+            const note = document.createElement("p");
+            note.className = "analysisEmptyRow";
+            note.textContent =
+                "Read any completed individual report above while the remaining cases continue one by one.";
+            container.appendChild(note);
+            return;
+        }
 
         const item = selectedThemeItem();
         if (activeAnalysisView === "themes") {
@@ -2615,9 +2640,114 @@
     function generationProgress() {
         const total = workspace?.batches?.length || 0;
         const processed = (workspace?.batches || []).filter(batch =>
-            batch.inputTokenCount !== null
+            Number.isInteger(batch.inputTokenCount)
+            && batch.inputTokenCount > 0
         ).length;
         return { processed, total };
+    }
+
+    function individualCaseRecords() {
+        return (workspace?.batches || [])
+            .filter(isIndividualCaseUnit)
+            .map(batch => {
+                const session = batch.sessions?.[0] || {};
+                const sessionId = session.sessionId
+                    || batch.groupingCriteria?.caseSessionId
+                    || null;
+                return {
+                    batch,
+                    complete: Number.isInteger(batch.inputTokenCount)
+                        && batch.inputTokenCount > 0,
+                    participant: {
+                        participantId: session.participantId || sessionId,
+                        participantCode: session.participantCode || null,
+                        sessionIds: new Set(sessionId ? [sessionId] : []),
+                        language: session.language || null,
+                        descriptors: session.descriptors || null
+                    }
+                };
+            });
+    }
+
+    function formOneReady() {
+        const cases = individualCaseRecords();
+        if (!cases.length) {
+            return true;
+        }
+        return workspace?.run?.status === "completed"
+            && cases.every(record => record.complete);
+    }
+
+    function renderIndividualCaseReports() {
+        const container = document.getElementById(
+            "individualCaseReportsList"
+        );
+        container.replaceChildren();
+        const cases = individualCaseRecords();
+
+        if (!cases.length) {
+            const note = document.createElement("p");
+            note.textContent = workspace?.run
+                ? "This historical run did not store transcript-scoped case-report status."
+                : "Start an analysis run to create the first individual case report.";
+            container.appendChild(note);
+            return;
+        }
+
+        const table = document.createElement("table");
+        const head = document.createElement("thead");
+        const headingRow = document.createElement("tr");
+        ["Case", "Participant code", "Status", "Individual report", "Transcript"]
+            .forEach(label => appendHeader(headingRow, label));
+        head.appendChild(headingRow);
+        table.appendChild(head);
+        const body = document.createElement("tbody");
+
+        cases.forEach((record, index) => {
+            const row = document.createElement("tr");
+            appendRowHeading(row, `Case ${index + 1}`);
+            appendCell(
+                row,
+                record.participant.participantCode || "Uncoded participant"
+            );
+            appendCell(
+                row,
+                record.complete
+                    ? "Complete"
+                    : record.batch.inputTokenCount === 0
+                        ? "Incomplete — retry required"
+                        : "Pending"
+            );
+            const reportCell = document.createElement("td");
+            const reportButton = actionButton(
+                record.complete ? "Open complete report" : "Report not ready",
+                () => openIndividualCaseReport(record.participant)
+            );
+            reportButton.disabled = !record.complete;
+            reportCell.appendChild(reportButton);
+            row.appendChild(reportCell);
+            const transcriptCell = document.createElement("td");
+            const sessionId = [...record.participant.sessionIds][0];
+            if (sessionId) {
+                const transcriptButton = actionButton(
+                    "Open transcript",
+                    () => openTranscript(
+                        sessionId,
+                        null,
+                        record.participant
+                    )
+                );
+                transcriptButton.className = "worksheetTranscriptButton";
+                transcriptCell.appendChild(transcriptButton);
+            } else {
+                transcriptCell.textContent = "—";
+            }
+            row.appendChild(transcriptCell);
+            body.appendChild(row);
+        });
+
+        table.appendChild(body);
+        container.appendChild(table);
     }
 
     function renderWorkspace() {
@@ -2668,6 +2798,7 @@
             ].join(" · ");
         }
         workspace.items.forEach(item => body.appendChild(renderItem(item)));
+        renderIndividualCaseReports();
         renderAnalysisOverview();
         renderHierarchyView();
 
@@ -2739,7 +2870,7 @@
 
             while (canResumeGeneration()) {
                 const progress = generationProgress();
-                setStatus(`Analysing individual case ${progress.processed + 1} of ${progress.total}…`);
+                setStatus(`Completing individual case report ${progress.processed + 1} of ${progress.total} before moving to the next case…`);
                 generateButton.disabled = true;
                 workspace = await authorizedRequest("/api/analysis", {
                     method: "POST",
