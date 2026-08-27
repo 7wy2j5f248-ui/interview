@@ -459,7 +459,8 @@ test("formal completion automatically translates before case analysis", async ()
         chat.indexOf("scheduleCompletedTranscriptTranslation")
         < chat.indexOf("scheduleAutomaticCaseAnalysis(req)")
     );
-    assert.match(translation, /\/api\/transcript-translation/);
+    assert.match(translation, /\/api\/automatic-analysis/);
+    assert.match(translation, /worker: "translation"/);
     assert.match(translation, /waitUntil\(fetch\(url/);
     assert.match(translation, /RESEARCHER_DASHBOARD_TOKEN/);
 });
@@ -474,7 +475,7 @@ test("historical translations run from a durable queue independent of analysis",
         "utf8"
     );
     const endpoint = await readFile(
-        new URL("../api/transcript-translation.js", import.meta.url),
+        new URL("../api/automatic-analysis.js", import.meta.url),
         "utf8"
     );
     const loadDesign = await readFile(
@@ -492,6 +493,7 @@ test("historical translations run from a durable queue independent of analysis",
     assert.match(worker, /TRANSLATION_CHUNK_SIZE = 12/);
     assert.match(worker, /ensureEnglishTranslations/);
     assert.match(endpoint, /translation_independent_from_case_analysis/);
+    assert.match(endpoint, /req\.body\?\.worker === "translation"/);
     assert.match(loadDesign, /scheduleTranscriptTranslationBackfill/);
 });
 

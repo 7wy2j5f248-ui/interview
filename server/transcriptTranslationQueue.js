@@ -1,7 +1,7 @@
 import { ensureEnglishTranslations, needsEnglishTranslation } from "./messageTranslation.js";
 
 const TRANSLATION_CHUNK_SIZE = 12;
-const WORKER_PATH = "/api/transcript-translation";
+const WORKER_PATH = "/api/automatic-analysis";
 
 function configuredWorkerSecret() {
     return process.env.RESEARCHER_DASHBOARD_TOKEN || null;
@@ -132,7 +132,10 @@ export async function continueTranscriptTranslation(baseUrl) {
             Authorization: `Bearer ${secret}`,
             "Content-Type": "application/json"
         },
-        body: JSON.stringify({ source: "translation-continuation" })
+        body: JSON.stringify({
+            source: "translation-continuation",
+            worker: "translation"
+        })
     });
 
     if (!response.ok) {

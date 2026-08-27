@@ -137,7 +137,7 @@ export function scheduleCompletedTranscriptTranslation(
         return false;
     }
 
-    const url = new URL("/api/transcript-translation", baseUrl);
+    const url = new URL("/api/automatic-analysis", baseUrl);
     waitUntil(fetch(url, {
         method: "POST",
         cache: "no-store",
@@ -147,6 +147,7 @@ export function scheduleCompletedTranscriptTranslation(
         },
         body: JSON.stringify({
             source: "formal-completion",
+            worker: "translation",
             sessionId
         })
     }).then(response => {
@@ -170,7 +171,7 @@ export function scheduleTranscriptTranslationBackfill(req) {
         return false;
     }
 
-    const url = new URL("/api/transcript-translation", baseUrl);
+    const url = new URL("/api/automatic-analysis", baseUrl);
     waitUntil(fetch(url, {
         method: "POST",
         cache: "no-store",
@@ -178,7 +179,10 @@ export function scheduleTranscriptTranslationBackfill(req) {
             Authorization: `Bearer ${secret}`,
             "Content-Type": "application/json"
         },
-        body: JSON.stringify({ source: "backfill-wakeup" })
+        body: JSON.stringify({
+            source: "backfill-wakeup",
+            worker: "translation"
+        })
     }).catch(error => {
         console.error("Transcript translation backfill trigger failed:", error);
     }));
