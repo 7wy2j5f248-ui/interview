@@ -118,3 +118,13 @@ test("researcher dashboard uses cases, positional codes, and positional themes",
     assert.match(script, /Participant ID:/);
     assert.match(script, /start_offset/);
 });
+
+test("automatic dashboard selects only stored transcript columns", async () => {
+    const dashboard = await readFile(
+        new URL("../server/caseAnalysisDashboard.js", import.meta.url),
+        "utf8"
+    );
+
+    assert.match(dashboard, /EnglishTranslation, Timestamp/);
+    assert.doesNotMatch(dashboard, /\.select\([^)]*TranslationState/);
+});

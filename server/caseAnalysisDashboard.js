@@ -136,7 +136,7 @@ export async function handleCaseAnalysisDashboard(req, res) {
                 reportIds.length ? requireData(
                     supabase
                         .from("interview_messages")
-                        .select("id, Participant, Session, Language, Speaker, Message, EnglishTranslation, TranslationState, Timestamp")
+                        .select("id, Participant, Session, Language, Speaker, Message, EnglishTranslation, Timestamp")
                         .in("Session", reports.map(report => report.session_id))
                         .order("Timestamp", { ascending: true }),
                     "Case transcripts could not be loaded."
