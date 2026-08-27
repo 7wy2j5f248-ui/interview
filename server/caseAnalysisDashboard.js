@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import { authorizeResearcher } from "../server/researcherAuth.js";
+import { authorizeResearcher } from "./researcherAuth.js";
 
 const PAGE_SIZE = 100;
 
@@ -43,7 +43,7 @@ async function loadCounts(supabase) {
     return Object.fromEntries(values);
 }
 
-export default async function handler(req, res) {
+export async function handleCaseAnalysisDashboard(req, res) {
     if (req.method !== "GET") {
         res.setHeader("Allow", "GET");
         return res.status(405).json({ error: "Method not allowed." });

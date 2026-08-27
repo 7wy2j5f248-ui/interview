@@ -307,7 +307,7 @@
 
     async function load() {
         setStatus("Loading automatic case reports…");
-        const response = await fetch("/api/case-analysis", {
+        const response = await fetch("/api/automatic-analysis", {
             headers: { Authorization: `Bearer ${token()}` }
         });
         const data = await response.json().catch(() => ({}));
