@@ -18,6 +18,10 @@ const demographicMigrationUrl = new URL(
     "../supabase/migrations/20260827164457_activate_v3_demographics_for_unfinished_cases.sql",
     import.meta.url
 );
+const historicalReprocessingMigrationUrl = new URL(
+    "../supabase/migrations/20260827170200_reprocess_v2_reports_with_v3_demographics.sql",
+    import.meta.url
+);
 
 test("automatic case analysis retains exact keyword offsets and local hierarchy", () => {
     const result = validateAutomaticCaseAnalysis({
@@ -315,6 +319,26 @@ test("v3 saves evidenced demographics atomically without replacing completed rep
     assert.match(worker, /descriptorSources: analysis\.descriptorSources/);
     assert.match(core, /source_message_id/);
     assert.match(core, /extraction_method: AUTOMATIC_CASE_ANALYSIS_VERSION/);
+});
+
+test("historical v2 reports remain active until an atomic v3 replacement succeeds", async () => {
+    const migration = await readFile(
+        historicalReprocessingMigrationUrl,
+        "utf8"
+    );
+
+    assert.match(migration, /before insert on public\.qualitative_case_reports/);
+    assert.match(migration, /superseded_at = now\(\)/);
+    assert.match(migration, /new\.analysis_version/);
+    assert.match(migration, /security invoker/);
+    assert.match(migration, /from public, anon, authenticated/);
+    assert.match(migration, /status = 'pending'/);
+    assert.match(migration, /report\.superseded_at is null/);
+    assert.match(
+        migration,
+        /report\.analysis_version =\s*'case-analysis-v2-no-conversational-courtesies'/
+    );
+    assert.doesNotMatch(migration, /delete from public\.qualitative_case_reports/);
 });
 
 test("automatic dashboard exposes every transcript independently of analysis completion", async () => {
