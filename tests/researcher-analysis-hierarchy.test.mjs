@@ -145,6 +145,17 @@ test("AI discussion remains grounded server-side and revisions stay explicit", (
     assert.match(api, /broad one- or two-word concept/);
 });
 
+test("analysis generation is resumable one stored batch at a time", () => {
+    assert.match(api, /async function startAnalysisGeneration/);
+    assert.match(api, /async function processGenerationBatch/);
+    assert.match(api, /action === "process_generation_batch"/);
+    assert.match(api, /input_token_count === null/);
+    assert.match(script, /while \(canResumeGeneration\(\)\)/);
+    assert.match(script, /action: "process_generation_batch"/);
+    assert.match(script, /Resume this analysis run/);
+    assert.match(script, /Generate corrected new analysis run/);
+});
+
 test("each worksheet supports a traceable Excel round-trip", () => {
     assert.match(script, /Download for Excel/);
     assert.match(script, /Upload grouping to Worksheet 2/);

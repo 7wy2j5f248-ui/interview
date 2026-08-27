@@ -2484,6 +2484,20 @@
         });
     }
 
+    function canResumeGeneration() {
+        return workspace?.run?.status === "generating"
+            && workspace.run.analysis_version
+                === workspace.currentAnalysisVersion;
+    }
+
+    function generationProgress() {
+        const total = workspace?.batches?.length || 0;
+        const processed = (workspace?.batches || []).filter(batch =>
+            batch.inputTokenCount !== null
+        ).length;
+        return { processed, total };
+    }
+
     function renderWorkspace() {
         if (!workspace) {
             return;
@@ -2496,9 +2510,11 @@
             !workspace.run;
 
         const generateButton = document.getElementById("generateAnalysisButton");
-        generateButton.textContent = workspace.run
-            ? "Regenerate as a new analysis run"
-            : "Generate AI suggestions";
+        generateButton.textContent = canResumeGeneration()
+            ? "Resume this analysis run"
+            : workspace.run
+                ? "Generate corrected new analysis run"
+                : "Generate AI suggestions";
         generateButton.disabled = !(workspace.corpusMessages || []).length;
 
         const metadata = document.getElementById("analysisRunMetadata");
@@ -2517,12 +2533,15 @@
                 selectedCode = null;
             }
 
+            const progress = generationProgress();
             metadata.textContent = [
                 completionFilter.selectedOptions[0].textContent,
                 `Model ${workspace.run.model}`,
                 `${workspace.run.messages_analyzed} participant messages analysed`,
                 `${workspace.run.sessions_analyzed} sessions`,
-                `${workspace.run.batches_used} batches`,
+                workspace.run.status === "generating"
+                    ? `${progress.processed} of ${progress.total} batches processed`
+                    : `${workspace.run.batches_used} batches`,
                 `${workspace.run.skipped_records} skipped records`,
                 `${workspace.run.invalid_evidence_ids} rejected evidence IDs`
             ].join(" · ");
@@ -2552,10 +2571,16 @@
         try {
             workspace = await authorizedRequest(analysisQuery(runId));
             renderWorkspace();
-            setStatus(workspace.run
-                ? "Stored analysis loaded. No AI generation was performed."
-                : "Real interview data loaded. Generate suggestions when you are ready to populate codes and keywords."
-            );
+            if (!workspace.run) {
+                setStatus("Real interview data loaded. Generate suggestions when you are ready to populate codes and keywords.");
+            } else if (canResumeGeneration()) {
+                const progress = generationProgress();
+                setStatus(`Generation paused after ${progress.processed} of ${progress.total} batches. Select Resume this analysis run to continue.`);
+            } else if (workspace.run.status === "generating") {
+                setStatus("This older analysis run stopped before completion and uses the former sentence-style themes. Select Generate corrected new analysis run.", true);
+            } else {
+                setStatus("Stored analysis loaded. No AI generation was performed.");
+            }
         } catch (error) {
             setStatus(error.message, true);
 
@@ -2563,6 +2588,58 @@
                 sessionStorage.removeItem(TOKEN_STORAGE_KEY);
                 setUnlocked(false);
             }
+        }
+    }
+
+    async function runIncrementalGeneration() {
+        const generateButton = document.getElementById(
+            "generateAnalysisButton"
+        );
+        generateButton.disabled = true;
+
+        try {
+            if (!canResumeGeneration()) {
+                const period = currentPeriod();
+                setStatus("Creating a corrected analysis run…");
+                workspace = await authorizedRequest("/api/analysis", {
+                    method: "POST",
+                    body: JSON.stringify({
+                        action: "start_generation",
+                        model: analysisModel.value.trim(),
+                        start: period.start,
+                        end: period.end,
+                        completion: completionFilter.value
+                    })
+                });
+                selectedThemeItemId = null;
+                selectedCode = null;
+                renderWorkspace();
+            }
+
+            while (canResumeGeneration()) {
+                const progress = generationProgress();
+                setStatus(`Analysing batch ${progress.processed + 1} of ${progress.total}…`);
+                generateButton.disabled = true;
+                workspace = await authorizedRequest("/api/analysis", {
+                    method: "POST",
+                    body: JSON.stringify({
+                        action: "process_generation_batch",
+                        runId: workspace.run.id
+                    })
+                });
+                renderWorkspace();
+                generateButton.disabled = true;
+            }
+
+            const progress = generationProgress();
+            setStatus(workspace.run.status === "completed"
+                ? `Corrected analysis complete: ${progress.total} of ${progress.total} batches processed.`
+                : `Analysis finished with status ${workspace.run.status}. Review the batch provenance for any missing evidence.`
+            );
+        } catch (error) {
+            setStatus(`${error.message} The completed batches are saved; select Resume this analysis run to continue.`, true);
+        } finally {
+            generateButton.disabled = !(workspace?.corpusMessages || []).length;
         }
     }
 
@@ -2838,16 +2915,7 @@
 
     document.getElementById("generateAnalysisButton").addEventListener(
         "click",
-        () => {
-            const period = currentPeriod();
-            postAction({
-                action: "generate",
-                model: analysisModel.value.trim(),
-                start: period.start,
-                end: period.end,
-                completion: completionFilter.value
-            }, "Generating provisional AI suggestions…");
-        }
+        runIncrementalGeneration
     );
 
     completionFilter.addEventListener("change", () => {

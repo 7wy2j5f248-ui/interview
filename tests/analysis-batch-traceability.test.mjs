@@ -229,7 +229,11 @@ test("AI discussion returns an explicit code-to-keyword revision proposal", asyn
     assert.equal(request.store, false);
     assert.match(
         request.input[0].content,
-        /under 'Work'.*'Long hours'.*'Overtime'/
+        /Under 'Work'.*'Long hours'.*'Overtime'/
+    );
+    assert.match(
+        request.input[0].content,
+        /'Stable sleep routines anchored by longstanding habits' to 'Sleep routine'/
     );
     assert.equal(result.proposal.shouldApply, true);
     assert.deepEqual(result.proposal.codeKeywordGroups, [{

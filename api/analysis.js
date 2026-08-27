@@ -26,11 +26,17 @@ import { authorizeResearcher } from "../server/researcherAuth.js";
 import { normalizeOpenAIModel } from "../server/modelConfiguration.js";
 import { loadParticipantCodeMap } from "../server/participantCodes.js";
 
-const AI_ACTIONS = new Set(["generate", "collect_evidence", "discuss"]);
+const AI_ACTIONS = new Set([
+    "process_generation_batch",
+    "collect_evidence",
+    "discuss"
+]);
 const KNOWN_ACTIONS = new Set([
     "list",
     "confirmed",
     "generate",
+    "start_generation",
+    "process_generation_batch",
     "save_feedback",
     "create_item",
     "collect_evidence",
@@ -817,6 +823,7 @@ async function loadWorkspace(
         );
 
         return {
+            currentAnalysisVersion: QUALITATIVE_ANALYSIS_VERSION,
             period,
             completionFilter,
             runs,
@@ -924,6 +931,7 @@ async function loadWorkspace(
     });
 
     return {
+        currentAnalysisVersion: QUALITATIVE_ANALYSIS_VERSION,
         period,
         completionFilter,
         runs,
@@ -1096,16 +1104,11 @@ async function persistSuggestedItem(
     }
 }
 
-async function generateAnalysis(
+async function startAnalysisGeneration(
     req,
     supabaseClient,
-    openaiClient,
     { batchSize, now }
 ) {
-    if (!openaiClient) {
-        throw new AnalysisError(500, "Server configuration is incomplete.");
-    }
-
     const model = analysisModel(req.body?.model);
     const period = analysisPeriod(req.body?.start, req.body?.end);
     const completionFilter = analysisCompletionFilter(
@@ -1174,33 +1177,141 @@ async function generateAnalysis(
         throw error;
     }
 
-    let batchFailures = 0;
-    let invalidEvidenceIds = 0;
-    let skippedItems = 0;
-    let storedItems = 0;
+    return loadWorkspace(
+        supabaseClient,
+        period,
+        completionFilter,
+        run.id
+    );
+}
 
-    for (let index = 0; index < batches.length; index += 1) {
+async function frozenBatchMessages(supabaseClient, batch) {
+    const { data: links, error: linkError } = await supabaseClient
+        .from(ANALYSIS_TABLES.batchMessages)
+        .select("message_id")
+        .eq("batch_id", batch.id);
+
+    if (linkError || !(links || []).length) {
+        throw new AnalysisError(500, "The frozen analysis batch could not be loaded.");
+    }
+
+    const rows = await loadMessagesByIds(
+        supabaseClient,
+        links.map(link => link.message_id)
+    );
+    const prepared = prepareParticipantMessages(rows);
+
+    if (!prepared.messages.length) {
+        throw new AnalysisError(500, "The frozen analysis batch has no participant evidence.");
+    }
+
+    return prepared.messages;
+}
+
+async function finishGenerationIfReady(supabaseClient, run, now) {
+    const [{ data: batches, error: batchError }, { data: items, error: itemError }] =
+        await Promise.all([
+            supabaseClient
+                .from(ANALYSIS_TABLES.batches)
+                .select("id, input_token_count")
+                .eq("analysis_run_id", run.id),
+            supabaseClient
+                .from(ANALYSIS_TABLES.items)
+                .select("id")
+                .eq("analysis_run_id", run.id)
+        ]);
+
+    if (batchError || itemError) {
+        throw new AnalysisError(500, "Analysis generation progress could not be checked.");
+    }
+
+    if ((batches || []).some(batch => batch.input_token_count === null)) {
+        return;
+    }
+
+    const status = !(items || []).length
+        ? "failed"
+        : (batches || []).some(batch => batch.input_token_count === 0)
+            ? "completed_with_errors"
+            : "completed";
+    const { error } = await supabaseClient
+        .from(ANALYSIS_TABLES.runs)
+        .update({ status, completed_at: now() })
+        .eq("id", run.id);
+
+    if (error) {
+        throw new AnalysisError(500, "The analysis run status could not be saved.");
+    }
+}
+
+async function processGenerationBatch(
+    req,
+    supabaseClient,
+    openaiClient,
+    now
+) {
+    if (!openaiClient) {
+        throw new AnalysisError(500, "Server configuration is incomplete.");
+    }
+
+    const runId = safeId(req.body?.runId, "Analysis run");
+    const run = await loadRun(supabaseClient, runId);
+
+    if (run.analysis_version !== QUALITATIVE_ANALYSIS_VERSION) {
+        throw new AnalysisError(
+            409,
+            "This incomplete run used the former sentence-style theme definition. Start a corrected new analysis run."
+        );
+    }
+
+    if (run.status !== "generating") {
+        return loadWorkspace(
+            supabaseClient,
+            analysisPeriod(run.period_start, run.period_end),
+            runCompletionFilter(run),
+            run.id
+        );
+    }
+
+    const { data: batches, error: batchLookupError } = await supabaseClient
+        .from(ANALYSIS_TABLES.batches)
+        .select("*")
+        .eq("analysis_run_id", run.id)
+        .order("batch_number", { ascending: true });
+
+    if (batchLookupError || !(batches || []).length) {
+        throw new AnalysisError(500, "Analysis generation batches could not be loaded.");
+    }
+
+    const batch = batches.find(entry => entry.input_token_count === null);
+
+    if (batch) {
+        let marker = 0;
+        let invalidEvidenceIds = 0;
+        let skippedRecords = 0;
+        let storedItems = 0;
+
         try {
+            const messages = await frozenBatchMessages(
+                supabaseClient,
+                batch
+            );
+            const model = analysisModel(run.model);
             const result = await generateSuggestionsForBatch(
                 openaiClient,
-                batches[index].messages,
+                messages,
                 { model }
             );
-            invalidEvidenceIds += result.invalidEvidenceIds;
-            skippedItems += result.skippedItems + result.skippedComponents;
+            marker = Number.isInteger(result.inputTokenCount)
+                && result.inputTokenCount > 0
+                ? result.inputTokenCount
+                : 1;
+            invalidEvidenceIds = result.invalidEvidenceIds;
+            skippedRecords = result.skippedItems + result.skippedComponents;
 
-            if (Number.isInteger(result.inputTokenCount)) {
-                const { error: tokenUpdateError } = await supabaseClient
-                    .from(ANALYSIS_TABLES.batches)
-                    .update({ input_token_count: result.inputTokenCount })
-                    .eq("id", batches[index].id);
-
-                if (tokenUpdateError) {
-                    logOperationalFailure("batch_token_persistence", {
-                        runId: run.id,
-                        batchNumber: index + 1
-                    }, tokenUpdateError);
-                }
+            if (!result.items.length) {
+                marker = 0;
+                skippedRecords += batch.message_count;
             }
 
             for (const item of result.items) {
@@ -1208,54 +1319,59 @@ async function generateAnalysis(
                     await persistSuggestedItem(
                         supabaseClient,
                         run.id,
-                        batches[index],
+                        batch,
                         item
                     );
                     storedItems += 1;
                 } catch (error) {
-                    skippedItems += 1;
+                    skippedRecords += 1;
                     logOperationalFailure("suggestion_persistence", {
                         runId: run.id,
-                        batchNumber: index + 1
+                        batchNumber: batch.batch_number
                     }, error);
                 }
             }
+
+            if (!storedItems) {
+                marker = 0;
+            }
         } catch (error) {
-            batchFailures += 1;
+            marker = 0;
+            skippedRecords += batch.message_count;
             logOperationalFailure("suggestion_generation", {
                 runId: run.id,
-                batchNumber: index + 1
+                batchNumber: batch.batch_number
             }, error);
+        }
+
+        const { error: batchUpdateError } = await supabaseClient
+            .from(ANALYSIS_TABLES.batches)
+            .update({ input_token_count: marker })
+            .eq("id", batch.id);
+
+        if (batchUpdateError) {
+            throw new AnalysisError(500, "Analysis batch progress could not be saved.");
+        }
+
+        const { error: runUpdateError } = await supabaseClient
+            .from(ANALYSIS_TABLES.runs)
+            .update({
+                skipped_records: (run.skipped_records || 0) + skippedRecords,
+                invalid_evidence_ids:
+                    (run.invalid_evidence_ids || 0) + invalidEvidenceIds
+            })
+            .eq("id", run.id);
+
+        if (runUpdateError) {
+            throw new AnalysisError(500, "Analysis generation totals could not be saved.");
         }
     }
 
-    const status = storedItems === 0
-        ? "failed"
-        : batchFailures || skippedItems
-            ? "completed_with_errors"
-            : "completed";
-    const { error: updateError } = await supabaseClient
-        .from(ANALYSIS_TABLES.runs)
-        .update({
-            status,
-            completed_at: now(),
-            skipped_records: prepared.skippedRecords + skippedItems,
-            invalid_evidence_ids: invalidEvidenceIds
-        })
-        .eq("id", run.id);
-
-    if (updateError) {
-        throw new AnalysisError(500, "The analysis run status could not be saved.");
-    }
-
-    if (storedItems === 0) {
-        throw new AnalysisError(502, "AI suggestions could not be generated for this corpus.");
-    }
-
+    await finishGenerationIfReady(supabaseClient, run, now);
     return loadWorkspace(
         supabaseClient,
-        period,
-        completionFilter,
+        analysisPeriod(run.period_start, run.period_end),
+        runCompletionFilter(run),
         run.id
     );
 }
@@ -2062,12 +2178,20 @@ export async function handleAnalysis(
         const action = req.body?.action;
         let runId;
 
-        if (action === "generate") {
-            return res.status(200).json(await generateAnalysis(
+        if (action === "generate" || action === "start_generation") {
+            return res.status(200).json(await startAnalysisGeneration(
+                req,
+                supabaseClient,
+                { batchSize, now }
+            ));
+        }
+
+        if (action === "process_generation_batch") {
+            return res.status(200).json(await processGenerationBatch(
                 req,
                 supabaseClient,
                 openaiClient,
-                { batchSize, now }
+                now
             ));
         }
 
