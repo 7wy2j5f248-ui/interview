@@ -25,6 +25,9 @@ test("dashboard exposes three named workbook worksheets", () => {
     assert.match(script, /function renderCodeWorksheet/);
     assert.match(script, /function renderKeywordWorksheet/);
     assert.match(script, /let activeAnalysisView = "themes"/);
+    assert.match(html, /read one transcript → attach its demographic data/);
+    assert.match(html, /A theme is a concept that categorizes codes/);
+    assert.match(html, /A code is a categorized\s+expression of keywords/);
 });
 
 test("opening the local dashboard redirects to the live HTTPS site", () => {
@@ -54,6 +57,9 @@ test("Worksheet 1 retains metadata and is the only worksheet with transcript lin
     assert.match(themeSource, /openTranscript/);
     assert.match(themeSource, /Open case report/);
     assert.match(script, /function openIndividualCaseReport/);
+    assert.match(script, /demographicHeading\.textContent = "Demographic data"/);
+    assert.match(script, /participantMetadataHeadings\.forEach/);
+    assert.match(script, /Form 1 is the theme-level researcher-validation form/);
     assert.match(html, /id="caseReportDialog"/);
     assert.doesNotMatch(codeSource, /openTranscript|openProvenance/);
     assert.doesNotMatch(keywordSource, /openTranscript|openProvenance/);
@@ -169,5 +175,5 @@ test("each worksheet supports a traceable Excel round-trip", () => {
     assert.match(script, /function workbookSnapshot/);
     assert.match(script, /function uploadWorkbook/);
     assert.match(api, /workbookImports/);
-    assert.match(html, /traceable decision layer/);
+    assert.match(html, /traceable researcher-validation layer/);
 });

@@ -1887,6 +1887,27 @@
             "This report is generated from this participant’s transcript alone. It is presented as themes, then codes, then keywords; the underlying analysis identifies evidence and keywords first.";
         content.appendChild(introduction);
 
+        const demographicHeading = document.createElement("h3");
+        demographicHeading.textContent = "Demographic data";
+        content.appendChild(demographicHeading);
+        const demographicValues = metadataValues(participant);
+        participantMetadataHeadings.forEach((label, index) => {
+            appendTextBlock(
+                content,
+                label,
+                String(demographicValues[index] ?? "—")
+            );
+        });
+        const demographicNote = document.createElement("p");
+        demographicNote.className = "muted";
+        demographicNote.textContent =
+            "These data belong to this case. They provide case context and are not treated as transcript evidence unless the participant discusses them.";
+        content.appendChild(demographicNote);
+
+        const analysisHeading = document.createElement("h3");
+        analysisHeading.textContent = "Themes, codes, and keywords";
+        content.appendChild(analysisHeading);
+
         themes.forEach((theme, themeIndex) => {
             const article = document.createElement("article");
             article.className = "evidenceMessage";
@@ -2272,7 +2293,7 @@
         if (activeAnalysisView === "themes") {
             breadcrumb.textContent = "Worksheet 1 · Participants & Themes";
             description.textContent =
-                "One row per participant, produced from that participant’s transcript alone. Open the individual report to review its themes, codes, keywords, and case interpretation. T1–T8 contain the broadest one- or two-word concepts, such as Sleep routine or Work. Differences such as Stable, Long hours, or Overtime belong under codes. Themes in the same column are not assumed to have the same meaning. This is the only worksheet with a direct link to the complete transcript. Older stored runs remain available for traceability.";
+                "Form 1 is the theme-level researcher-validation form. One row represents one participant and is produced from that participant’s transcript and demographic context alone. Open the individual report to review its themes, codes, keywords, and case interpretation. T1–T8 contain the broadest one- or two-word concepts, such as Sleep routine or Work. Differences such as Stable, Long hours, or Overtime belong under codes. Themes in the same column are not assumed to have the same meaning. This is the only worksheet with a direct link to the complete transcript. Older stored runs remain available for traceability.";
             renderWorkbookControls(container, "themes");
             renderThemeWorksheet(container);
             renderDiscussionPanel(item);
