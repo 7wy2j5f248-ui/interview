@@ -137,6 +137,7 @@ set
     last_error = null,
     updated_at = now()
 where job.archived_at is null
+  and job.status = 'completed'
   and exists (
       select 1
       from public.interview_sessions as session
@@ -149,4 +150,5 @@ where job.archived_at is null
       from public.qualitative_case_reports as report
       where report.session_id = job.session_id
         and report.superseded_at is null
+        and report.demographics::text ~ '[^\x00-\x7F]'
   );

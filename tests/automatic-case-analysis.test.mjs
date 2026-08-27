@@ -460,8 +460,10 @@ test("new English demographics replace old display values without losing provena
         /descriptor_sources =\s*descriptor\.descriptor_sources\s*\|\| excluded\.descriptor_sources/
     );
     assert.match(migration, /job\.archived_at is null/);
+    assert.match(migration, /job\.status = 'completed'/);
     assert.match(migration, /lower\(coalesce\(session\.language, ''\)\) <> 'en'/);
     assert.match(migration, /report\.superseded_at is null/);
+    assert.match(migration, /report\.demographics::text/);
     assert.doesNotMatch(migration, /delete from public\.qualitative_case_reports/);
 });
 
