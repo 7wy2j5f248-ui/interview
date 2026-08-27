@@ -26,6 +26,10 @@ const independentDemographicMigrationUrl = new URL(
     "../supabase/migrations/20260827171500_save_case_demographics_independently.sql",
     import.meta.url
 );
+const atomicReplacementGrantMigrationUrl = new URL(
+    "../supabase/migrations/20260827171800_grant_atomic_report_supersede.sql",
+    import.meta.url
+);
 
 test("automatic case analysis retains exact keyword offsets and local hierarchy", () => {
     const result = validateAutomaticCaseAnalysis({
@@ -372,6 +376,22 @@ test("evidenced demographics survive an invalid replacement hierarchy", async ()
     );
     assert.match(dashboard, /function mergedDemographics/);
     assert.match(dashboard, /demographics: mergedDemographics/);
+});
+
+test("atomic replacement grants only its two lineage columns", async () => {
+    const migration = await readFile(
+        atomicReplacementGrantMigrationUrl,
+        "utf8"
+    );
+
+    assert.match(
+        migration,
+        /grant update \(superseded_at, superseded_reason\)/
+    );
+    assert.match(migration, /on public\.qualitative_case_reports/);
+    assert.match(migration, /to service_role/);
+    assert.doesNotMatch(migration, /grant update on/);
+    assert.doesNotMatch(migration, /to anon|to authenticated/);
 });
 
 test("automatic dashboard exposes every transcript independently of analysis completion", async () => {
