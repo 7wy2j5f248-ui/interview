@@ -96,6 +96,14 @@ async function loadCounts(supabase, scope) {
 }
 
 export async function handleCaseAnalysisDashboard(req, res) {
+    res.setHeader(
+        "Cache-Control",
+        "private, no-store, no-cache, must-revalidate, max-age=0"
+    );
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+    res.setHeader("Vary", "Authorization");
+
     if (req.method !== "GET") {
         res.setHeader("Allow", "GET");
         return res.status(405).json({ error: "Method not allowed." });
@@ -288,6 +296,7 @@ export async function handleCaseAnalysisDashboard(req, res) {
             page,
             pageSize: PAGE_SIZE,
             scope,
+            generatedAt: new Date().toISOString(),
             counts,
             cases
         });

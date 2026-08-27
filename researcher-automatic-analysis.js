@@ -20,6 +20,7 @@
     let activeView = "cases";
     let loadedScope = "active";
     let refreshTimer = null;
+    let loadPromise = null;
     let requestedTranscriptOpened = false;
     let activeCaseRecord = null;
 
@@ -30,6 +31,8 @@
     const dialog = document.getElementById("automaticTranscriptDialog");
     const reportDialog = document.getElementById("automaticCaseReportDialog");
     const archiveButton = document.getElementById("automaticCaseArchiveButton");
+    const unlockButton = document.getElementById("automaticAnalysisUnlockButton");
+    const gateStatus = document.getElementById("automaticAnalysisGateStatus");
 
     function token() {
         return sessionStorage.getItem(TOKEN_STORAGE_KEY) || "";
@@ -38,6 +41,11 @@
     function setStatus(text, isError = false) {
         status.textContent = text;
         status.className = isError ? "errorMessage" : "muted";
+    }
+
+    function setGateStatus(text, isError = false) {
+        gateStatus.textContent = text;
+        gateStatus.className = isError ? "errorMessage" : "muted";
     }
 
     function displayValue(value) {
@@ -576,9 +584,14 @@
     }
 
     async function fetchDashboardPage(requestedScope, page) {
+        const requestUrl = new URL("/api/automatic-analysis", window.location.origin);
+        requestUrl.searchParams.set("scope", requestedScope);
+        requestUrl.searchParams.set("page", String(page));
+        requestUrl.searchParams.set("fresh", `${Date.now()}-${page}`);
         const response = await fetch(
-            `/api/automatic-analysis?scope=${requestedScope}&page=${page}`,
+            requestUrl,
             {
+                cache: "no-store",
                 headers: { Authorization: `Bearer ${token()}` }
             }
         );
@@ -591,7 +604,7 @@
         return data;
     }
 
-    async function load() {
+    async function performLoad() {
         setStatus("Loading automatic case reports…");
         const requestedScope = activeView === "archive"
             ? "archived"
@@ -605,15 +618,28 @@
         const pageCount = Math.ceil(totalCases / pageSize);
         const cases = [...(firstPage.cases || [])];
 
-        for (let page = 2; page <= pageCount; page += 1) {
-            const nextPage = await fetchDashboardPage(requestedScope, page);
-            cases.push(...(nextPage.cases || []));
-        }
-
         payload = { ...firstPage, cases };
         loadedScope = requestedScope;
         gate.hidden = true;
         workspace.hidden = false;
+        render();
+
+        if (pageCount > 1) {
+            setStatus(
+                `Loaded ${cases.length} cases. Loading the remaining cases…`
+            );
+            const remainingPages = await Promise.all(
+                Array.from(
+                    { length: pageCount - 1 },
+                    (_, index) => fetchDashboardPage(requestedScope, index + 2)
+                )
+            );
+            remainingPages.forEach(nextPage => {
+                cases.push(...(nextPage.cases || []));
+            });
+        }
+
+        payload = { ...firstPage, cases };
         render();
         openRequestedTranscript();
         setStatus(
@@ -623,16 +649,34 @@
         );
     }
 
-    document.getElementById("automaticAnalysisUnlockButton")
-        .addEventListener("click", async () => {
+    function load() {
+        if (loadPromise) return loadPromise;
+        loadPromise = performLoad().finally(() => {
+            loadPromise = null;
+        });
+        return loadPromise;
+    }
+
+    unlockButton.addEventListener("click", async () => {
             const entered = document.getElementById("automaticAnalysisToken").value;
+            if (!entered.trim()) {
+                setGateStatus("Enter the researcher dashboard token.", true);
+                return;
+            }
             sessionStorage.setItem(TOKEN_STORAGE_KEY, entered);
+            unlockButton.disabled = true;
+            unlockButton.textContent = "Unlocking…";
+            setGateStatus("Checking the token and loading the newest reports…");
             try {
                 await load();
+                setGateStatus("");
                 clearInterval(refreshTimer);
                 refreshTimer = setInterval(() => load().catch(() => {}), 30000);
             } catch (error) {
-                setStatus(error.message, true);
+                setGateStatus(error.message, true);
+            } finally {
+                unlockButton.disabled = false;
+                unlockButton.textContent = "Unlock case analysis";
             }
         });
     document.getElementById("automaticAnalysisRefreshButton")

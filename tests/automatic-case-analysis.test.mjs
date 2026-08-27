@@ -362,10 +362,16 @@ test("Cases and keywords loads every case and every stored highlight", async () 
         /qualitative_case_keyword_highlights[\s\S]*\.order\("report_id"[\s\S]*\.order\("keyword_number"/
     );
     assert.match(script, /async function fetchDashboardPage/);
-    assert.match(script, /for \(let page = 2; page <= pageCount; page \+= 1\)/);
+    assert.match(script, /const remainingPages = await Promise\.all/);
     assert.match(script, /casesWithMarkedKeywords/);
     assert.match(script, /completed cases currently have marked keywords/);
-    assert.match(html, /researcher-automatic-analysis\.js\?version=20260827-demographics-live/);
+    assert.match(html, /researcher-automatic-analysis\.js\?version=20260827-unlock-fresh-v2/);
+    assert.match(html, /automaticAnalysisGateStatus/);
+    assert.match(script, /cache: "no-store"/);
+    assert.match(script, /searchParams\.set\("fresh"/);
+    assert.match(script, /unlockButton\.disabled = true/);
+    assert.match(dashboard, /private, no-store, no-cache/);
+    assert.match(dashboard, /generatedAt: new Date\(\)\.toISOString\(\)/);
 });
 
 test("researcher analysis assets cannot be held on a stale cached version", async () => {
