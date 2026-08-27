@@ -317,6 +317,8 @@
             "Link to transcript",
             "Case report",
             "Action",
+            "Language",
+            ...FORM_ONE_DEMOGRAPHIC_COLUMNS.map(([, label]) => label),
             ...Array.from(
                 { length: maximumCodes },
                 (_, index) => `C${index + 1}`
@@ -350,6 +352,11 @@
             );
             restoreCell.appendChild(restoreButton);
             row.appendChild(restoreCell);
+            createCell(row, caseRecord.language || "—");
+            FORM_ONE_DEMOGRAPHIC_COLUMNS.forEach(([key]) => createCell(
+                row,
+                demographicValue(caseRecord, key)
+            ));
 
             const codeByNumber = new Map((caseRecord.codes || []).map(code => [
                 code.code_number,
@@ -418,7 +425,7 @@
                     ? "Form 2: each case starts at C1. Headers are positional only; participant-specific code content stays inside cells."
                     : activeView === "themes"
                         ? "Form 3: each case starts at T1. Headers are positional only; participant-specific theme content stays inside cells."
-                        : "Archived cases are excluded from every active analysis form and from future automatic reanalysis. Each archived row preserves its transcript, report, positional C1–Cn codes, positional T1–Tn themes, and archive history.";
+                        : "Archived cases are excluded from every active analysis form and from future automatic reanalysis. Each archived row preserves its transcript, report, language, demographic columns, positional C1–Cn codes, positional T1–Tn themes, and archive history.";
     }
 
     function highlightedText(message, caseRecord) {
@@ -654,6 +661,8 @@
                 "Archived",
                 "Archive note",
                 "Link to transcript",
+                "Language",
+                ...FORM_ONE_DEMOGRAPHIC_COLUMNS.map(([, label]) => label),
                 ...Array.from(
                     { length: maximumCodes },
                     (_, index) => `C${index + 1}`
@@ -668,6 +677,10 @@
                 item.archivedAt || "",
                 item.archiveNote || "",
                 transcriptUrl(item),
+                item.language || "—",
+                ...FORM_ONE_DEMOGRAPHIC_COLUMNS.map(([key]) =>
+                    demographicValue(item, key)
+                ),
                 ...Array.from(
                     { length: maximumCodes },
                     (_, index) => (item.codes || []).find(
