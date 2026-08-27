@@ -2302,14 +2302,18 @@
 
         if (!summaryReady) {
             const progress = generationProgress();
-            breadcrumb.textContent =
-                "Form 1 · Waiting for completed case reports";
-            description.textContent =
-                `${progress.processed} of ${progress.total} complete individual reports are available above. Form 1 will be generated only after every case report is complete; no partial case output is placed into the summary.`;
+            const currentCaseRun = isCurrentIndividualCaseRun();
+            breadcrumb.textContent = currentCaseRun
+                ? "Form 1 · Waiting for completed case reports"
+                : "Form 1 · Strict case analysis not started";
+            description.textContent = currentCaseRun
+                ? `${progress.processed} of ${progress.total} complete individual reports are available above. Form 1 will be generated only after every case report is complete; no partial case output is placed into the summary.`
+                : "The selected historical run combined multiple cases in batches. It cannot supply individual reports or Form 1. Select Start strict case-by-case analysis to begin with the first transcript.";
             const note = document.createElement("p");
             note.className = "analysisEmptyRow";
-            note.textContent =
-                "Read any completed individual report above while the remaining cases continue one by one.";
+            note.textContent = currentCaseRun
+                ? "Read any completed individual report above while the remaining cases continue one by one."
+                : "No historical batch is counted as a completed case report.";
             container.appendChild(note);
             return;
         }
@@ -2625,7 +2629,11 @@
         workspace.runs.forEach(run => {
             const option = document.createElement("option");
             option.value = run.id;
-            option.textContent = `${new Date(run.created_at).toLocaleString()} — ${run.model} — ${run.status}`;
+            const runType = run.analysis_version
+                === workspace.currentAnalysisVersion
+                ? "strict case-by-case"
+                : "historical batch run";
+            option.textContent = `${new Date(run.created_at).toLocaleString()} — ${runType} — ${run.model} — ${run.status}`;
             option.selected = workspace.run?.id === run.id;
             runSelect.appendChild(option);
         });
@@ -2633,6 +2641,12 @@
 
     function canResumeGeneration() {
         return workspace?.run?.status === "generating"
+            && workspace.run.analysis_version
+                === workspace.currentAnalysisVersion;
+    }
+
+    function isCurrentIndividualCaseRun() {
+        return Boolean(workspace?.run)
             && workspace.run.analysis_version
                 === workspace.currentAnalysisVersion;
     }
@@ -2670,11 +2684,13 @@
     }
 
     function formOneReady() {
-        const cases = individualCaseRecords();
-        if (!cases.length) {
-            return true;
+        if (!isCurrentIndividualCaseRun()) {
+            return false;
         }
-        return workspace?.run?.status === "completed"
+
+        const cases = individualCaseRecords();
+        return cases.length > 0
+            && workspace?.run?.status === "completed"
             && cases.every(record => record.complete);
     }
 
@@ -2685,11 +2701,20 @@
         container.replaceChildren();
         const cases = individualCaseRecords();
 
+        if (workspace?.run && !isCurrentIndividualCaseRun()) {
+            const note = document.createElement("p");
+            note.className = "analysisEmptyRow";
+            note.textContent =
+                "This is a historical batch run, not a case-by-case analysis. It contains no completed individual case reports. Select Start strict case-by-case analysis to create them in order.";
+            container.appendChild(note);
+            return;
+        }
+
         if (!cases.length) {
             const note = document.createElement("p");
             note.textContent = workspace?.run
-                ? "This historical run did not store transcript-scoped case-report status."
-                : "Start an analysis run to create the first individual case report.";
+                ? "The strict case-by-case run has been created, but its first individual report has not yet been completed."
+                : "Start strict case-by-case analysis to create the first individual report.";
             container.appendChild(note);
             return;
         }
@@ -2764,9 +2789,7 @@
         const generateButton = document.getElementById("generateAnalysisButton");
         generateButton.textContent = canResumeGeneration()
             ? "Resume individual case reports"
-            : workspace.run
-                ? "Generate corrected new analysis run"
-                : "Generate AI suggestions";
+            : "Start strict case-by-case analysis";
         generateButton.disabled = !(workspace.corpusMessages || []).length;
 
         const metadata = document.getElementById("analysisRunMetadata");
@@ -2786,12 +2809,15 @@
             }
 
             const progress = generationProgress();
+            const currentCaseRun = isCurrentIndividualCaseRun();
             metadata.textContent = [
                 completionFilter.selectedOptions[0].textContent,
                 `Model ${workspace.run.model}`,
                 `${workspace.run.messages_analyzed} participant messages analysed`,
                 `${workspace.run.sessions_analyzed} sessions`,
-                workspace.run.status === "generating"
+                !currentCaseRun
+                    ? `${workspace.run.batches_used} historical multi-case batches — not individual reports`
+                    : workspace.run.status === "generating"
                     ? `${progress.processed} of ${progress.total} individual reports completed`
                     : `${workspace.run.batches_used} individual reports`,
                 `${workspace.run.invalid_evidence_ids} rejected evidence IDs`
@@ -2828,8 +2854,8 @@
             } else if (canResumeGeneration()) {
                 const progress = generationProgress();
                 setStatus(`Individual analysis paused after ${progress.processed} of ${progress.total} case reports. Select Resume individual case reports to continue.`);
-            } else if (workspace.run.status === "generating") {
-                setStatus("This older analysis run stopped before completion and uses the former sentence-style themes. Select Generate corrected new analysis run.", true);
+            } else if (!isCurrentIndividualCaseRun()) {
+                setStatus("This historical run was not analysed one case at a time and contains no completed individual reports. Select Start strict case-by-case analysis.", true);
             } else {
                 setStatus("Stored analysis loaded. No AI generation was performed.");
             }

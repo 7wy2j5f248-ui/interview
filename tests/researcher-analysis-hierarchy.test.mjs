@@ -162,7 +162,10 @@ test("analysis generation is resumable one stored individual case at a time", ()
     assert.match(script, /while \(canResumeGeneration\(\)\)/);
     assert.match(script, /action: "process_generation_batch"/);
     assert.match(script, /Resume individual case reports/);
-    assert.match(script, /Generate corrected new analysis run/);
+    assert.match(script, /Start strict case-by-case analysis/);
+    assert.match(script, /function isCurrentIndividualCaseRun/);
+    assert.match(script, /historical batch run, not a case-by-case analysis/);
+    assert.match(script, /No historical batch is counted as a completed case report/);
     assert.match(api, /strategy: "individual_case_report"/);
     assert.match(api, /one_transcript_per_case/);
     assert.match(api, /buildIndividualCaseBatches/);
