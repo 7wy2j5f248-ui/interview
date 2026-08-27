@@ -11,6 +11,7 @@ import {
   resolveInactivityTimeoutMinutes
 } from "../server/sessionLifecycle.js";
 import { scheduleAutomaticCaseAnalysis } from "../server/automaticCaseAnalysis.js";
+import { scheduleCompletedTranscriptTranslation } from "../server/messageTranslation.js";
 
 const supportedInterviewLanguages = Object.freeze({
   en: "English",
@@ -390,7 +391,14 @@ Return final_question_answered as true when the participant's current message an
       );
 
       // Formal completion persists the durable queue item in PostgreSQL.
-      // This request only wakes the worker; a wake-up failure never loses work.
+      // Translation starts independently so it does not wait behind analysis.
+      scheduleCompletedTranscriptTranslation(
+        req,
+        activeSessionId,
+        language
+      );
+      // This request only wakes the analysis worker; a wake-up failure never
+      // loses the durable queue item.
       scheduleAutomaticCaseAnalysis(req);
     }
 

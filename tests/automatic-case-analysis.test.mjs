@@ -430,6 +430,14 @@ test("formal completion automatically translates before case analysis", async ()
         new URL("../server/automaticCaseAnalysis.js", import.meta.url),
         "utf8"
     );
+    const chat = await readFile(
+        new URL("../api/chat.js", import.meta.url),
+        "utf8"
+    );
+    const translation = await readFile(
+        new URL("../server/messageTranslation.js", import.meta.url),
+        "utf8"
+    );
 
     assert.match(worker, /ensureEnglishTranslations/);
     assert.match(worker, /failOnError: true/);
@@ -442,6 +450,13 @@ test("formal completion automatically translates before case analysis", async ()
     assert.match(migration, /message\."Language"/);
     assert.match(migration, /message\."EnglishTranslation"/);
     assert.doesNotMatch(migration, /qualitative_case_reports/);
+    assert.match(chat, /scheduleCompletedTranscriptTranslation/);
+    assert.ok(
+        chat.indexOf("scheduleCompletedTranscriptTranslation")
+        < chat.indexOf("scheduleAutomaticCaseAnalysis(req)")
+    );
+    assert.match(translation, /waitUntil\(fetch\(url/);
+    assert.match(translation, /RESEARCHER_DASHBOARD_TOKEN/);
 });
 
 test("new English demographics replace old display values without losing provenance", async () => {

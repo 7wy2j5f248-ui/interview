@@ -1,3 +1,5 @@
+import { waitUntil } from "@vercel/functions";
+
 function textFromResponse(response) {
     const candidates = [
         response?.output_text,
@@ -110,4 +112,45 @@ export async function ensureEnglishTranslations(
         translated: pending.length - failures.length,
         failures
     };
+}
+
+function requestBaseUrl(req) {
+    const forwardedHost = req?.headers?.["x-forwarded-host"];
+    const host = forwardedHost || req?.headers?.host;
+    const protocol = req?.headers?.["x-forwarded-proto"] || "https";
+    return host ? `${protocol}://${host}` : null;
+}
+
+export function scheduleCompletedTranscriptTranslation(
+    req,
+    sessionId,
+    language
+) {
+    if (String(language || "").toLowerCase() === "en") {
+        return true;
+    }
+
+    const baseUrl = requestBaseUrl(req);
+    const secret = process.env.RESEARCHER_DASHBOARD_TOKEN;
+
+    if (!baseUrl || !secret || !sessionId) {
+        return false;
+    }
+
+    const url = new URL("/api/messages", baseUrl);
+    url.searchParams.set("session", sessionId);
+    waitUntil(fetch(url, {
+        cache: "no-store",
+        headers: { Authorization: `Bearer ${secret}` }
+    }).then(response => {
+        if (!response.ok) {
+            throw new Error(
+                `Completed transcript translation returned ${response.status}.`
+            );
+        }
+    }).catch(error => {
+        console.error("Completed transcript translation failed:", error);
+    }));
+
+    return true;
 }
