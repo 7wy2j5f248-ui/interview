@@ -46,6 +46,10 @@ const allSessionCaseCodesMigrationUrl = new URL(
     "../supabase/migrations/20260827211500_assign_case_codes_to_all_sessions.sql",
     import.meta.url
 );
+const incompleteSessionTimeoutMigrationUrl = new URL(
+    "../supabase/migrations/20260827212500_mark_stale_sessions_incomplete.sql",
+    import.meta.url
+);
 
 test("automatic case analysis retains exact keyword offsets and local hierarchy", () => {
     const result = validateAutomaticCaseAnalysis({
@@ -316,6 +320,10 @@ test("Form 4 keeps incomplete transcripts separate and marks why they need atten
         "utf8"
     );
     const migration = await readFile(allSessionCaseCodesMigrationUrl, "utf8");
+    const timeoutMigration = await readFile(
+        incompleteSessionTimeoutMigrationUrl,
+        "utf8"
+    );
 
     assert.match(html, /data-automatic-analysis-view="incomplete"/);
     assert.match(html, /automaticAnalysisIncompleteCount/);
@@ -329,8 +337,13 @@ test("Form 4 keeps incomplete transcripts separate and marks why they need atten
     assert.match(dashboard, /\.eq\("completed", false\)/);
     assert.match(dashboard, /formal completion signal missing/);
     assert.match(dashboard, /participantResponseCount/);
+    assert.match(dashboard, /session_status", \["timed_out", "abandoned"\]/);
     assert.match(migration, /ensure_session_case_code_mapping/);
     assert.match(migration, /from every interview session, complete or incomplete/);
+    assert.match(timeoutMigration, /mark_stale_interview_sessions_incomplete/);
+    assert.match(timeoutMigration, /pli-mark-incomplete-sessions/);
+    assert.match(timeoutMigration, /\* \* \* \* \*/);
+    assert.match(timeoutMigration, /session_status = 'timed_out'/);
 });
 
 test("researcher archive is durable, auditable, and excluded from future claims", async () => {

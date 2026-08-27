@@ -155,12 +155,14 @@ async function loadIncompleteDashboard(supabase, page, from) {
         supabase
             .from("interview_sessions")
             .select("session_id", { count: "exact", head: true })
-            .eq("completed", false),
+            .eq("completed", false)
+            .in("session_status", ["timed_out", "abandoned"]),
         requireData(
             supabase
                 .from("interview_sessions")
                 .select("session_id, participant_id, language, completed, created_at, updated_at, last_activity_at, ended_at, session_status, end_reason, timed_out_at, inactivity_timeout_minutes")
                 .eq("completed", false)
+                .in("session_status", ["timed_out", "abandoned"])
                 .order("created_at", { ascending: true })
                 .order("session_id", { ascending: true })
                 .range(from, from + PAGE_SIZE - 1),
