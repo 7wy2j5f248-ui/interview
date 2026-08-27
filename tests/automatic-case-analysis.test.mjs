@@ -10,6 +10,10 @@ const migrationUrl = new URL(
     "../supabase/migrations/20260827143920_automatic_case_analysis_pipeline.sql",
     import.meta.url
 );
+const archiveMigrationUrl = new URL(
+    "../supabase/migrations/20260827155638_add_case_archive_and_queue_wakeup.sql",
+    import.meta.url
+);
 
 test("automatic case analysis retains exact keyword offsets and local hierarchy", () => {
     const result = validateAutomaticCaseAnalysis({
@@ -147,8 +151,10 @@ test("researcher dashboard uses cases, positional codes, and positional themes",
     assert.match(html, /1 · Cases &amp; keywords/);
     assert.match(html, /2 · Codes/);
     assert.match(html, /3 · Themes/);
+    assert.match(html, /data-automatic-analysis-view="archive"/);
     assert.match(html, /Download current form/);
     assert.match(html, /automaticCaseReportDialog/);
+    assert.match(html, /automaticCaseArchiveButton/);
     assert.match(script, /Array\.from\(\{ length: maximum \}[^\n]*`\$\{prefix\}\$\{index \+ 1\}`/);
     assert.match(script, /Participant ID:/);
     assert.match(script, /start_offset/);
@@ -165,7 +171,37 @@ test("researcher dashboard uses cases, positional codes, and positional themes",
     assert.match(script, /URLSearchParams\(window\.location\.search\)\.get\("case"\)/);
     assert.match(script, /openRequestedTranscript\(\)/);
     assert.match(script, /Open case report/);
+    assert.match(script, /renderArchive/);
+    assert.match(script, /Restore to active analysis/);
+    assert.match(script, /action: shouldArchive \? "archive" : "restore"/);
     assert.doesNotMatch(script, /"Demographic data",\s*"Case report"/);
+});
+
+test("researcher archive is durable, auditable, and excluded from future claims", async () => {
+    const migration = await readFile(archiveMigrationUrl, "utf8");
+    const dashboard = await readFile(
+        new URL("../server/caseAnalysisDashboard.js", import.meta.url),
+        "utf8"
+    );
+    const api = await readFile(
+        new URL("../api/automatic-analysis.js", import.meta.url),
+        "utf8"
+    );
+
+    assert.match(migration, /add column archived_at timestamptz/);
+    assert.match(migration, /automatic_case_analysis_archive_events/);
+    assert.match(migration, /enable row level security/);
+    assert.match(migration, /set_automatic_case_archive/);
+    assert.match(
+        migration,
+        /claim_next_automatic_case_analysis[\s\S]*job\.archived_at is null/
+    );
+    assert.match(migration, /pli-automatic-case-analysis-wakeup/);
+    assert.match(migration, /\* \* \* \* \*/);
+    assert.match(migration, /https:\/\/intervu\.quest\/api\/loadDesign/);
+    assert.match(dashboard, /scope === "archived"/);
+    assert.match(dashboard, /set_automatic_case_archive/);
+    assert.match(api, /\["archive", "restore"\]/);
 });
 
 test("v2 preserves superseded reports and restarts the FIFO queue", async () => {

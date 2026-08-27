@@ -12,8 +12,10 @@
     ]);
     let payload = { counts: {}, cases: [] };
     let activeView = "cases";
+    let loadedScope = "active";
     let refreshTimer = null;
     let requestedTranscriptOpened = false;
+    let activeCaseRecord = null;
 
     const gate = document.getElementById("automaticAnalysisTokenGate");
     const workspace = document.getElementById("automaticAnalysisWorkspace");
@@ -21,6 +23,7 @@
     const tableHost = document.getElementById("automaticAnalysisTable");
     const dialog = document.getElementById("automaticTranscriptDialog");
     const reportDialog = document.getElementById("automaticCaseReportDialog");
+    const archiveButton = document.getElementById("automaticCaseArchiveButton");
 
     function token() {
         return sessionStorage.getItem(TOKEN_STORAGE_KEY) || "";
@@ -218,6 +221,53 @@
         tableHost.replaceChildren(scroll);
     }
 
+    function formatTimestamp(value) {
+        if (!value) return "—";
+        const date = new Date(value);
+        return Number.isNaN(date.getTime())
+            ? displayValue(value)
+            : date.toLocaleString();
+    }
+
+    function renderArchive() {
+        const { scroll, table } = createTable([
+            "Participant code",
+            "Archived",
+            "Archive note",
+            "Link to transcript",
+            "Case report",
+            "Action"
+        ]);
+        const body = document.createElement("tbody");
+
+        payload.cases.forEach(caseRecord => {
+            const row = document.createElement("tr");
+            createCell(row, caseRecord.caseNumber, "analysisIdentifierCell");
+            createCell(row, formatTimestamp(caseRecord.archivedAt));
+            createCell(row, caseRecord.archiveNote || "—");
+            const transcriptCell = document.createElement("td");
+            transcriptCell.appendChild(transcriptButton(caseRecord));
+            row.appendChild(transcriptCell);
+            const reportCell = document.createElement("td");
+            reportCell.appendChild(caseReportButton(caseRecord));
+            row.appendChild(reportCell);
+            const restoreCell = document.createElement("td");
+            const restoreButton = document.createElement("button");
+            restoreButton.type = "button";
+            restoreButton.className = "worksheetTranscriptButton";
+            restoreButton.textContent = "Restore to active analysis";
+            restoreButton.addEventListener("click", () =>
+                setArchiveState(caseRecord, false)
+            );
+            restoreCell.appendChild(restoreButton);
+            row.appendChild(restoreCell);
+            body.appendChild(row);
+        });
+
+        table.appendChild(body);
+        tableHost.replaceChildren(scroll);
+    }
+
     function render() {
         const counts = payload.counts || {};
         ["pending", "processing", "completed", "failed"].forEach(key => {
@@ -226,7 +276,9 @@
             ).textContent = counts[key] || 0;
         });
 
-        if (activeView === "cases") {
+        if (activeView === "archive") {
+            renderArchive();
+        } else if (activeView === "cases") {
             renderCases();
         } else {
             renderMatrix(activeView);
@@ -244,7 +296,9 @@
                 ? "Form 1: demographic data and the transcript with exact keyword evidence highlighted by code colour."
                 : activeView === "codes"
                     ? "Form 2: each case starts at C1. Headers are positional only; participant-specific code content stays inside cells."
-                    : "Form 3: each case starts at T1. Headers are positional only; participant-specific theme content stays inside cells.";
+                    : activeView === "themes"
+                        ? "Form 3: each case starts at T1. Headers are positional only; participant-specific theme content stays inside cells."
+                        : "Archived cases are excluded from every active analysis form and from future automatic reanalysis. Their transcripts, reports, and archive history remain available here.";
     }
 
     function highlightedText(message, caseRecord) {
@@ -354,6 +408,7 @@
     }
 
     function openCaseReport(caseRecord) {
+        activeCaseRecord = caseRecord;
         document.getElementById("automaticCaseReportHeading").textContent =
             `${caseRecord.caseNumber} · individual case report`;
         const identity = caseRecord.transcriptIdentity;
@@ -400,7 +455,51 @@
             section.append(heading, rationale, list);
             content.appendChild(section);
         });
+        archiveButton.textContent = caseRecord.archivedAt
+            ? "Restore to active analysis"
+            : "Archive completed case";
         reportDialog.showModal();
+    }
+
+    async function setArchiveState(caseRecord, shouldArchive) {
+        let note = "";
+
+        if (shouldArchive) {
+            const entered = window.prompt(
+                `Archive ${caseRecord.caseNumber}? It will disappear from active analysis. Add an optional note, or leave this blank.`
+            );
+
+            if (entered === null) return;
+            note = entered.trim();
+        } else if (!window.confirm(
+            `Restore ${caseRecord.caseNumber} to active analysis?`
+        )) {
+            return;
+        }
+
+        setStatus(shouldArchive ? "Archiving case…" : "Restoring case…");
+        const response = await fetch("/api/automatic-analysis", {
+            method: "POST",
+            headers: {
+                Authorization: `Bearer ${token()}`,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                action: shouldArchive ? "archive" : "restore",
+                sessionId: caseRecord.transcriptIdentity.sessionId,
+                note
+            })
+        });
+        const data = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+            setStatus(data.error || "The archive could not be updated.", true);
+            return;
+        }
+
+        if (reportDialog.open) reportDialog.close();
+        activeCaseRecord = null;
+        await load();
     }
 
     function csvValue(value) {
@@ -411,7 +510,19 @@
         const completed = payload.cases.filter(item => item.status === "completed");
         let rows;
 
-        if (activeView === "cases") {
+        if (activeView === "archive") {
+            rows = [[
+                "Participant code",
+                "Archived",
+                "Archive note",
+                "Link to transcript"
+            ], ...payload.cases.map(item => [
+                item.caseNumber,
+                item.archivedAt || "",
+                item.archiveNote || "",
+                transcriptUrl(item)
+            ])];
+        } else if (activeView === "cases") {
             rows = [[
                 "Participant code",
                 "Link to transcript",
@@ -454,9 +565,15 @@
 
     async function load() {
         setStatus("Loading automatic case reports…");
-        const response = await fetch("/api/automatic-analysis", {
+        const requestedScope = activeView === "archive"
+            ? "archived"
+            : "active";
+        const response = await fetch(
+            `/api/automatic-analysis?scope=${requestedScope}`,
+            {
             headers: { Authorization: `Bearer ${token()}` }
-        });
+            }
+        );
         const data = await response.json().catch(() => ({}));
 
         if (!response.ok) {
@@ -464,12 +581,15 @@
         }
 
         payload = data;
+        loadedScope = requestedScope;
         gate.hidden = true;
         workspace.hidden = false;
         render();
         openRequestedTranscript();
         setStatus(
-            `${data.counts.completed || 0} complete case reports. The queue always processes the earliest completed transcript first.`
+            requestedScope === "archived"
+                ? `${data.cases.length} archived cases on this page.`
+                : `${data.counts.completed || 0} complete active case reports. The queue always processes the earliest completed transcript first.`
         );
     }
 
@@ -497,14 +617,29 @@
     document.getElementById("automaticAnalysisDownloadButton")
         .addEventListener("click", downloadCurrentForm);
     document.querySelectorAll("[data-automatic-analysis-view]")
-        .forEach(button => button.addEventListener("click", () => {
+        .forEach(button => button.addEventListener("click", async () => {
             activeView = button.dataset.automaticAnalysisView;
-            render();
+            const requestedScope = activeView === "archive"
+                ? "archived"
+                : "active";
+            if (requestedScope !== loadedScope) {
+                await load().catch(error => setStatus(error.message, true));
+            } else {
+                render();
+            }
         }));
     document.getElementById("automaticTranscriptCloseButton")
         .addEventListener("click", () => dialog.close());
     document.getElementById("automaticCaseReportCloseButton")
-        .addEventListener("click", () => reportDialog.close());
+        .addEventListener("click", () => {
+            activeCaseRecord = null;
+            reportDialog.close();
+        });
+    archiveButton.addEventListener("click", () => {
+        if (!activeCaseRecord) return;
+        setArchiveState(activeCaseRecord, !activeCaseRecord.archivedAt)
+            .catch(error => setStatus(error.message, true));
+    });
 
     if (token()) {
         document.getElementById("automaticAnalysisToken").value = token();

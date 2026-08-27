@@ -756,6 +756,7 @@
             <button type="button" data-automatic-analysis-view="cases" aria-pressed="true">1 · Cases &amp; keywords</button>
             <button type="button" data-automatic-analysis-view="codes" aria-pressed="false">2 · Codes</button>
             <button type="button" data-automatic-analysis-view="themes" aria-pressed="false">3 · Themes</button>
+            <button type="button" data-automatic-analysis-view="archive" aria-pressed="false">Archive</button>
         </nav>
         <p id="automaticAnalysisDescription" class="muted"></p>
         <div id="automaticAnalysisTable"></div>
@@ -776,6 +777,9 @@
     <h2 id="automaticCaseReportHeading">Individual case report</h2>
     <p id="automaticCaseReportIdentity" class="transcriptIdentity"></p>
     <div id="automaticCaseReportContent"></div>
+    <div class="actionRow">
+        <button id="automaticCaseArchiveButton" type="button">Archive completed case</button>
+    </div>
 </dialog>
 
 <section id="legacyAnalysisSection" class="panel" aria-labelledby="analysisHeading" hidden>
@@ -1605,7 +1609,7 @@ document.getElementById("periodResetButton").addEventListener("click", () => {
 loadStatistics();
 
 </script>
-<script src="researcher-automatic-analysis.js"></script>
+<script src="researcher-automatic-analysis.js?version=20260827-archive"></script>
     
 </body>
 </html>

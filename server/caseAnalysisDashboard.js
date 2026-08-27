@@ -39,13 +39,22 @@ async function requireData(query, message) {
     return data || [];
 }
 
-async function loadCounts(supabase) {
+function archiveScope(query, scope) {
+    return scope === "archived"
+        ? query.not("archived_at", "is", null)
+        : query.is("archived_at", null);
+}
+
+async function loadCounts(supabase, scope) {
     const statuses = ["pending", "processing", "completed", "failed"];
     const values = await Promise.all(statuses.map(async status => {
-        const { count, error } = await supabase
-            .from("automatic_case_analysis_jobs")
-            .select("session_id", { count: "exact", head: true })
-            .eq("status", status);
+        const { count, error } = await archiveScope(
+            supabase
+                .from("automatic_case_analysis_jobs")
+                .select("session_id", { count: "exact", head: true })
+                .eq("status", status),
+            scope
+        );
 
         if (error) {
             throw new Error("Automatic analysis totals could not be loaded.", {
@@ -82,18 +91,26 @@ export async function handleCaseAnalysisDashboard(req, res) {
         { auth: { persistSession: false, autoRefreshToken: false } }
     );
     const page = Math.max(1, Number.parseInt(req.query?.page, 10) || 1);
+    const scope = req.query?.scope === "archived" ? "archived" : "active";
     const from = (page - 1) * PAGE_SIZE;
 
     try {
+        const jobsQuery = archiveScope(
+            supabase
+                .from("automatic_case_analysis_jobs")
+                .select("session_id, participant_id, case_number, source_completed_at, status, attempt_count, completed_at, last_error, archived_at, archived_by, archive_note"),
+            scope
+        )
+            .order(
+                scope === "archived" ? "archived_at" : "source_completed_at",
+                { ascending: scope !== "archived" }
+            )
+            .order("session_id", { ascending: true })
+            .range(from, from + PAGE_SIZE - 1);
         const [counts, jobs] = await Promise.all([
-            loadCounts(supabase),
+            loadCounts(supabase, scope),
             requireData(
-                supabase
-                    .from("automatic_case_analysis_jobs")
-                    .select("session_id, participant_id, case_number, source_completed_at, status, attempt_count, completed_at, last_error")
-                    .order("source_completed_at", { ascending: true })
-                    .order("session_id", { ascending: true })
-                    .range(from, from + PAGE_SIZE - 1),
+                jobsQuery,
                 "Automatic case-analysis progress could not be loaded."
             )
         ]);
@@ -103,6 +120,7 @@ export async function handleCaseAnalysisDashboard(req, res) {
             return res.status(200).json({
                 page,
                 pageSize: PAGE_SIZE,
+                scope,
                 counts,
                 cases: []
             });
@@ -203,6 +221,9 @@ export async function handleCaseAnalysisDashboard(req, res) {
                 sourceCompletedAt: job.source_completed_at,
                 attemptCount: job.attempt_count,
                 lastError: job.status === "failed" ? job.last_error : null,
+                archivedAt: job.archived_at,
+                archivedBy: job.archived_by,
+                archiveNote: job.archive_note,
                 language: report?.language || session?.language || null,
                 demographics: report?.demographics
                     || demographicSnapshot(descriptor),
@@ -233,6 +254,7 @@ export async function handleCaseAnalysisDashboard(req, res) {
         return res.status(200).json({
             page,
             pageSize: PAGE_SIZE,
+            scope,
             counts,
             cases
         });
@@ -242,4 +264,71 @@ export async function handleCaseAnalysisDashboard(req, res) {
             error: "Unable to load automatic individual case analysis."
         });
     }
+}
+
+export async function handleCaseArchiveMutation(req, res) {
+    const authorization = authorizeResearcher(
+        req,
+        process.env.RESEARCHER_DASHBOARD_TOKEN
+    );
+
+    if (!authorization.authorized) {
+        return res.status(authorization.status).json({
+            error: authorization.error
+        });
+    }
+
+    const action = req.body?.action;
+    const sessionId = typeof req.body?.sessionId === "string"
+        ? req.body.sessionId.trim()
+        : "";
+    const note = typeof req.body?.note === "string"
+        ? req.body.note.trim()
+        : "";
+
+    if (!["archive", "restore"].includes(action) || !sessionId) {
+        return res.status(400).json({
+            error: "A valid archive action and session are required."
+        });
+    }
+
+    if (note.length > 500) {
+        return res.status(400).json({
+            error: "Archive notes must be 500 characters or fewer."
+        });
+    }
+
+    const supabase = createClient(
+        process.env.SUPABASE_URL,
+        process.env.SUPABASE_SECRET_KEY,
+        { auth: { persistSession: false, autoRefreshToken: false } }
+    );
+    const { data: changed, error } = await supabase.rpc(
+        "set_automatic_case_archive",
+        {
+            p_session_id: sessionId,
+            p_action: action,
+            p_note: note || null
+        }
+    );
+
+    if (error) {
+        console.error("Automatic case archive action failed:", error);
+        return res.status(500).json({
+            error: "The archive could not be updated."
+        });
+    }
+
+    if (!changed) {
+        return res.status(409).json({
+            error: action === "archive"
+                ? "Only a completed active case can be archived."
+                : "This case is not currently archived."
+        });
+    }
+
+    return res.status(200).json({
+        archived: action === "archive",
+        sessionId
+    });
 }

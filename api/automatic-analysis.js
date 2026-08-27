@@ -1,7 +1,10 @@
 import { waitUntil } from "@vercel/functions";
 import OpenAI from "openai";
 import { createClient } from "@supabase/supabase-js";
-import { handleCaseAnalysisDashboard } from "../server/caseAnalysisDashboard.js";
+import {
+    handleCaseAnalysisDashboard,
+    handleCaseArchiveMutation
+} from "../server/caseAnalysisDashboard.js";
 import {
     automaticCaseAnalysisBaseUrl,
     continueAutomaticCaseAnalysis,
@@ -47,6 +50,10 @@ export default async function handler(req, res) {
     if (req.method !== "POST") {
         res.setHeader("Allow", "GET, POST");
         return res.status(405).json({ error: "Method not allowed." });
+    }
+
+    if (["archive", "restore"].includes(req.body?.action)) {
+        return handleCaseArchiveMutation(req, res);
     }
 
     if (!workerRequestIsAuthorized(req)) {
