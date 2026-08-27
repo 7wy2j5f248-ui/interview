@@ -34,6 +34,10 @@ const automaticTranslationMigrationUrl = new URL(
     "../supabase/migrations/20260827183500_backfill_completed_transcript_translations.sql",
     import.meta.url
 );
+const englishDemographicMigrationUrl = new URL(
+    "../supabase/migrations/20260827190000_prefer_new_english_demographics.sql",
+    import.meta.url
+);
 
 test("automatic case analysis retains exact keyword offsets and local hierarchy", () => {
     const result = validateAutomaticCaseAnalysis({
@@ -438,6 +442,27 @@ test("formal completion automatically translates before case analysis", async ()
     assert.match(migration, /message\."Language"/);
     assert.match(migration, /message\."EnglishTranslation"/);
     assert.doesNotMatch(migration, /qualitative_case_reports/);
+});
+
+test("new English demographics replace old display values without losing provenance", async () => {
+    const migration = await readFile(englishDemographicMigrationUrl, "utf8");
+
+    assert.match(
+        migration,
+        /current_country = coalesce\(\s*excluded\.current_country,\s*descriptor\.current_country/
+    );
+    assert.match(
+        migration,
+        /additional_descriptors =\s*descriptor\.additional_descriptors\s*\|\| excluded\.additional_descriptors/
+    );
+    assert.match(
+        migration,
+        /descriptor_sources =\s*descriptor\.descriptor_sources\s*\|\| excluded\.descriptor_sources/
+    );
+    assert.match(migration, /job\.archived_at is null/);
+    assert.match(migration, /lower\(coalesce\(session\.language, ''\)\) <> 'en'/);
+    assert.match(migration, /report\.superseded_at is null/);
+    assert.doesNotMatch(migration, /delete from public\.qualitative_case_reports/);
 });
 
 test("automatic dashboard exposes every transcript independently of analysis completion", async () => {
