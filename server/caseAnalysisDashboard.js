@@ -1,7 +1,23 @@
 import { createClient } from "@supabase/supabase-js";
 import { authorizeResearcher } from "./researcherAuth.js";
+import { loadParticipantCodeMap } from "./participantCodes.js";
 
 const PAGE_SIZE = 100;
+const DEMOGRAPHIC_FIELDS = Object.freeze([
+    "current_country",
+    "country_of_origin",
+    "gender",
+    "age",
+    "education_level",
+    "additional_descriptors"
+]);
+
+function demographicSnapshot(descriptor) {
+    return Object.fromEntries(DEMOGRAPHIC_FIELDS.map(field => [
+        field,
+        descriptor?.[field] ?? null
+    ]));
+}
 
 function groupedBy(items, key) {
     return (items || []).reduce((groups, item) => {
@@ -74,7 +90,7 @@ export async function handleCaseAnalysisDashboard(req, res) {
             requireData(
                 supabase
                     .from("automatic_case_analysis_jobs")
-                    .select("session_id, case_number, source_completed_at, status, attempt_count, completed_at, last_error")
+                    .select("session_id, participant_id, case_number, source_completed_at, status, attempt_count, completed_at, last_error")
                     .order("source_completed_at", { ascending: true })
                     .order("session_id", { ascending: true })
                     .range(from, from + PAGE_SIZE - 1),
@@ -92,16 +108,37 @@ export async function handleCaseAnalysisDashboard(req, res) {
             });
         }
 
-        const reports = await requireData(
-            supabase
-                .from("qualitative_case_reports")
-                .select("id, session_id, case_number, participant_id, participant_code, language, demographics, case_interpretation, analysis_version, model, source_completed_at, completed_at")
-                .is("superseded_at", null)
-                .in("session_id", sessionIds),
-            "Individual case reports could not be loaded."
-        );
+        const [reports, sessions, descriptors, participantCodes] =
+            await Promise.all([
+                requireData(
+                    supabase
+                        .from("qualitative_case_reports")
+                        .select("id, session_id, case_number, participant_id, participant_code, language, demographics, case_interpretation, analysis_version, model, source_completed_at, completed_at")
+                        .is("superseded_at", null)
+                        .in("session_id", sessionIds),
+                    "Individual case reports could not be loaded."
+                ),
+                requireData(
+                    supabase
+                        .from("interview_sessions")
+                        .select("session_id, participant_id, language")
+                        .in("session_id", sessionIds),
+                    "Case session details could not be loaded."
+                ),
+                requireData(
+                    supabase
+                        .from("participant_descriptors")
+                        .select("session_id, current_country, country_of_origin, gender, age, education_level, additional_descriptors")
+                        .in("session_id", sessionIds),
+                    "Case demographic details could not be loaded."
+                ),
+                loadParticipantCodeMap(
+                    supabase,
+                    jobs.map(job => job.participant_id)
+                )
+            ]);
         const reportIds = reports.map(report => report.id);
-        const [codes, themes, highlights, themeCodes, messages] =
+        const [codes, themes, highlights, themeCodes] =
             await Promise.all([
                 reportIds.length ? requireData(
                     supabase
@@ -133,14 +170,6 @@ export async function handleCaseAnalysisDashboard(req, res) {
                         .select("report_id, theme_id, code_id")
                         .in("report_id", reportIds),
                     "Theme-to-code relationships could not be loaded."
-                ) : [],
-                reportIds.length ? requireData(
-                    supabase
-                        .from("interview_messages")
-                        .select("id, Participant, Session, Language, Speaker, Message, EnglishTranslation, Timestamp")
-                        .in("Session", reports.map(report => report.session_id))
-                        .order("Timestamp", { ascending: true }),
-                    "Case transcripts could not be loaded."
                 ) : []
             ]);
 
@@ -148,45 +177,56 @@ export async function handleCaseAnalysisDashboard(req, res) {
             report.session_id,
             report
         ]));
+        const sessionById = new Map(sessions.map(session => [
+            session.session_id,
+            session
+        ]));
+        const descriptorBySession = new Map(descriptors.map(descriptor => [
+            descriptor.session_id,
+            descriptor
+        ]));
         const codesByReport = groupedBy(codes, "report_id");
         const themesByReport = groupedBy(themes, "report_id");
         const highlightsByReport = groupedBy(highlights, "report_id");
         const mappingsByReport = groupedBy(themeCodes, "report_id");
-        const messagesBySession = groupedBy(messages, "Session");
 
         const cases = jobs.map(job => {
             const report = reportBySession.get(job.session_id);
+            const session = sessionById.get(job.session_id);
+            const descriptor = descriptorBySession.get(job.session_id) || {};
+            const participantCode = report?.participant_code
+                || participantCodes.get(job.participant_id)
+                || null;
+            const sharedCase = {
+                caseNumber: job.case_number,
+                status: job.status,
+                sourceCompletedAt: job.source_completed_at,
+                attemptCount: job.attempt_count,
+                lastError: job.status === "failed" ? job.last_error : null,
+                language: report?.language || session?.language || null,
+                demographics: report?.demographics
+                    || demographicSnapshot(descriptor),
+                transcriptIdentity: {
+                    participantCode,
+                    participantId: job.participant_id,
+                    sessionId: job.session_id
+                }
+            };
 
             if (!report) {
-                return {
-                    caseNumber: job.case_number,
-                    status: job.status,
-                    sourceCompletedAt: job.source_completed_at,
-                    attemptCount: job.attempt_count,
-                    lastError: job.status === "failed" ? job.last_error : null
-                };
+                return sharedCase;
             }
 
             return {
-                caseNumber: report.case_number,
-                status: job.status,
-                sourceCompletedAt: report.source_completed_at,
+                ...sharedCase,
                 analysisCompletedAt: report.completed_at,
-                language: report.language,
-                demographics: report.demographics,
                 caseInterpretation: report.case_interpretation,
                 analysisVersion: report.analysis_version,
                 model: report.model,
-                transcriptIdentity: {
-                    participantCode: report.participant_code,
-                    participantId: report.participant_id,
-                    sessionId: report.session_id
-                },
                 codes: codesByReport.get(report.id) || [],
                 themes: themesByReport.get(report.id) || [],
                 highlights: highlightsByReport.get(report.id) || [],
-                themeCodes: mappingsByReport.get(report.id) || [],
-                transcript: messagesBySession.get(report.session_id) || []
+                themeCodes: mappingsByReport.get(report.id) || []
             };
         });
 

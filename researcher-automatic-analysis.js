@@ -113,8 +113,10 @@
         const button = document.createElement("button");
         button.type = "button";
         button.className = "worksheetTranscriptButton";
-        button.textContent = "Open transcript";
-        button.disabled = caseRecord.status !== "completed";
+        button.textContent = caseRecord.transcriptIdentity?.sessionId
+            ? "Open transcript"
+            : "Transcript unavailable";
+        button.disabled = !caseRecord.transcriptIdentity?.sessionId;
         button.addEventListener("click", () => openTranscript(caseRecord));
         return button;
     }
@@ -273,12 +275,12 @@
         return fragment;
     }
 
-    function openTranscript(caseRecord) {
+    async function openTranscript(caseRecord) {
         document.getElementById("automaticTranscriptHeading").textContent =
             `${caseRecord.caseNumber} · annotated transcript`;
-        const identity = caseRecord.transcriptIdentity;
+        const expectedIdentity = caseRecord.transcriptIdentity;
         document.getElementById("automaticTranscriptIdentity").textContent =
-            `Participant code: ${identity.participantCode} · Participant ID: ${identity.participantId} · Session ID: ${identity.sessionId}`;
+            "Verifying participant identity…";
         document.getElementById("automaticTranscriptDemographics").textContent =
             demographicsText(caseRecord.demographics);
         const legend = document.getElementById("automaticTranscriptLegend");
@@ -291,27 +293,64 @@
             legend.appendChild(item);
         });
         const messages = document.getElementById("automaticTranscriptMessages");
-        messages.replaceChildren();
-        (caseRecord.transcript || []).forEach(message => {
-            const article = document.createElement("article");
-            article.className = "message";
-            const paragraph = document.createElement("p");
-            const speaker = document.createElement("strong");
-            speaker.textContent = `${message.Speaker}: `;
-            paragraph.appendChild(speaker);
-            paragraph.appendChild(highlightedText(message, caseRecord));
-            article.appendChild(paragraph);
+        messages.textContent = "Loading transcript…";
+        dialog.showModal();
 
-            if (message.EnglishTranslation) {
-                const translation = document.createElement("p");
-                translation.className = "englishTranslation";
-                translation.textContent = `English translation: ${message.EnglishTranslation}`;
-                article.appendChild(translation);
+        try {
+            const response = await fetch(
+                `/api/messages?session=${encodeURIComponent(expectedIdentity.sessionId)}`,
+                {
+                    headers: {
+                        Authorization: `Bearer ${token()}`
+                    }
+                }
+            );
+            const data = await response.json().catch(() => ({}));
+
+            if (!response.ok) {
+                throw new Error(data.error || "Transcript could not be loaded.");
             }
 
-            messages.appendChild(article);
-        });
-        dialog.showModal();
+            const identity = data.identity || {};
+            const identityMatches = (
+                identity.sessionId === expectedIdentity.sessionId
+                && identity.participantId === expectedIdentity.participantId
+                && identity.participantCode === expectedIdentity.participantCode
+            );
+
+            if (!identityMatches) {
+                throw new Error(
+                    "Transcript hidden because its participant identity does not match this case."
+                );
+            }
+
+            document.getElementById("automaticTranscriptIdentity").textContent =
+                `Participant code: ${identity.participantCode} · Participant ID: ${identity.participantId} · Session ID: ${identity.sessionId} · Verified match`;
+            messages.replaceChildren();
+            (data.messages || []).forEach(message => {
+                const article = document.createElement("article");
+                article.className = "message";
+                const paragraph = document.createElement("p");
+                const speaker = document.createElement("strong");
+                speaker.textContent = `${message.Speaker}: `;
+                paragraph.appendChild(speaker);
+                paragraph.appendChild(highlightedText(message, caseRecord));
+                article.appendChild(paragraph);
+
+                if (message.EnglishTranslation) {
+                    const translation = document.createElement("p");
+                    translation.className = "englishTranslation";
+                    translation.textContent = `English translation: ${message.EnglishTranslation}`;
+                    article.appendChild(translation);
+                }
+
+                messages.appendChild(article);
+            });
+        } catch (error) {
+            document.getElementById("automaticTranscriptIdentity").textContent =
+                "Transcript identity could not be verified.";
+            messages.textContent = error.message;
+        }
     }
 
     function openCaseReport(caseRecord) {

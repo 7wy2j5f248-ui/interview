@@ -183,12 +183,22 @@ test("v2 preserves superseded reports and restarts the FIFO queue", async () => 
     assert.match(migration, /status = 'pending'/);
 });
 
-test("automatic dashboard selects only stored transcript columns", async () => {
+test("automatic dashboard exposes every transcript independently of analysis completion", async () => {
     const dashboard = await readFile(
         new URL("../server/caseAnalysisDashboard.js", import.meta.url),
         "utf8"
     );
+    const script = await readFile(
+        new URL("../researcher-automatic-analysis.js", import.meta.url),
+        "utf8"
+    );
 
-    assert.match(dashboard, /EnglishTranslation, Timestamp/);
+    assert.match(dashboard, /session_id, participant_id, language/);
+    assert.match(dashboard, /loadParticipantCodeMap/);
+    assert.match(dashboard, /transcriptIdentity/);
     assert.doesNotMatch(dashboard, /\.select\([^)]*TranslationState/);
+    assert.doesNotMatch(dashboard, /\.from\("interview_messages"\)/);
+    assert.match(script, /button\.disabled = !caseRecord\.transcriptIdentity\?\.sessionId/);
+    assert.match(script, /\/api\/messages\?session=/);
+    assert.match(script, /Verified match/);
 });
