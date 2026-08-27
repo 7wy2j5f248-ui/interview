@@ -38,6 +38,10 @@ const englishDemographicMigrationUrl = new URL(
     "../supabase/migrations/20260827190000_prefer_new_english_demographics.sql",
     import.meta.url
 );
+const independentTranslationQueueMigrationUrl = new URL(
+    "../supabase/migrations/20260827182114_add_independent_transcript_translation_queue.sql",
+    import.meta.url
+);
 
 test("automatic case analysis retains exact keyword offsets and local hierarchy", () => {
     const result = validateAutomaticCaseAnalysis({
@@ -455,8 +459,40 @@ test("formal completion automatically translates before case analysis", async ()
         chat.indexOf("scheduleCompletedTranscriptTranslation")
         < chat.indexOf("scheduleAutomaticCaseAnalysis(req)")
     );
+    assert.match(translation, /\/api\/transcript-translation/);
     assert.match(translation, /waitUntil\(fetch\(url/);
     assert.match(translation, /RESEARCHER_DASHBOARD_TOKEN/);
+});
+
+test("historical translations run from a durable queue independent of analysis", async () => {
+    const migration = await readFile(
+        independentTranslationQueueMigrationUrl,
+        "utf8"
+    );
+    const worker = await readFile(
+        new URL("../server/transcriptTranslationQueue.js", import.meta.url),
+        "utf8"
+    );
+    const endpoint = await readFile(
+        new URL("../api/transcript-translation.js", import.meta.url),
+        "utf8"
+    );
+    const loadDesign = await readFile(
+        new URL("../api/loadDesign.js", import.meta.url),
+        "utf8"
+    );
+
+    assert.match(migration, /automatic_transcript_translation_jobs/);
+    assert.match(migration, /claim_next_transcript_translation/);
+    assert.match(migration, /claim_transcript_translation_session/);
+    assert.match(migration, /finish_transcript_translation/);
+    assert.match(migration, /session\.completed = true/);
+    assert.match(migration, /analysis_job\.archived_at is null/);
+    assert.match(migration, /enable row level security/);
+    assert.match(worker, /TRANSLATION_CHUNK_SIZE = 12/);
+    assert.match(worker, /ensureEnglishTranslations/);
+    assert.match(endpoint, /translation_independent_from_case_analysis/);
+    assert.match(loadDesign, /scheduleTranscriptTranslationBackfill/);
 });
 
 test("new English demographics replace old display values without losing provenance", async () => {

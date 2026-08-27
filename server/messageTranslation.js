@@ -13,7 +13,7 @@ function textFromResponse(response) {
     )?.trim() || "";
 }
 
-function needsEnglishTranslation(item) {
+export function needsEnglishTranslation(item) {
     const language = typeof item?.Language === "string"
         ? item.Language.trim().toLowerCase()
         : "";
@@ -137,11 +137,18 @@ export function scheduleCompletedTranscriptTranslation(
         return false;
     }
 
-    const url = new URL("/api/messages", baseUrl);
-    url.searchParams.set("session", sessionId);
+    const url = new URL("/api/transcript-translation", baseUrl);
     waitUntil(fetch(url, {
+        method: "POST",
         cache: "no-store",
-        headers: { Authorization: `Bearer ${secret}` }
+        headers: {
+            Authorization: `Bearer ${secret}`,
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            source: "formal-completion",
+            sessionId
+        })
     }).then(response => {
         if (!response.ok) {
             throw new Error(
@@ -150,6 +157,30 @@ export function scheduleCompletedTranscriptTranslation(
         }
     }).catch(error => {
         console.error("Completed transcript translation failed:", error);
+    }));
+
+    return true;
+}
+
+export function scheduleTranscriptTranslationBackfill(req) {
+    const baseUrl = requestBaseUrl(req);
+    const secret = process.env.RESEARCHER_DASHBOARD_TOKEN;
+
+    if (!baseUrl || !secret) {
+        return false;
+    }
+
+    const url = new URL("/api/transcript-translation", baseUrl);
+    waitUntil(fetch(url, {
+        method: "POST",
+        cache: "no-store",
+        headers: {
+            Authorization: `Bearer ${secret}`,
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ source: "backfill-wakeup" })
+    }).catch(error => {
+        console.error("Transcript translation backfill trigger failed:", error);
     }));
 
     return true;
