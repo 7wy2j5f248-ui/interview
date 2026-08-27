@@ -152,7 +152,18 @@ test("researcher dashboard uses cases, positional codes, and positional themes",
     assert.match(script, /Array\.from\(\{ length: maximum \}[^\n]*`\$\{prefix\}\$\{index \+ 1\}`/);
     assert.match(script, /Participant ID:/);
     assert.match(script, /start_offset/);
-    assert.match(script, /STANDARD_DEMOGRAPHIC_COLUMNS/);
+    assert.match(script, /FORM_ONE_DEMOGRAPHIC_COLUMNS/);
+    assert.match(
+        script,
+        /\["current_country", "Country of residence"\][\s\S]*\["country_of_origin", "Country of origin"\][\s\S]*\["gender", "Gender"\][\s\S]*\["age", "Age"\][\s\S]*\["occupation", "Occupation"\][\s\S]*\["education_level", "Education"\]/
+    );
+    assert.match(
+        script,
+        /"Participant code",\s*"Link to transcript",\s*"Language",\s*\.\.\.FORM_ONE_DEMOGRAPHIC_COLUMNS/
+    );
+    assert.match(script, /transcriptUrl\(item\)/);
+    assert.match(script, /URLSearchParams\(window\.location\.search\)\.get\("case"\)/);
+    assert.match(script, /openRequestedTranscript\(\)/);
     assert.match(script, /Open case report/);
     assert.doesNotMatch(script, /"Demographic data",\s*"Case report"/);
 });

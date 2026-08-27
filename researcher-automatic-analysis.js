@@ -2,22 +2,18 @@
     "use strict";
 
     const TOKEN_STORAGE_KEY = "researcherDashboardToken";
-    const STANDARD_DEMOGRAPHIC_COLUMNS = Object.freeze([
-        ["current_country", "Current country"],
-        ["current_region", "Current region"],
+    const FORM_ONE_DEMOGRAPHIC_COLUMNS = Object.freeze([
+        ["current_country", "Country of residence"],
         ["country_of_origin", "Country of origin"],
-        ["diaspora_status", "Diaspora status"],
         ["gender", "Gender"],
         ["age", "Age"],
-        ["birth_year", "Birth year"],
-        ["birth_cohort", "Birth cohort"],
-        ["youth_status", "Youth status"],
-        ["education_level", "Education"],
-        ["social_identity", "Social identity"]
+        ["occupation", "Occupation"],
+        ["education_level", "Education"]
     ]);
     let payload = { counts: {}, cases: [] };
     let activeView = "cases";
     let refreshTimer = null;
+    let requestedTranscriptOpened = false;
 
     const gate = document.getElementById("automaticAnalysisTokenGate");
     const workspace = document.getElementById("automaticAnalysisWorkspace");
@@ -58,37 +54,30 @@
             .join("; ") || "Not recorded";
     }
 
-    function titleFromKey(key) {
-        return key.replaceAll("_", " ").replace(
-            /^./,
-            character => character.toUpperCase()
-        );
-    }
-
-    function demographicColumns() {
-        const additionalKeys = [...new Set(payload.cases.flatMap(item =>
-            Object.keys(item.demographics?.additional_descriptors || {})
-        ))].sort();
-
-        return [
-            ...STANDARD_DEMOGRAPHIC_COLUMNS.map(([key, label]) => ({
-                key,
-                label,
-                additional: false
-            })),
-            ...additionalKeys.map(key => ({
-                key,
-                label: titleFromKey(key),
-                additional: true
-            }))
-        ];
-    }
-
-    function demographicValue(caseRecord, column) {
-        const value = column.additional
-            ? caseRecord.demographics?.additional_descriptors?.[column.key]
-            : caseRecord.demographics?.[column.key];
+    function demographicValue(caseRecord, key) {
+        const value = caseRecord.demographics?.[key]
+            ?? caseRecord.demographics?.additional_descriptors?.[key];
         return displayValue(value);
+    }
+
+    function transcriptUrl(caseRecord) {
+        const url = new URL(window.location.href);
+        url.search = "";
+        url.hash = "";
+        url.searchParams.set("case", caseRecord.caseNumber);
+        return url.href;
+    }
+
+    function openRequestedTranscript() {
+        if (requestedTranscriptOpened) return;
+        const requestedCase = new URLSearchParams(window.location.search).get("case");
+        if (!requestedCase) return;
+        const caseRecord = payload.cases.find(item =>
+            item.caseNumber === requestedCase && item.status === "completed"
+        );
+        if (!caseRecord) return;
+        requestedTranscriptOpened = true;
+        openTranscript(caseRecord);
     }
 
     function createCell(row, value, className = "") {
@@ -124,7 +113,7 @@
         const button = document.createElement("button");
         button.type = "button";
         button.className = "worksheetTranscriptButton";
-        button.textContent = "Open annotated transcript";
+        button.textContent = "Open transcript";
         button.disabled = caseRecord.status !== "completed";
         button.addEventListener("click", () => openTranscript(caseRecord));
         return button;
@@ -147,30 +136,29 @@
     }
 
     function renderCases() {
-        const columns = demographicColumns();
         const { scroll, table } = createTable([
-            "Case number",
+            "Participant code",
+            "Link to transcript",
             "Language",
-            ...columns.map(column => column.label),
-            "Case report",
-            "Annotated transcript"
+            ...FORM_ONE_DEMOGRAPHIC_COLUMNS.map(([, label]) => label),
+            "Case report"
         ]);
         const body = document.createElement("tbody");
 
         payload.cases.forEach(caseRecord => {
             const row = document.createElement("tr");
             createCell(row, caseRecord.caseNumber, "analysisIdentifierCell");
+            const transcriptCell = document.createElement("td");
+            transcriptCell.appendChild(transcriptButton(caseRecord));
+            row.appendChild(transcriptCell);
             createCell(row, caseRecord.language || "—");
-            columns.forEach(column => createCell(
+            FORM_ONE_DEMOGRAPHIC_COLUMNS.forEach(([key]) => createCell(
                 row,
-                demographicValue(caseRecord, column)
+                demographicValue(caseRecord, key)
             ));
             const reportCell = document.createElement("td");
             reportCell.appendChild(caseReportButton(caseRecord));
             row.appendChild(reportCell);
-            const transcriptCell = document.createElement("td");
-            transcriptCell.appendChild(transcriptButton(caseRecord));
-            row.appendChild(transcriptCell);
             body.appendChild(row);
         });
 
@@ -385,17 +373,20 @@
         let rows;
 
         if (activeView === "cases") {
-            const columns = demographicColumns();
             rows = [[
-                "Case number",
+                "Participant code",
+                "Link to transcript",
                 "Language",
-                ...columns.map(column => column.label),
+                ...FORM_ONE_DEMOGRAPHIC_COLUMNS.map(([, label]) => label),
                 "Case report"
             ],
                 ...payload.cases.map(item => [
                     item.caseNumber,
-                    item.language || "",
-                    ...columns.map(column => demographicValue(item, column)),
+                    transcriptUrl(item),
+                    item.language || "—",
+                    ...FORM_ONE_DEMOGRAPHIC_COLUMNS.map(([key]) =>
+                        demographicValue(item, key)
+                    ),
                     item.status === "completed" ? "Available" : item.status
                 ])];
         } else {
@@ -437,6 +428,7 @@
         gate.hidden = true;
         workspace.hidden = false;
         render();
+        openRequestedTranscript();
         setStatus(
             `${data.counts.completed || 0} complete case reports. The queue always processes the earliest completed transcript first.`
         );
