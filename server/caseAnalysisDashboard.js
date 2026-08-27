@@ -26,6 +26,23 @@ function demographicSnapshot(descriptor) {
     ]));
 }
 
+function mergedDemographics(report, descriptor) {
+    const stored = demographicSnapshot(descriptor);
+    const reported = report?.demographics || {};
+
+    DEMOGRAPHIC_FIELDS.forEach(field => {
+        const value = reported[field];
+        if (value !== null && value !== undefined && value !== "") {
+            stored[field] = value;
+        }
+    });
+    stored.additional_descriptors = {
+        ...(descriptor?.additional_descriptors || {}),
+        ...(reported.additional_descriptors || {})
+    };
+    return stored;
+}
+
 function groupedBy(items, key) {
     return (items || []).reduce((groups, item) => {
         const value = item[key];
@@ -266,8 +283,7 @@ export async function handleCaseAnalysisDashboard(req, res) {
                 archivedBy: job.archived_by,
                 archiveNote: job.archive_note,
                 language: report?.language || session?.language || null,
-                demographics: report?.demographics
-                    || demographicSnapshot(descriptor),
+                demographics: mergedDemographics(report, descriptor),
                 transcriptIdentity: {
                     participantCode,
                     participantId: job.participant_id,

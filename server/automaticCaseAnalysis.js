@@ -153,6 +153,22 @@ export async function processOldestAutomaticCase(
             source.messages,
             { model }
         );
+        const { error: demographicError } = await supabaseClient.rpc(
+            "save_automatic_case_demographics",
+            {
+                p_session_id: job.session_id,
+                p_analysis_version: AUTOMATIC_CASE_ANALYSIS_VERSION,
+                p_demographics: analysis.demographics,
+                p_descriptor_sources: analysis.descriptorSources
+            }
+        );
+
+        if (demographicError) {
+            throw new Error(
+                "Transcript-evidenced demographics were not saved.",
+                { cause: demographicError }
+            );
+        }
 
         if (!analysis.complete || !source.participantCode) {
             throw new Error(

@@ -22,6 +22,10 @@ const historicalReprocessingMigrationUrl = new URL(
     "../supabase/migrations/20260827170200_reprocess_v2_reports_with_v3_demographics.sql",
     import.meta.url
 );
+const independentDemographicMigrationUrl = new URL(
+    "../supabase/migrations/20260827171500_save_case_demographics_independently.sql",
+    import.meta.url
+);
 
 test("automatic case analysis retains exact keyword offsets and local hierarchy", () => {
     const result = validateAutomaticCaseAnalysis({
@@ -339,6 +343,35 @@ test("historical v2 reports remain active until an atomic v3 replacement succeed
         /report\.analysis_version =\s*'case-analysis-v2-no-conversational-courtesies'/
     );
     assert.doesNotMatch(migration, /delete from public\.qualitative_case_reports/);
+});
+
+test("evidenced demographics survive an invalid replacement hierarchy", async () => {
+    const migration = await readFile(
+        independentDemographicMigrationUrl,
+        "utf8"
+    );
+    const worker = await readFile(
+        new URL("../server/automaticCaseAnalysis.js", import.meta.url),
+        "utf8"
+    );
+    const dashboard = await readFile(
+        new URL("../server/caseAnalysisDashboard.js", import.meta.url),
+        "utf8"
+    );
+
+    assert.match(migration, /save_automatic_case_demographics/);
+    assert.match(migration, /job\.status <> 'processing'/);
+    assert.match(migration, /participant_descriptors as descriptor/);
+    assert.match(migration, /descriptor_sources/);
+    assert.match(migration, /to service_role/);
+    assert.match(worker, /save_automatic_case_demographics/);
+    assert.match(worker, /if \(!analysis\.complete/);
+    assert.ok(
+        worker.indexOf("save_automatic_case_demographics")
+        < worker.indexOf("if (!analysis.complete")
+    );
+    assert.match(dashboard, /function mergedDemographics/);
+    assert.match(dashboard, /demographics: mergedDemographics/);
 });
 
 test("automatic dashboard exposes every transcript independently of analysis completion", async () => {
