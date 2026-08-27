@@ -20,6 +20,7 @@
     const analysisModel = document.getElementById("analysisModel");
     const evidenceDialog = document.getElementById("evidenceDialog");
     const provenanceDialog = document.getElementById("provenanceDialog");
+    const caseReportDialog = document.getElementById("caseReportDialog");
     const completionFilter = document.getElementById(
         "analysisCompletionFilter"
     );
@@ -255,13 +256,23 @@
         ) || null;
     }
 
+    function isIndividualCaseUnit(batch) {
+        return batch?.groupingCriteria?.strategy
+            === "individual_case_report";
+    }
+
     function appendBatchDetails(container, batch) {
+        const individualCase = isIndividualCaseUnit(batch);
         appendTextBlock(
             container,
-            "Batch",
-            `Batch ${batch.batchNumber} of ${batch.totalBatches}`
+            individualCase ? "Individual case" : "Batch",
+            `${individualCase ? "Case" : "Batch"} ${batch.batchNumber} of ${batch.totalBatches}`
         );
-        appendTextBlock(container, "Stable batch ID", batch.id);
+        appendTextBlock(
+            container,
+            individualCase ? "Stable case unit ID" : "Stable batch ID",
+            batch.id
+        );
         appendTextBlock(container, "Analysis run", batch.analysisRunId);
         appendTextBlock(container, "Sessions", String(batch.sessionCount));
         appendTextBlock(container, "Messages", String(batch.messageCount));
@@ -283,7 +294,10 @@
             batch.languageDistribution,
             entry => `${entry.language}: ${entry.messageCount} messages, ${entry.sessionCount} sessions`
         ));
-        appendSectionHeading(container, "Included sessions");
+        appendSectionHeading(
+            container,
+            individualCase ? "Case transcript" : "Included sessions"
+        );
 
         if (!batch.sessions.length) {
             const note = document.createElement("p");
@@ -487,12 +501,15 @@
                 entry.id === provenanceView.batchId
             );
 
+            const individualCase = isIndividualCaseUnit(batch);
             heading.textContent = batch
-                ? `Batch ${batch.batchNumber} of ${batch.totalBatches}`
-                : "Batch provenance unavailable";
+                ? `${individualCase ? "Case" : "Batch"} ${batch.batchNumber} of ${batch.totalBatches}`
+                : "Computational provenance unavailable";
             summary.textContent = batch?.legacy
                 ? "Legacy batch membership reconstructed only from stored run-message batch numbers."
-                : "Frozen computational batch membership.";
+                : individualCase
+                    ? "This computational unit contains one participant transcript only."
+                    : "Frozen computational batch membership.";
 
             if (batch) {
                 appendBatchDetails(content, batch);
@@ -556,8 +573,9 @@
         const batchActions = document.createElement("div");
         batchActions.className = "provenanceActions";
         provenance.batches.forEach(batch => {
+            const individualCase = isIndividualCaseUnit(batch);
             batchActions.appendChild(linkButton(
-                `Batch ${batch.batchNumber} of ${batch.totalBatches}`,
+                `${individualCase ? "Case" : "Batch"} ${batch.batchNumber} of ${batch.totalBatches}`,
                 () => openProvenance({
                     mode: "batch",
                     batchId: batch.id
@@ -565,7 +583,9 @@
             ));
             const size = document.createElement("span");
             size.textContent =
-                `${batch.sessionCount} sessions · ${batch.messageCount} messages · ${batch.supportingSessionCount} of ${batch.sessionCount} supporting sessions in this batch · ${batch.supportingMessageCount} supporting messages`;
+                individualCase
+                    ? `${batch.messageCount} participant messages · ${batch.supportingMessageCount} supporting messages from this case`
+                    : `${batch.sessionCount} sessions · ${batch.messageCount} messages · ${batch.supportingSessionCount} of ${batch.sessionCount} supporting sessions in this batch · ${batch.supportingMessageCount} supporting messages`;
             batchActions.appendChild(size);
         });
         section.appendChild(batchActions);
@@ -1853,12 +1873,87 @@
         container.appendChild(controls);
     }
 
+    function openIndividualCaseReport(participant) {
+        const content = document.getElementById("caseReportContent");
+        const participantCode = participant.participantCode
+            || "Uncoded participant";
+        const themes = participantThemeRecords(participant);
+        document.getElementById("caseReportHeading").textContent =
+            `Individual case report — ${participantCode}`;
+        content.replaceChildren();
+
+        const introduction = document.createElement("p");
+        introduction.textContent =
+            "This report is generated from this participant’s transcript alone. It is presented as themes, then codes, then keywords; the underlying analysis identifies evidence and keywords first.";
+        content.appendChild(introduction);
+
+        themes.forEach((theme, themeIndex) => {
+            const article = document.createElement("article");
+            article.className = "evidenceMessage";
+            const heading = document.createElement("h3");
+            heading.textContent = `${participantThemeSlotIdentifier(themeIndex)} · ${theme.label}`;
+            article.appendChild(heading);
+            const codes = participantCodeRecords(participant, themeIndex);
+
+            if (!codes.length) {
+                appendTextBlock(article, "Codes", "Not identified");
+            }
+
+            codes.forEach((code, codeIndex) => {
+                const codeHeading = document.createElement("h4");
+                codeHeading.textContent =
+                    `${participantCodeSlotIdentifier(themeIndex, codeIndex)} · ${code.label}`;
+                article.appendChild(codeHeading);
+                const keywords = participantKeywordRecords(
+                    participant,
+                    themeIndex,
+                    codeIndex
+                ).map(keyword => keyword.label);
+                appendTextBlock(
+                    article,
+                    "Keywords",
+                    keywords.join(", ") || "Not identified"
+                );
+            });
+
+            appendTextBlock(
+                article,
+                "Case interpretation",
+                theme.item.researcher_note
+                    || theme.item.ai_rationale
+                    || "Not available"
+            );
+            content.appendChild(article);
+        });
+
+        if (!themes.length) {
+            const empty = document.createElement("p");
+            empty.textContent =
+                "This individual case report has not been computed yet.";
+            content.appendChild(empty);
+        }
+
+        const sessionId = [...participant.sessionIds][0];
+        if (sessionId) {
+            content.appendChild(actionButton(
+                "Open complete transcript",
+                () => {
+                    caseReportDialog.close();
+                    openTranscript(sessionId, null, participant);
+                }
+            ));
+        }
+
+        caseReportDialog.showModal();
+    }
+
     function renderThemeWorksheet(container) {
         const participants = orderedParticipants("themes");
         const table = worksheetTable("themeWorksheet");
         const head = document.createElement("thead");
         const headingRow = document.createElement("tr");
         appendHeader(headingRow, "Participant code");
+        appendHeader(headingRow, "Individual report");
         appendHeader(headingRow, "Link to transcript");
         participantMetadataHeadings.forEach(label => appendHeader(
             headingRow,
@@ -1880,6 +1975,12 @@
                 row,
                 participant.participantCode || "Uncoded participant"
             );
+            const reportCell = document.createElement("td");
+            reportCell.appendChild(actionButton(
+                "Open case report",
+                () => openIndividualCaseReport(participant)
+            ));
+            row.appendChild(reportCell);
             const transcriptCell = document.createElement("td");
             const sessionIds = [...participant.sessionIds];
             if (sessionIds.length) {
@@ -1930,7 +2031,7 @@
         if (!participants.length) {
             appendEmptyRow(
                 body,
-                2 + participantMetadataHeadings.length
+                3 + participantMetadataHeadings.length
                     + PARTICIPANT_THEME_SLOT_COUNT,
                 "No interview participants are available in this corpus scope."
             );
@@ -2171,7 +2272,7 @@
         if (activeAnalysisView === "themes") {
             breadcrumb.textContent = "Worksheet 1 · Participants & Themes";
             description.textContent =
-                "One row per participant. T1–T8 are participant-specific positions: each cell contains the broadest one- or two-word concept, preferably one word, such as Work. Differences such as Long hours, Overtime, Weekend work, or Overwork belong under codes; full interpretations belong in the rationale or case report. Themes in the same column are not assumed to have the same meaning. This is the only worksheet with a direct link to the complete transcript. Older stored runs may retain statement-style themes for traceability.";
+                "One row per participant, produced from that participant’s transcript alone. Open the individual report to review its themes, codes, keywords, and case interpretation. T1–T8 contain the broadest one- or two-word concepts, such as Sleep routine or Work. Differences such as Stable, Long hours, or Overtime belong under codes. Themes in the same column are not assumed to have the same meaning. This is the only worksheet with a direct link to the complete transcript. Older stored runs remain available for traceability.";
             renderWorkbookControls(container, "themes");
             renderThemeWorksheet(container);
             renderDiscussionPanel(item);
@@ -2511,7 +2612,7 @@
 
         const generateButton = document.getElementById("generateAnalysisButton");
         generateButton.textContent = canResumeGeneration()
-            ? "Resume this analysis run"
+            ? "Resume individual case reports"
             : workspace.run
                 ? "Generate corrected new analysis run"
                 : "Generate AI suggestions";
@@ -2540,9 +2641,8 @@
                 `${workspace.run.messages_analyzed} participant messages analysed`,
                 `${workspace.run.sessions_analyzed} sessions`,
                 workspace.run.status === "generating"
-                    ? `${progress.processed} of ${progress.total} batches processed`
-                    : `${workspace.run.batches_used} batches`,
-                `${workspace.run.skipped_records} skipped records`,
+                    ? `${progress.processed} of ${progress.total} individual reports completed`
+                    : `${workspace.run.batches_used} individual reports`,
                 `${workspace.run.invalid_evidence_ids} rejected evidence IDs`
             ].join(" · ");
         }
@@ -2575,7 +2675,7 @@
                 setStatus("Real interview data loaded. Generate suggestions when you are ready to populate codes and keywords.");
             } else if (canResumeGeneration()) {
                 const progress = generationProgress();
-                setStatus(`Generation paused after ${progress.processed} of ${progress.total} batches. Select Resume this analysis run to continue.`);
+                setStatus(`Individual analysis paused after ${progress.processed} of ${progress.total} case reports. Select Resume individual case reports to continue.`);
             } else if (workspace.run.status === "generating") {
                 setStatus("This older analysis run stopped before completion and uses the former sentence-style themes. Select Generate corrected new analysis run.", true);
             } else {
@@ -2600,7 +2700,7 @@
         try {
             if (!canResumeGeneration()) {
                 const period = currentPeriod();
-                setStatus("Creating a corrected analysis run…");
+                setStatus("Creating individual case reports…");
                 workspace = await authorizedRequest("/api/analysis", {
                     method: "POST",
                     body: JSON.stringify({
@@ -2618,7 +2718,7 @@
 
             while (canResumeGeneration()) {
                 const progress = generationProgress();
-                setStatus(`Analysing batch ${progress.processed + 1} of ${progress.total}…`);
+                setStatus(`Analysing individual case ${progress.processed + 1} of ${progress.total}…`);
                 generateButton.disabled = true;
                 workspace = await authorizedRequest("/api/analysis", {
                     method: "POST",
@@ -2633,11 +2733,11 @@
 
             const progress = generationProgress();
             setStatus(workspace.run.status === "completed"
-                ? `Corrected analysis complete: ${progress.total} of ${progress.total} batches processed.`
-                : `Analysis finished with status ${workspace.run.status}. Review the batch provenance for any missing evidence.`
+                ? `Individual analysis complete: ${progress.total} of ${progress.total} case reports created.`
+                : `Individual analysis finished with status ${workspace.run.status}. Review any case with missing evidence.`
             );
         } catch (error) {
-            setStatus(`${error.message} The completed batches are saved; select Resume this analysis run to continue.`, true);
+            setStatus(`${error.message} Completed case reports are saved; select Resume individual case reports to continue.`, true);
         } finally {
             generateButton.disabled = !(workspace?.corpusMessages || []).length;
         }

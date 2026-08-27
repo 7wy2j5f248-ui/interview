@@ -2,7 +2,7 @@ import { storedIdentifier } from "./corpus.js";
 import { DEFAULT_OPENAI_MODEL } from "./modelConfiguration.js";
 
 export const QUALITATIVE_ANALYSIS_MODEL = DEFAULT_OPENAI_MODEL;
-export const QUALITATIVE_ANALYSIS_VERSION = "task-014-v5-resumable-abstract-themes";
+export const QUALITATIVE_ANALYSIS_VERSION = "task-014-v6-individual-case-reports";
 export const DEFAULT_ANALYSIS_BATCH_SIZE = 40;
 export const MAX_THEME_SUBJECT_WORDS = 2;
 export const MAX_THEME_SUBJECT_LENGTH = 60;
@@ -128,6 +128,26 @@ export function buildAnalysisBatches(
 
     commitCurrentBatch();
     return batches;
+}
+
+export function buildIndividualCaseBatches(messages) {
+    const cases = [];
+    const caseByKey = new Map();
+
+    (Array.isArray(messages) ? messages : []).forEach(message => {
+        const key = message.sessionId
+            || `legacy:${message.participantId || message.id}`;
+
+        if (!caseByKey.has(key)) {
+            const individualCase = [];
+            caseByKey.set(key, individualCase);
+            cases.push(individualCase);
+        }
+
+        caseByKey.get(key).push(message);
+    });
+
+    return cases;
 }
 
 function responseText(response) {
@@ -646,7 +666,7 @@ export async function generateSuggestionsForBatch(
         input: [
             {
                 role: "system",
-                content: "You are assisting a qualitative researcher. Analyse only the participant messages supplied. Return provisional themes, qualitative codes, exact verbatim coded phrases, keywords, exact supporting participant message IDs, explicit code-to-message attribution, explicit keyword-to-message attribution, and concise English rationales. Every supplied participant session with substantive answers must be represented by at least one theme. A theme is a reusable, comparable subject label, not a case summary. It must be exactly one or two words. Reuse the same label whenever participants discuss the same subject. Prefer labels such as 'Sleep routine', 'Sleep duration', 'Night waking', 'Sleep strategies', 'Technology', 'Work', 'Family', 'Ageing', 'Environment', and 'Satisfaction'. For example, replace 'Stable sleep routines anchored by longstanding habits' with the theme 'Sleep routine'; put 'Stable' and 'Longstanding' under concise codes. Under the theme 'Work', use codes such as 'Long hours', 'Overtime', 'Weekend work', or 'Overwork'. If evidence covers two subjects such as work and family, create separate themes rather than a compound statement. Themes and codes must be short labels, never sentences, findings, cause-and-effect interpretations, or participant-specific claims. Put the full analytical interpretation in the rationale. Link every suggested component to the exact supporting messages. A coded phrase must appear verbatim in the original message or its supplied English translation. Never cite an ID that is not in the supplied evidence set. Do not invent or rewrite evidence."
+                content: "You are producing one qualitative individual case report. The supplied evidence belongs to exactly one participant session; never compare, combine, or generalize across participants. Analyse this case bottom-up: first identify exact evidence phrases and concise keywords, then group them into concise codes, then group those codes into themes. Return the required theme-centred JSON structure only after completing that bottom-up case analysis. The case must have at least one theme when substantive answers are present. A theme is a reusable, comparable subject label, not a case summary. It must be exactly one or two words. Reuse labels such as 'Sleep routine', 'Sleep duration', 'Night waking', 'Sleep strategies', 'Technology', 'Work', 'Family', 'Ageing', 'Environment', and 'Satisfaction'. For example, replace 'Stable sleep routines anchored by longstanding habits' with the theme 'Sleep routine'; put 'Stable' and 'Longstanding' under concise codes. Under 'Work', use codes such as 'Long hours', 'Overtime', 'Weekend work', or 'Overwork'. If this case covers two subjects such as work and family, create separate themes rather than a compound statement. Themes and codes must be short labels, never sentences, findings, cause-and-effect interpretations, or case summaries. Put fuller case interpretation in the rationale. Return exact supporting participant message IDs, explicit code-to-message attribution, explicit keyword-to-message attribution, and exact verbatim coded phrases. A coded phrase must appear verbatim in the original message or its supplied English translation. Never cite an ID outside this single-case evidence set. Do not invent or rewrite evidence."
             },
             {
                 role: "user",

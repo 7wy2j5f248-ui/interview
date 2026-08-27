@@ -679,8 +679,11 @@
     <h2 id="analysisHeading">Researcher Data Analysis Dashboard</h2>
     <p>
         Explore the real interview analysis as one workbook with three named
-        worksheets. Worksheet 1 compares participants and themes and links to
-        each complete transcript. Worksheet 2 maps codes to themes, and
+        worksheets. Each transcript is first analysed separately into an
+        individual case report: evidence and keywords are identified, grouped
+        into codes, then grouped into themes. Worksheet 1 presents themes first
+        for researcher review and links to each individual report and complete
+        transcript. Worksheet 2 maps codes to themes, and
         Worksheet 3 maps keyword expressions to codes. Each stage can be
         downloaded to Excel, rearranged and grouped by the researcher, then
         uploaded as a traceable decision layer for the next worksheet.
@@ -890,6 +893,14 @@
     <h2 id="provenanceDialogHeading">Analysis provenance</h2>
     <p id="provenanceDialogSummary" class="muted"></p>
     <div id="provenanceDialogContent"></div>
+</dialog>
+
+<dialog id="caseReportDialog">
+    <form method="dialog">
+        <button type="submit">Close individual report</button>
+    </form>
+    <h2 id="caseReportHeading">Individual case report</h2>
+    <div id="caseReportContent"></div>
 </dialog>
 
 <section id="languageView" hidden>

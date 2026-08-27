@@ -1,10 +1,9 @@
 import OpenAI from "openai";
 import { createClient } from "@supabase/supabase-js";
 import {
-    buildAnalysisBatches,
+    buildIndividualCaseBatches,
     collectEvidenceForBatch,
     commaSeparatedList,
-    DEFAULT_ANALYSIS_BATCH_SIZE,
     discussAnalysisWithResearcher,
     generateSuggestionsForBatch,
     isShortThemeSubject,
@@ -971,21 +970,8 @@ async function insertRunMessageLinks(supabaseClient, runId, batches) {
 async function persistFrozenBatches(
     supabaseClient,
     runId,
-    batches,
-    batchSize
+    batches
 ) {
-    const sessionBatchCounts = new Map();
-
-    batches.forEach(batch => {
-        new Set(batch.map(message => message.sessionId).filter(Boolean))
-            .forEach(sessionId => {
-                sessionBatchCounts.set(
-                    sessionId,
-                    (sessionBatchCounts.get(sessionId) || 0) + 1
-                );
-            });
-    });
-
     const batchRows = batches.map((batch, index) => {
         const sessionIds = [...new Set(
             batch.map(message => message.sessionId).filter(Boolean)
@@ -999,12 +985,10 @@ async function persistFrozenBatches(
             message_count: batch.length,
             input_token_count: null,
             grouping_criteria: {
-                strategy: "sequential_session_preserving",
-                partitionReason: "technical_message_limit",
-                configuredMessageLimit: batchSize,
-                splitSessionIds: sessionIds.filter(sessionId =>
-                    sessionBatchCounts.get(sessionId) > 1
-                )
+                strategy: "individual_case_report",
+                partitionReason: "one_transcript_per_case",
+                oneSessionPerUnit: true,
+                caseSessionId: sessionIds[0] || null
             }
         };
     });
@@ -1107,7 +1091,7 @@ async function persistSuggestedItem(
 async function startAnalysisGeneration(
     req,
     supabaseClient,
-    { batchSize, now }
+    { now }
 ) {
     const model = analysisModel(req.body?.model);
     const period = analysisPeriod(req.body?.start, req.body?.end);
@@ -1131,7 +1115,7 @@ async function startAnalysisGeneration(
         throw new AnalysisError(400, "No participant messages are available in this period.");
     }
 
-    let batches = buildAnalysisBatches(prepared.messages, batchSize);
+    let batches = buildIndividualCaseBatches(prepared.messages);
     const representedLanguages = [...new Set(
         prepared.messages.map(message => message.language).filter(Boolean)
     )].sort();
@@ -1166,8 +1150,7 @@ async function startAnalysisGeneration(
         batches = await persistFrozenBatches(
             supabaseClient,
             run.id,
-            batches,
-            batchSize
+            batches
         );
     } catch (error) {
         await supabaseClient
@@ -2126,7 +2109,6 @@ export async function handleAnalysis(
         supabaseClient,
         openaiClient = null,
         configuredToken,
-        batchSize = DEFAULT_ANALYSIS_BATCH_SIZE,
         now = () => new Date().toISOString()
     }
 ) {
@@ -2182,7 +2164,7 @@ export async function handleAnalysis(
             return res.status(200).json(await startAnalysisGeneration(
                 req,
                 supabaseClient,
-                { batchSize, now }
+                { now }
             ));
         }
 
@@ -2250,13 +2232,6 @@ export async function handleAnalysis(
     }
 }
 
-function configuredBatchSize(value) {
-    const parsed = Number(value);
-    return Number.isInteger(parsed) && parsed > 0 && parsed <= 100
-        ? parsed
-        : DEFAULT_ANALYSIS_BATCH_SIZE;
-}
-
 export default async function handler(req, res) {
     const secretKey = process.env.SUPABASE_SECRET_KEY;
     const configuredToken = process.env.RESEARCHER_DASHBOARD_TOKEN;
@@ -2293,9 +2268,6 @@ export default async function handler(req, res) {
     return handleAnalysis(req, res, {
         supabaseClient,
         openaiClient,
-        configuredToken,
-        batchSize: configuredBatchSize(
-            process.env.QUALITATIVE_ANALYSIS_BATCH_SIZE
-        )
+        configuredToken
     });
 }

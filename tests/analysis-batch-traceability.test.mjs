@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
     buildAnalysisBatches,
+    buildIndividualCaseBatches,
     discussAnalysisWithResearcher,
     generateSuggestionsForBatch,
     isShortThemeSubject,
@@ -163,6 +164,22 @@ test("session-preserving batch numbers remain deterministic", () => {
         ),
         batches.map(batch => batch.map(message => message.id))
     );
+});
+
+test("individual case analysis never combines participant sessions", () => {
+    const cases = buildIndividualCaseBatches(messages);
+
+    assert.equal(cases.length, 2);
+    assert.deepEqual(cases[0].map(message => message.id), [
+        "message-1",
+        "message-2"
+    ]);
+    assert.deepEqual(cases[1].map(message => message.id), ["message-3"]);
+    cases.forEach(individualCase => {
+        assert.equal(new Set(
+            individualCase.map(message => message.sessionId)
+        ).size, 1);
+    });
 });
 
 test("available OpenAI input-token usage is retained for batch persistence", async () => {
@@ -335,7 +352,7 @@ test("migration stores frozen multi-batch provenance with backend-only grants", 
     );
 });
 
-test("researcher interface exposes clickable batch, session, message, and transcript paths", async () => {
+test("researcher interface exposes clickable case, session, message, and transcript paths", async () => {
     const [dashboard, analysisScript, messageApi, analysisApi] = await Promise.all([
         readFile(new URL("../researcher.html", import.meta.url), "utf8"),
         readFile(new URL("../researcher-analysis.js", import.meta.url), "utf8"),
@@ -344,7 +361,8 @@ test("researcher interface exposes clickable batch, session, message, and transc
     ]);
 
     assert.match(dashboard, /id="provenanceDialog"/);
-    assert.match(analysisScript, /Batch \$\{batch\.batchNumber\} of \$\{batch\.totalBatches\}/);
+    assert.match(analysisScript, /individualCase \? "Case" : "Batch"/);
+    assert.match(analysisScript, /This computational unit contains one participant transcript only/);
     assert.match(analysisScript, /supporting sessions/);
     assert.match(analysisScript, /supporting messages/);
     assert.match(analysisScript, /Open this message in the complete transcript/);

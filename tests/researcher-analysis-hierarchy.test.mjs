@@ -52,6 +52,9 @@ test("Worksheet 1 retains metadata and is the only worksheet with transcript lin
         "Education"
     ].forEach(label => assert.match(script, new RegExp(`"${label}"`)));
     assert.match(themeSource, /openTranscript/);
+    assert.match(themeSource, /Open case report/);
+    assert.match(script, /function openIndividualCaseReport/);
+    assert.match(html, /id="caseReportDialog"/);
     assert.doesNotMatch(codeSource, /openTranscript|openProvenance/);
     assert.doesNotMatch(keywordSource, /openTranscript|openProvenance/);
 });
@@ -72,7 +75,7 @@ test("Worksheet 1 uses fixed participant-specific T1 to T8 slots", () => {
     assert.doesNotMatch(source, /relationCell/);
     assert.match(
         script,
-        /T1–T8 are participant-specific positions/
+        /T1–T8 contain the broadest one- or two-word concepts/
     );
     assert.match(script, /broadest one- or two-word concept/);
     assert.match(html, /Themes are the broadest concepts/);
@@ -145,15 +148,18 @@ test("AI discussion remains grounded server-side and revisions stay explicit", (
     assert.match(api, /broad one- or two-word concept/);
 });
 
-test("analysis generation is resumable one stored batch at a time", () => {
+test("analysis generation is resumable one stored individual case at a time", () => {
     assert.match(api, /async function startAnalysisGeneration/);
     assert.match(api, /async function processGenerationBatch/);
     assert.match(api, /action === "process_generation_batch"/);
     assert.match(api, /input_token_count === null/);
     assert.match(script, /while \(canResumeGeneration\(\)\)/);
     assert.match(script, /action: "process_generation_batch"/);
-    assert.match(script, /Resume this analysis run/);
+    assert.match(script, /Resume individual case reports/);
     assert.match(script, /Generate corrected new analysis run/);
+    assert.match(api, /strategy: "individual_case_report"/);
+    assert.match(api, /one_transcript_per_case/);
+    assert.match(api, /buildIndividualCaseBatches/);
 });
 
 test("each worksheet supports a traceable Excel round-trip", () => {
