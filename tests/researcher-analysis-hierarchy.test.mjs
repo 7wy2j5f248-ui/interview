@@ -33,7 +33,7 @@ test("Worksheet 1 retains metadata and is the only worksheet with transcript lin
     const keywordSource = functionSource("renderKeywordWorksheet", "renderHierarchyView");
 
     [
-        "Participant ID",
+        "Participant code",
         "Link to transcript",
         "Language",
         "Country of residence",
@@ -66,6 +66,18 @@ test("Worksheet 1 uses fixed participant-specific T1 to T8 slots", () => {
         script,
         /T1–T8 are participant-specific positions/
     );
+});
+
+test("worksheet rows use private participant codes rather than source IDs", () => {
+    assert.match(script, /participantCode:\s*null/);
+    assert.match(script, /participant\.participantCode \|\| "Uncoded participant"/);
+    assert.match(script, /appendHeader\(headingRow, "Participant code"\)/);
+    assert.doesNotMatch(script, /appendHeader\(headingRow, "Participant ID"\)/);
+    assert.match(html, /id="transcriptIdentity"/);
+    assert.match(html, /\["Participant code", identity\.participantCode\]/);
+    assert.match(html, /\["Participant ID", identity\.participantId\]/);
+    assert.match(html, /Transcript hidden because its participant identity does not match/);
+    assert.match(html, /transcriptView\.scrollIntoView/);
 });
 
 test("Worksheet 2 uses content-free participant-specific code slots", () => {

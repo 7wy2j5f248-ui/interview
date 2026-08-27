@@ -23,6 +23,7 @@ import {
 } from "../server/corpus.js";
 import { authorizeResearcher } from "../server/researcherAuth.js";
 import { normalizeOpenAIModel } from "../server/modelConfiguration.js";
+import { loadParticipantCodeMap } from "../server/participantCodes.js";
 
 const AI_ACTIONS = new Set(["generate", "collect_evidence", "discuss"]);
 const KNOWN_ACTIONS = new Set([
@@ -270,7 +271,12 @@ async function loadRunsForScope(supabaseClient, period, completionFilter) {
     );
 }
 
-function evidenceMessage(message, link, suggestionSources = []) {
+function evidenceMessage(
+    message,
+    link,
+    suggestionSources = [],
+    participantCode = null
+) {
     const sourceValues = type => [...new Set(
         suggestionSources
             .filter(source => source.suggestion_type === type)
@@ -283,6 +289,7 @@ function evidenceMessage(message, link, suggestionSources = []) {
         batchId: link.batch_id || null,
         session: message.Session || null,
         participant: message.Participant || null,
+        participantCode,
         language: message.Language || null,
         speaker: message.Speaker || null,
         timestamp: message.Timestamp || null,
@@ -323,7 +330,12 @@ function validatedAttributionCodes(value, item) {
     return validated;
 }
 
-function sessionDescriptorPayload(session, descriptor, fallbackSessionId = null) {
+function sessionDescriptorPayload(
+    session,
+    descriptor,
+    fallbackSessionId = null,
+    participantCode = null
+) {
     return {
         sessionId: session?.session_id
             || descriptor?.session_id
@@ -331,6 +343,7 @@ function sessionDescriptorPayload(session, descriptor, fallbackSessionId = null)
         participantId: session?.participant_id
             || descriptor?.participant_id
             || null,
+        participantCode,
         language: session?.language || null,
         completed: session?.completed === true,
         completedAt: session?.completed_at || null,
@@ -356,12 +369,17 @@ function sessionDescriptorPayload(session, descriptor, fallbackSessionId = null)
     };
 }
 
-function workspaceMessagePayload(message, batchId = null) {
+function workspaceMessagePayload(
+    message,
+    batchId = null,
+    participantCode = null
+) {
     return {
         messageId: message.id,
         batchId,
         session: message.Session || null,
         participant: message.Participant || null,
+        participantCode,
         language: message.Language || null,
         speaker: message.Speaker || null,
         timestamp: message.Timestamp || null,
@@ -501,6 +519,13 @@ async function loadRunProvenance(
         descriptor.session_id,
         descriptor
     ]));
+    const participantCodeById = await loadParticipantCodeMap(
+        supabaseClient,
+        [
+            ...sessionRows.map(session => session.participant_id),
+            ...corpusRows.map(message => message.Participant)
+        ]
+    );
     const corpusById = new Map(corpusRows.map(message => [message.id, message]));
     const batchPayloads = (batchRows || []).map(batch => {
         const membership = batchMessages.filter(link =>
@@ -511,7 +536,11 @@ async function loadRunProvenance(
             .map(link => sessionDescriptorPayload(
                 sessionById.get(link.session_id),
                 descriptorBySession.get(link.session_id),
-                link.session_id
+                link.session_id,
+                participantCodeById.get(
+                    sessionById.get(link.session_id)?.participant_id
+                    || descriptorBySession.get(link.session_id)?.participant_id
+                ) || null
             ));
 
         return {
@@ -554,9 +583,14 @@ async function loadRunProvenance(
             sessionDescriptorPayload(
                 sessionById.get(sessionId),
                 descriptorBySession.get(sessionId),
-                sessionId
+                sessionId,
+                participantCodeById.get(
+                    sessionById.get(sessionId)?.participant_id
+                    || descriptorBySession.get(sessionId)?.participant_id
+                ) || null
             )
         ])),
+        participantCodeById,
         itemBatches,
         suggestionSources
     };
@@ -610,6 +644,7 @@ function itemProvenancePayload(item, itemEvidence, provenance) {
                 ...(provenance.sessionById.get(sessionId) || {
                     sessionId,
                     participantId: null,
+                    participantCode: null,
                     language: null,
                     completed: false,
                     completedAt: null,
@@ -667,6 +702,7 @@ function itemProvenancePayload(item, itemEvidence, provenance) {
         supportingSessions: [...supportingBySession.values()].map(session => ({
             sessionId: session.sessionId,
             participantId: session.participantId,
+            participantCode: session.participantCode,
             language: session.language,
             completed: session.completed,
             completedAt: session.completedAt,
@@ -738,6 +774,13 @@ async function loadWorkspace(
             descriptor.session_id,
             descriptor
         ]));
+        const participantCodeById = await loadParticipantCodeMap(
+            supabaseClient,
+            [
+                ...scopedSessions.map(session => session.participant_id),
+                ...corpusRows.map(message => message.Participant)
+            ]
+        );
 
         return {
             period,
@@ -750,11 +793,16 @@ async function loadWorkspace(
                 sessionDescriptorPayload(
                     session,
                     descriptorBySession.get(session.session_id),
-                    session.session_id
+                    session.session_id,
+                    participantCodeById.get(session.participant_id) || null
                 )
             ),
             corpusMessages: corpusRows.map(message =>
-                workspaceMessagePayload(message)
+                workspaceMessagePayload(
+                    message,
+                    null,
+                    participantCodeById.get(message.Participant) || null
+                )
             )
         };
     }
@@ -820,7 +868,10 @@ async function loadWorkspace(
                     link,
                     itemSources.filter(source =>
                         source.message_id === link.message_id
-                    )
+                    ),
+                    provenance.participantCodeById.get(
+                        message.Participant
+                    ) || null
                 ) : null;
             })
             .filter(Boolean),
@@ -842,7 +893,8 @@ async function loadWorkspace(
         participants: [...provenance.sessionById.values()],
         corpusMessages: corpusRows.map(message => workspaceMessagePayload(
             message,
-            provenance.batchIdByMessageId.get(message.id) || null
+            provenance.batchIdByMessageId.get(message.id) || null,
+            provenance.participantCodeById.get(message.Participant) || null
         ))
     };
 }

@@ -5,6 +5,7 @@ import {
     storedIdentifier,
     validTimestamp
 } from "../server/corpus.js";
+import { loadParticipantCodeMap } from "../server/participantCodes.js";
 
 export const SUPPORTED_LANGUAGE_NAMES = Object.freeze({
     en: "English",
@@ -189,7 +190,11 @@ function compareSessions(left, right) {
         || left.session.localeCompare(right.session);
 }
 
-export function buildCorpusStatistics(rows, completionRows = []) {
+export function buildCorpusStatistics(
+    rows,
+    completionRows = [],
+    participantCodeById = new Map()
+) {
     const messages = Array.isArray(rows) ? rows : [];
     const completionBySession = new Map(
         (Array.isArray(completionRows) ? completionRows : [])
@@ -268,7 +273,10 @@ export function buildCorpusStatistics(rows, completionRows = []) {
         session.messageCount += 1;
 
         if (participantId) {
-            session.participants.add(participantId);
+            session.participants.add(
+                participantCodeById.get(participantId)
+                || "Uncoded participant"
+            );
         }
 
         if (timestamp !== null) {
@@ -435,9 +443,14 @@ export async function handleStatistics(
             loadStatisticsRows(supabaseClient),
             loadSessionCompletionRows(sessionSupabaseClient)
         ]);
+        const participantCodeById = await loadParticipantCodeMap(
+            sessionSupabaseClient,
+            rows.map(row => row.Participant)
+        );
         const statistics = buildCorpusStatistics(
             filterCorpusRows(rows, period),
-            completionRows
+            completionRows,
+            participantCodeById
         );
 
         statistics.metadata.period = period;

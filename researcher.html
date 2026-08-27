@@ -281,6 +281,23 @@
             min-width: 8rem;
         }
 
+        .transcriptIdentity {
+            background: #eef8f2;
+            border: 1px solid #84b99a;
+            border-radius: 0.45rem;
+            margin-block: 0.75rem 1rem;
+            padding: 0.85rem 1rem;
+        }
+
+        .transcriptIdentity p {
+            margin-block: 0.25rem;
+        }
+
+        .transcriptIdentityMismatch {
+            background: #fff1f1;
+            border-color: #c96363;
+        }
+
         .analysisColumnId {
             color: #245fbd;
             display: block;
@@ -841,7 +858,7 @@
         <thead>
             <tr>
                 <th scope="col">Session</th>
-                <th scope="col">Participant</th>
+                <th scope="col">Participant code</th>
                 <th scope="col">Messages</th>
                 <th scope="col">Start time</th>
                 <th scope="col">Last activity</th>
@@ -867,6 +884,7 @@
 <section id="transcriptView" hidden>
     <button id="languageBackButton" class="backButton" type="button"></button>
     <h2 id="transcriptHeading"></h2>
+    <div id="transcriptIdentity" class="transcriptIdentity" role="status"></div>
     <div id="messagesList"></div>
 </section>
 
@@ -1078,7 +1096,12 @@ function showLanguage(languageCode) {
         sessionButton.type = "button";
         sessionButton.textContent = session.session;
         sessionButton.addEventListener("click", () => {
-            loadMessages(session.session);
+            loadMessages(session.session, {
+                expectedParticipantCode:
+                    session.participants?.length === 1
+                        ? session.participants[0]
+                        : null
+            });
         });
         sessionCell.appendChild(sessionButton);
 
@@ -1195,12 +1218,18 @@ async function loadStatistics() {
 
 async function loadMessages(
     sessionId,
-    { returnMode = "language", highlightMessageId = null } = {}
+    {
+        returnMode = "language",
+        highlightMessageId = null,
+        expectedParticipantCode = null,
+        expectedParticipantId = null
+    } = {}
 ) {
 
     transcriptReturnMode = returnMode;
     clearViews();
-    document.getElementById("transcriptView").hidden = false;
+    const transcriptView = document.getElementById("transcriptView");
+    transcriptView.hidden = false;
     document.getElementById("transcriptHeading").textContent =
         `Session ${sessionId} — Transcript`;
     document.getElementById("languageBackButton").textContent =
@@ -1209,18 +1238,73 @@ async function loadMessages(
             : `← Back to ${selectedLanguage?.name || "language"} sessions`;
 
     const messageList = document.getElementById("messagesList");
+    const identityPanel = document.getElementById("transcriptIdentity");
+    identityPanel.className = "transcriptIdentity";
+    identityPanel.textContent = "Verifying participant identity…";
     messageList.textContent = "Loading transcript…";
+    transcriptView.scrollIntoView({ behavior: "smooth", block: "start" });
 
     const response = await fetch(
-        "/api/messages?session=" + encodeURIComponent(sessionId)
+        "/api/messages?session=" + encodeURIComponent(sessionId),
+        {
+            headers: {
+                Authorization: `Bearer ${sessionStorage.getItem("researcherDashboardToken") || ""}`
+            }
+        }
     );
 
     if (!response.ok) {
-        messageList.textContent = "Unable to load interview messages.";
+        const error = await response.json().catch(() => ({}));
+        identityPanel.classList.add("transcriptIdentityMismatch");
+        identityPanel.textContent = error.error
+            || "Transcript identity could not be verified.";
+        messageList.textContent = response.status === 401
+            ? "Unlock the analysis workspace to view this transcript."
+            : "Unable to load interview messages.";
         return;
     }
 
-    const messages = await response.json();
+    const payload = await response.json();
+    const identity = payload.identity || {};
+    const messages = Array.isArray(payload.messages) ? payload.messages : [];
+    const identityMatches = (
+        !expectedParticipantCode
+        || identity.participantCode === expectedParticipantCode
+    ) && (
+        !expectedParticipantId
+        || identity.participantId === expectedParticipantId
+    ) && identity.sessionId === sessionId;
+
+    identityPanel.replaceChildren();
+    [
+        ["Participant code", identity.participantCode],
+        ["Participant ID", identity.participantId],
+        ["Session ID", identity.sessionId]
+    ].forEach(([label, value]) => {
+        const line = document.createElement("p");
+        const heading = document.createElement("strong");
+        heading.textContent = `${label}: `;
+        line.append(heading, document.createTextNode(value || "Unavailable"));
+        identityPanel.appendChild(line);
+    });
+
+    const verification = document.createElement("p");
+    const verificationLabel = document.createElement("strong");
+    verificationLabel.textContent = identityMatches
+        ? "Verified match"
+        : "Identity mismatch";
+    verification.appendChild(verificationLabel);
+    identityPanel.appendChild(verification);
+
+    if (!identityMatches) {
+        identityPanel.classList.add("transcriptIdentityMismatch");
+        messageList.textContent =
+            "Transcript hidden because its participant identity does not match the selected worksheet row.";
+        return;
+    }
+
+    document.getElementById("transcriptHeading").textContent =
+        `${identity.participantCode} — Transcript`;
     messageList.replaceChildren();
 
     messages.forEach(function(item) {
@@ -1283,10 +1367,16 @@ async function loadMessages(
 
 }
 
-window.openResearcherTranscript = (sessionId, messageId = null) =>
+window.openResearcherTranscript = (
+    sessionId,
+    messageId = null,
+    participant = {}
+) =>
     loadMessages(sessionId, {
         returnMode: "analysis",
-        highlightMessageId: messageId
+        highlightMessageId: messageId,
+        expectedParticipantCode: participant.participantCode || null,
+        expectedParticipantId: participant.participantId || null
     });
 
 document.getElementById("summaryBackButton").addEventListener("click", () => {

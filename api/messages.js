@@ -1,5 +1,7 @@
 import OpenAI from "openai";
 import { createClient } from "@supabase/supabase-js";
+import { authorizeResearcher } from "../server/researcherAuth.js";
+import { loadParticipantCodeMap } from "../server/participantCodes.js";
 
 function textFromResponse(response) {
     const candidates = [
@@ -89,8 +91,21 @@ function logTranslationFailure(item, stage, error) {
 export async function handleMessages(
     req,
     res,
-    { supabaseClient, openaiClient, translateMessage = translateMessageToEnglish }
+    {
+        supabaseClient,
+        openaiClient,
+        configuredToken,
+        translateMessage = translateMessageToEnglish
+    }
 ) {
+    const authorization = authorizeResearcher(req, configuredToken);
+
+    if (!authorization.authorized) {
+        return res.status(authorization.status).json({
+            error: authorization.error
+        });
+    }
+
     const session = typeof req.query?.session === "string"
         ? req.query.session.trim()
         : "";
@@ -102,7 +117,7 @@ export async function handleMessages(
     try {
         const { data, error } = await supabaseClient
             .from("interview_messages")
-            .select("id, Speaker, Message, Timestamp, Language, EnglishTranslation")
+            .select("id, Participant, Speaker, Message, Timestamp, Language, EnglishTranslation")
             .eq("Session", session)
             .order("Timestamp", { ascending: true });
 
@@ -113,6 +128,29 @@ export async function handleMessages(
         }
 
         const messages = data || [];
+        const participantIds = [...new Set(messages.map(item =>
+            typeof item.Participant === "string"
+                ? item.Participant.trim()
+                : ""
+        ).filter(Boolean))];
+
+        if (participantIds.length !== 1) {
+            return res.status(409).json({
+                error: "Transcript identity could not be verified."
+            });
+        }
+
+        const participantId = participantIds[0];
+        const participantCode = (await loadParticipantCodeMap(
+            supabaseClient,
+            [participantId]
+        )).get(participantId);
+
+        if (!participantCode) {
+            return res.status(409).json({
+                error: "Transcript participant code is unavailable."
+            });
+        }
 
         for (const item of messages) {
             if (!needsEnglishTranslation(item)) {
@@ -153,17 +191,24 @@ export async function handleMessages(
             }
         }
 
-        return res.status(200).json(messages.map(item => ({
-            id: item.id,
-            Speaker: item.Speaker,
-            Message: item.Message,
-            Timestamp: item.Timestamp,
-            Language: item.Language,
-            EnglishTranslation: normalizedTranslation(item)
-                ? item.EnglishTranslation
-                : null,
-            TranslationState: translationState(item)
-        })));
+        return res.status(200).json({
+            identity: {
+                sessionId: session,
+                participantId,
+                participantCode
+            },
+            messages: messages.map(item => ({
+                id: item.id,
+                Speaker: item.Speaker,
+                Message: item.Message,
+                Timestamp: item.Timestamp,
+                Language: item.Language,
+                EnglishTranslation: normalizedTranslation(item)
+                    ? item.EnglishTranslation
+                    : null,
+                TranslationState: translationState(item)
+            }))
+        });
     } catch (error) {
         console.error("Researcher message loading failed:", error);
         return res.status(500).json({
@@ -173,13 +218,32 @@ export async function handleMessages(
 }
 
 export default async function handler(req, res) {
+    const secretKey = process.env.SUPABASE_SECRET_KEY;
+    const configuredToken = process.env.RESEARCHER_DASHBOARD_TOKEN;
+
+    if (!secretKey || !configuredToken) {
+        return res.status(500).json({
+            error: "Server configuration is incomplete."
+        });
+    }
+
     const supabaseClient = createClient(
         process.env.SUPABASE_URL,
-        process.env.SUPABASE_ANON_KEY
+        secretKey,
+        {
+            auth: {
+                autoRefreshToken: false,
+                persistSession: false
+            }
+        }
     );
     const openaiClient = new OpenAI({
         apiKey: process.env.OPENAI_API_KEY
     });
 
-    return handleMessages(req, res, { supabaseClient, openaiClient });
+    return handleMessages(req, res, {
+        supabaseClient,
+        openaiClient,
+        configuredToken
+    });
 }

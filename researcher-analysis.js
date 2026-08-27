@@ -220,7 +220,11 @@
             : "No structured descriptors recovered";
     }
 
-    function openTranscript(sessionId, messageId = null) {
+    function openTranscript(
+        sessionId,
+        messageId = null,
+        participant = null
+    ) {
         if (provenanceDialog.open) {
             provenanceDialog.close();
         }
@@ -229,7 +233,10 @@
             evidenceDialog.close();
         }
 
-        window.openResearcherTranscript?.(sessionId, messageId);
+        window.openResearcherTranscript?.(sessionId, messageId, {
+            participantCode: participant?.participantCode || null,
+            participantId: participant?.participantId || null
+        });
     }
 
     function openProvenance(view) {
@@ -286,7 +293,11 @@
             const article = document.createElement("article");
             article.className = "provenanceCard";
             appendTextBlock(article, "Session", session.sessionId);
-            appendTextBlock(article, "Participant", session.participantId);
+            appendTextBlock(
+                article,
+                "Participant code",
+                session.participantCode || "Uncoded participant"
+            );
             appendTextBlock(article, "Language", session.language);
             appendTextBlock(
                 article,
@@ -299,7 +310,7 @@
                 lifecycleLabel(session.endReason)
             );
             article.appendChild(linkButton("Open complete transcript", () => {
-                openTranscript(session.sessionId);
+                openTranscript(session.sessionId, null, session);
             }));
             container.appendChild(article);
         });
@@ -317,7 +328,11 @@
             const article = document.createElement("article");
             article.className = "provenanceCard";
             appendTextBlock(article, "Session", session.sessionId);
-            appendTextBlock(article, "Participant", session.participantId);
+            appendTextBlock(
+                article,
+                "Participant code",
+                session.participantCode || "Uncoded participant"
+            );
             appendTextBlock(article, "Language", session.language);
             appendTextBlock(
                 article,
@@ -345,7 +360,7 @@
                 descriptorSummary(session.descriptors)
             );
             article.appendChild(linkButton("Open complete transcript", () => {
-                openTranscript(session.sessionId);
+                openTranscript(session.sessionId, null, session);
             }));
             container.appendChild(article);
         });
@@ -400,7 +415,11 @@
             article.className = "provenanceCard";
             appendTextBlock(article, "Message ID", evidence.messageId);
             appendTextBlock(article, "Session", evidence.session);
-            appendTextBlock(article, "Participant", evidence.participant);
+            appendTextBlock(
+                article,
+                "Participant code",
+                evidence.participantCode || "Uncoded participant"
+            );
             appendTextBlock(article, "Language", evidence.language);
             appendTextBlock(article, "Speaker", evidence.speaker);
             appendTextBlock(
@@ -439,7 +458,14 @@
             if (evidence.session) {
                 article.appendChild(linkButton(
                     "Open this message in the complete transcript",
-                    () => openTranscript(evidence.session, evidence.messageId)
+                    () => openTranscript(
+                        evidence.session,
+                        evidence.messageId,
+                        {
+                            participantCode: evidence.participantCode,
+                            participantId: evidence.participant
+                        }
+                    )
                 ));
             }
             container.appendChild(article);
@@ -921,6 +947,7 @@
             const sessionId = session?.sessionId || session?.session || null;
             const existing = participants.get(participantId) || {
                 participantId,
+                participantCode: null,
                 sessionIds: new Set(),
                 language: null,
                 descriptors: null
@@ -930,6 +957,7 @@
             }
             existing.language ||= session?.language || null;
             existing.descriptors ||= session?.descriptors || null;
+            existing.participantCode ||= session?.participantCode || null;
             participants.set(participantId, existing);
         }
 
@@ -942,9 +970,13 @@
         });
 
         return [...participants.values()].sort((first, second) =>
-            first.participantId.localeCompare(second.participantId, undefined, {
+            (first.participantCode || first.participantId).localeCompare(
+                second.participantCode || second.participantId,
+                undefined,
+                {
                 numeric: true
-            })
+                }
+            )
         );
     }
 
@@ -1338,7 +1370,7 @@
         const table = worksheetTable("themeWorksheet");
         const head = document.createElement("thead");
         const headingRow = document.createElement("tr");
-        appendHeader(headingRow, "Participant ID");
+        appendHeader(headingRow, "Participant code");
         appendHeader(headingRow, "Link to transcript");
         participantMetadataHeadings.forEach(label => appendHeader(
             headingRow,
@@ -1356,7 +1388,10 @@
         const body = document.createElement("tbody");
         participants.forEach(participant => {
             const row = document.createElement("tr");
-            appendRowHeading(row, participant.participantId);
+            appendRowHeading(
+                row,
+                participant.participantCode || "Uncoded participant"
+            );
             const transcriptCell = document.createElement("td");
             const sessionIds = [...participant.sessionIds];
             if (sessionIds.length) {
@@ -1364,7 +1399,7 @@
                     sessionIds.length === 1
                         ? "Open transcript"
                         : `Open transcript (${sessionIds.length} sessions)`,
-                    () => openTranscript(sessionIds[0])
+                    () => openTranscript(sessionIds[0], null, participant)
                 );
                 button.className = "worksheetTranscriptButton";
                 transcriptCell.appendChild(button);
@@ -1446,7 +1481,7 @@
         const table = worksheetTable("codeWorksheet");
         const head = document.createElement("thead");
         const headingRow = document.createElement("tr");
-        appendHeader(headingRow, "Participant ID");
+        appendHeader(headingRow, "Participant code");
         Array.from({ length: PARTICIPANT_CODE_SLOT_COUNT }).forEach(
             (_, codeSlotIndex) => appendHeader(
                 headingRow,
@@ -1462,7 +1497,10 @@
         const body = document.createElement("tbody");
         participants.forEach(participant => {
             const row = document.createElement("tr");
-            appendRowHeading(row, participant.participantId);
+            appendRowHeading(
+                row,
+                participant.participantCode || "Uncoded participant"
+            );
             const participantCodes = participantCodeRecords(
                 participant,
                 selectedThemeSlotIndex
@@ -1530,7 +1568,7 @@
         const table = worksheetTable("keywordWorksheet");
         const head = document.createElement("thead");
         const headingRow = document.createElement("tr");
-        appendHeader(headingRow, "Participant ID");
+        appendHeader(headingRow, "Participant code");
         Array.from({ length: PARTICIPANT_KEYWORD_SLOT_COUNT }).forEach(
             (_, keywordSlotIndex) => appendHeader(
                 headingRow,
@@ -1547,7 +1585,10 @@
         const body = document.createElement("tbody");
         participants.forEach(participant => {
             const row = document.createElement("tr");
-            appendRowHeading(row, participant.participantId);
+            appendRowHeading(
+                row,
+                participant.participantCode || "Uncoded participant"
+            );
             const participantKeywords = participantKeywordRecords(
                 participant,
                 selectedThemeSlotIndex,
@@ -2036,7 +2077,11 @@
             article.appendChild(selection);
             appendTextBlock(article, "Source", evidenceSourceLabel(evidence));
             appendTextBlock(article, "Session", evidence.session || "Unknown / legacy");
-            appendTextBlock(article, "Participant", evidence.participant || "Unknown / legacy");
+            appendTextBlock(
+                article,
+                "Participant code",
+                evidence.participantCode || "Uncoded participant"
+            );
             appendTextBlock(article, "Language", evidence.language || "Unknown / legacy");
             appendTextBlock(article, "Speaker", evidence.speaker || "Unknown / legacy");
             appendTextBlock(
@@ -2073,7 +2118,14 @@
             if (evidence.session) {
                 article.appendChild(linkButton(
                     "Open this message in the complete transcript",
-                    () => openTranscript(evidence.session, evidence.messageId)
+                    () => openTranscript(
+                        evidence.session,
+                        evidence.messageId,
+                        {
+                            participantCode: evidence.participantCode,
+                            participantId: evidence.participant
+                        }
+                    )
                 ));
             }
 
