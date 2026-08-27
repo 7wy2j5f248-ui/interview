@@ -6,31 +6,8 @@ import {
 } from "./analysisCore.js";
 import { normalizeOpenAIModel } from "./modelConfiguration.js";
 import { loadParticipantCodeMap } from "./participantCodes.js";
-import { loadParticipantDescriptor } from "./participantDescriptors.js";
 
 const WORKER_PATH = "/api/automatic-analysis";
-const DEMOGRAPHIC_FIELDS = Object.freeze([
-    "current_country",
-    "current_region",
-    "country_of_origin",
-    "diaspora_status",
-    "gender",
-    "age",
-    "birth_year",
-    "birth_cohort",
-    "youth_status",
-    "education_level",
-    "social_identity",
-    "additional_descriptors"
-]);
-
-function demographicSnapshot(descriptor) {
-    return Object.fromEntries(
-        DEMOGRAPHIC_FIELDS
-            .filter(field => descriptor?.[field] !== undefined)
-            .map(field => [field, descriptor[field]])
-    );
-}
 
 function configuredWorkerSecret() {
     return process.env.AUTOMATIC_ANALYSIS_SECRET
@@ -125,15 +102,14 @@ async function loadCompletedCase(supabaseClient, job) {
         throw new Error("The completed transcript has no participant evidence.");
     }
 
-    const [descriptor, participantCodes] = await Promise.all([
-        loadParticipantDescriptor(supabaseClient, job.session_id),
-        loadParticipantCodeMap(supabaseClient, [job.participant_id])
-    ]);
+    const participantCodes = await loadParticipantCodeMap(
+        supabaseClient,
+        [job.participant_id]
+    );
 
     return {
         session,
         messages: prepared.messages,
-        demographics: demographicSnapshot(descriptor),
         participantCode: participantCodes.get(job.participant_id) || null
     };
 }
@@ -192,7 +168,8 @@ export async function processOldestAutomaticCase(
         const payload = {
             participantCode: source.participantCode,
             language: source.session.language,
-            demographics: source.demographics,
+            demographics: analysis.demographics,
+            descriptorSources: analysis.descriptorSources,
             caseInterpretation: analysis.caseInterpretation,
             codes: analysis.codes,
             themes: analysis.themes

@@ -128,6 +128,69 @@ test("greetings and conversational courtesies are never retained as keywords", (
     assert.equal(result.codes.length, 0);
 });
 
+test("automatic demographics retain only exact participant evidence and provenance", () => {
+    const result = validateAutomaticCaseAnalysis({
+        demographics: {
+            current_country: {
+                value: "Canada",
+                message_id: "message-1",
+                exact_text: "live in Canada",
+                basis: "stated"
+            },
+            age: {
+                value: 34,
+                message_id: "message-1",
+                exact_text: "I am 34",
+                basis: "stated"
+            },
+            birth_year: {
+                value: 1992,
+                message_id: "message-1",
+                exact_text: "born in 1991",
+                basis: "stated"
+            },
+            occupation: {
+                value: "Nurse",
+                message_id: "message-1",
+                exact_text: "work as a nurse",
+                basis: "stated"
+            }
+        },
+        codes: [{
+            label: "Work schedule",
+            rationale: "Shift work affects sleep.",
+            keyword_evidence: [{
+                message_id: "message-1",
+                exact_text: "night shifts"
+            }]
+        }],
+        themes: [{
+            label: "Work",
+            rationale: "The code concerns work.",
+            code_numbers: [1]
+        }],
+        case_interpretation: "Night shifts affect sleep."
+    }, [{
+        id: "message-1",
+        originalText: "I am 34, live in Canada, work as a nurse, and do night shifts. I was born in 1991.",
+        englishText: "I am 34, live in Canada, work as a nurse, and do night shifts. I was born in 1991."
+    }]);
+
+    assert.equal(result.complete, true);
+    assert.deepEqual(result.demographics, {
+        current_country: "Canada",
+        age: 34,
+        additional_descriptors: { occupation: "Nurse" }
+    });
+    assert.equal(result.invalidDemographicEvidence, 1);
+    assert.equal(
+        result.descriptorSources.age.source_message_id,
+        "message-1"
+    );
+    assert.equal(result.descriptorSources.age.raw_answer, "I am 34");
+    assert.equal(result.descriptorSources.age.basis, "stated");
+});
+
 test("formal completion enqueues a strict FIFO atomic case pipeline", async () => {
     const migration = await readFile(migrationUrl, "utf8");
     const chat = await readFile(new URL("../api/chat.js", import.meta.url), "utf8");

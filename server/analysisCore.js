@@ -4,7 +4,7 @@ import { DEFAULT_OPENAI_MODEL } from "./modelConfiguration.js";
 export const QUALITATIVE_ANALYSIS_MODEL = DEFAULT_OPENAI_MODEL;
 export const QUALITATIVE_ANALYSIS_VERSION = "task-014-v7-complete-cases-before-summary";
 export const AUTOMATIC_CASE_ANALYSIS_VERSION =
-    "case-analysis-v2-no-conversational-courtesies";
+    "case-analysis-v3-evidence-backed-demographics";
 export const DEFAULT_ANALYSIS_BATCH_SIZE = 40;
 export const MAX_THEME_SUBJECT_WORDS = 2;
 export const MAX_THEME_SUBJECT_LENGTH = 60;
@@ -270,9 +270,60 @@ const suggestionSchema = {
     additionalProperties: false
 };
 
+function nullableEvidenceSchema(valueType) {
+    return {
+        type: "object",
+        properties: {
+            value: { type: [valueType, "null"] },
+            message_id: { type: ["string", "null"] },
+            exact_text: { type: ["string", "null"] },
+            basis: {
+                type: ["string", "null"],
+                enum: ["stated", "derived", null]
+            }
+        },
+        required: ["value", "message_id", "exact_text", "basis"],
+        additionalProperties: false
+    };
+}
+
+const automaticDemographicSchema = {
+    type: "object",
+    properties: {
+        current_country: nullableEvidenceSchema("string"),
+        current_region: nullableEvidenceSchema("string"),
+        country_of_origin: nullableEvidenceSchema("string"),
+        diaspora_status: nullableEvidenceSchema("string"),
+        gender: nullableEvidenceSchema("string"),
+        age: nullableEvidenceSchema("integer"),
+        birth_year: nullableEvidenceSchema("integer"),
+        birth_cohort: nullableEvidenceSchema("string"),
+        youth_status: nullableEvidenceSchema("string"),
+        occupation: nullableEvidenceSchema("string"),
+        education_level: nullableEvidenceSchema("string"),
+        social_identity: nullableEvidenceSchema("string")
+    },
+    required: [
+        "current_country",
+        "current_region",
+        "country_of_origin",
+        "diaspora_status",
+        "gender",
+        "age",
+        "birth_year",
+        "birth_cohort",
+        "youth_status",
+        "occupation",
+        "education_level",
+        "social_identity"
+    ],
+    additionalProperties: false
+};
+
 const automaticCaseSchema = {
     type: "object",
     properties: {
+        demographics: automaticDemographicSchema,
         codes: {
             type: "array",
             items: {
@@ -315,7 +366,7 @@ const automaticCaseSchema = {
         },
         case_interpretation: { type: "string" }
     },
-    required: ["codes", "themes", "case_interpretation"],
+    required: ["demographics", "codes", "themes", "case_interpretation"],
     additionalProperties: false
 };
 
@@ -436,6 +487,107 @@ function validateAutomaticThemes(rawThemes, codes) {
     return { themes, invalidThemes, unassignedCodeNumbers };
 }
 
+const AUTOMATIC_DEMOGRAPHIC_FIELDS = Object.freeze([
+    ["current_country", "text"],
+    ["current_region", "text"],
+    ["country_of_origin", "text"],
+    ["diaspora_status", "text"],
+    ["gender", "text"],
+    ["age", "age"],
+    ["birth_year", "birth_year"],
+    ["birth_cohort", "birth_cohort"],
+    ["youth_status", "text"],
+    ["occupation", "text"],
+    ["education_level", "text"],
+    ["social_identity", "text"]
+]);
+
+function normalizedDemographicValue(value, type) {
+    if (type === "age") {
+        return Number.isInteger(value) && value >= 0 && value <= 130
+            ? value
+            : null;
+    }
+
+    if (type === "birth_year") {
+        return Number.isInteger(value) && value >= 1000 && value <= 9999
+            ? value
+            : null;
+    }
+
+    const text = normalizedText(value);
+
+    if (type !== "birth_cohort") {
+        return text;
+    }
+
+    return text && (
+        [
+            "unidentified",
+            "not_asked",
+            "declined",
+            "unclear",
+            "not_applicable"
+        ].includes(text)
+        || /^(post|pre)_[0-9]{4}s$/u.test(text)
+    ) ? text : null;
+}
+
+function validateAutomaticDemographics(value, messagesById) {
+    const demographics = {};
+    const descriptorSources = {};
+    let invalidDemographicEvidence = 0;
+
+    AUTOMATIC_DEMOGRAPHIC_FIELDS.forEach(([field, type]) => {
+        const entry = value?.[field];
+
+        if (entry?.value === null || entry?.value === undefined) {
+            return;
+        }
+
+        const normalizedValue = normalizedDemographicValue(entry.value, type);
+        const messageId = normalizedText(entry.message_id);
+        const message = messagesById.get(messageId);
+        const occurrences = exactTextOccurrences(
+            message?.originalText,
+            entry.exact_text
+        );
+        const basis = entry?.basis === "derived" ? "derived" : "stated";
+        const numericEvidenceMatches = !["age", "birth_year"].includes(type)
+            || occurrences.some(occurrence =>
+                occurrence.exactText.includes(String(normalizedValue))
+            );
+
+        if (normalizedValue === null
+            || !message
+            || !occurrences.length
+            || !numericEvidenceMatches
+        ) {
+            invalidDemographicEvidence += 1;
+            return;
+        }
+
+        if (field === "occupation") {
+            demographics.additional_descriptors = {
+                ...(demographics.additional_descriptors || {}),
+                occupation: normalizedValue
+            };
+        } else {
+            demographics[field] = normalizedValue;
+        }
+
+        descriptorSources[field] = {
+            source_message_id: messageId,
+            raw_answer: occurrences[0].exactText,
+            extracted_segment: occurrences[0].exactText,
+            basis,
+            extraction_method: AUTOMATIC_CASE_ANALYSIS_VERSION
+        };
+    });
+
+    return { demographics, descriptorSources, invalidDemographicEvidence };
+}
+
 export function validateAutomaticCaseAnalysis(value, availableMessages) {
     const messagesById = new Map(
         (Array.isArray(availableMessages) ? availableMessages : [])
@@ -494,6 +646,10 @@ export function validateAutomaticCaseAnalysis(value, availableMessages) {
     const themeValidation = validateAutomaticThemes(value?.themes, codes);
     const { themes, unassignedCodeNumbers } = themeValidation;
     invalidEvidence += themeValidation.invalidThemes;
+    const demographicValidation = validateAutomaticDemographics(
+        value?.demographics,
+        messagesById
+    );
 
     const caseInterpretation = normalizedText(value?.case_interpretation);
     const allCodesAssigned = unassignedCodeNumbers.length === 0;
@@ -505,6 +661,7 @@ export function validateAutomaticCaseAnalysis(value, availableMessages) {
         invalidEvidence,
         droppedCodes,
         unassignedCodeNumbers,
+        ...demographicValidation,
         complete: Boolean(
             codes.length
             && themes.length
@@ -940,7 +1097,7 @@ export async function generateAutomaticCaseAnalysis(
     messages,
     { model = QUALITATIVE_ANALYSIS_MODEL } = {}
 ) {
-    const systemInstruction = "Read this single completed participant transcript line by line. Work strictly from evidence upward. First identify analytically meaningful words or short phrases in the participant's original_text and return them verbatim as keyword evidence with their exact message_id. Keywords are research evidence, not every word in the conversation. Never select greetings, introductions, thanks, farewells, politeness formulas, interviewer-directed courtesies, or other phatic conversational language as keywords or codes. Examples to exclude include hello, hi, good morning, thank you, and their equivalents in every interview language. Never return translated wording as exact_text. Then categorize the substantive keyword occurrences into participant-specific codes. Codes are concise category names and may be abstractions such as 'Work patterns' or 'Media use'; they do not need to repeat transcript wording. Finally group related code numbers into broad one- or two-word themes. Every code must belong to at least one theme. Do not compare this case with any participant. Do not invent or paraphrase evidence. Return the substantive keyword occurrences needed to make the code system inspectable without flooding it with routine conversation. Codes and themes are proposals for researcher review, not confirmed findings.";
+    const systemInstruction = "Read this single completed participant transcript line by line. First extract the fixed demographic fields. Every non-null demographic value must cite one exact participant original_text phrase and its message_id. Use null when the participant did not provide the information; never guess. Birth year must be explicitly stated. Birth cohort may be derived only from an explicitly stated birth year. Diaspora status may be derived from explicit residence and origin evidence. Mark each supported value as stated or derived. Then work strictly from evidence upward. Identify analytically meaningful words or short phrases in the participant's original_text and return them verbatim as keyword evidence with their exact message_id. Keywords are research evidence, not every word in the conversation. Never select greetings, introductions, thanks, farewells, politeness formulas, interviewer-directed courtesies, or other phatic conversational language as keywords or codes. Examples to exclude include hello, hi, good morning, thank you, and their equivalents in every interview language. Never return translated wording as exact_text. Then categorize the substantive keyword occurrences into participant-specific codes. Codes are concise category names and may be abstractions such as 'Work patterns' or 'Media use'; they do not need to repeat transcript wording. Finally group related code numbers into broad one- or two-word themes. Every code must belong to at least one theme. Do not compare this case with any participant. Do not invent or paraphrase evidence. Return the substantive keyword occurrences needed to make the code system inspectable without flooding it with routine conversation. Codes, themes, and demographic values are proposals with exact provenance for researcher review, not confirmed findings.";
     const createResponse = input => openaiClient.responses.create({
         model,
         store: false,
@@ -971,7 +1128,7 @@ export async function generateAutomaticCaseAnalysis(
         ? response.usage.input_tokens
         : null;
 
-    if (!validated.complete) {
+    if (!validated.complete || validated.invalidDemographicEvidence > 0) {
         const repairResponse = await createResponse([
             {
                 role: "system",
@@ -986,6 +1143,8 @@ export async function generateAutomaticCaseAnalysis(
                     "Validation problems (JSON):",
                     JSON.stringify({
                         invalidEvidence: validated.invalidEvidence,
+                        invalidDemographicEvidence:
+                            validated.invalidDemographicEvidence,
                         droppedCodes: validated.droppedCodes,
                         unassignedCodeNumbers:
                             validated.unassignedCodeNumbers
