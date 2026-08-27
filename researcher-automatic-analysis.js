@@ -303,6 +303,12 @@
     }
 
     function renderArchive() {
+        const maximumCodes = Math.max(0, ...payload.cases.map(item =>
+            Math.max(0, ...(item.codes || []).map(code => code.code_number))
+        ));
+        const maximumThemes = Math.max(0, ...payload.cases.map(item =>
+            Math.max(0, ...(item.themes || []).map(theme => theme.theme_number))
+        ));
         const { scroll, table } = createTable([
             "Participant code",
             "Session number",
@@ -310,7 +316,15 @@
             "Archive note",
             "Link to transcript",
             "Case report",
-            "Action"
+            "Action",
+            ...Array.from(
+                { length: maximumCodes },
+                (_, index) => `C${index + 1}`
+            ),
+            ...Array.from(
+                { length: maximumThemes },
+                (_, index) => `T${index + 1}`
+            )
         ]);
         const body = document.createElement("tbody");
 
@@ -336,6 +350,29 @@
             );
             restoreCell.appendChild(restoreButton);
             row.appendChild(restoreCell);
+
+            const codeByNumber = new Map((caseRecord.codes || []).map(code => [
+                code.code_number,
+                code
+            ]));
+            for (let number = 1; number <= maximumCodes; number += 1) {
+                const code = codeByNumber.get(number);
+                const cell = createCell(row, code?.code_label || "—");
+                cell.title = code?.rationale || "";
+                if (!code) cell.className = "analysisEmptyCell";
+            }
+
+            const themeByNumber = new Map((caseRecord.themes || []).map(theme => [
+                theme.theme_number,
+                theme
+            ]));
+            for (let number = 1; number <= maximumThemes; number += 1) {
+                const theme = themeByNumber.get(number);
+                const cell = createCell(row, theme?.theme_label || "—");
+                cell.title = theme?.rationale || "";
+                if (!theme) cell.className = "analysisEmptyCell";
+            }
+
             body.appendChild(row);
         });
 
@@ -381,7 +418,7 @@
                     ? "Form 2: each case starts at C1. Headers are positional only; participant-specific code content stays inside cells."
                     : activeView === "themes"
                         ? "Form 3: each case starts at T1. Headers are positional only; participant-specific theme content stays inside cells."
-                        : "Archived cases are excluded from every active analysis form and from future automatic reanalysis. Their transcripts, reports, and archive history remain available here.";
+                        : "Archived cases are excluded from every active analysis form and from future automatic reanalysis. Each archived row preserves its transcript, report, positional C1–Cn codes, positional T1–Tn themes, and archive history.";
     }
 
     function highlightedText(message, caseRecord) {
@@ -605,18 +642,44 @@
         let rows;
 
         if (activeView === "archive") {
+            const maximumCodes = Math.max(0, ...payload.cases.map(item =>
+                Math.max(0, ...(item.codes || []).map(code => code.code_number))
+            ));
+            const maximumThemes = Math.max(0, ...payload.cases.map(item =>
+                Math.max(0, ...(item.themes || []).map(theme => theme.theme_number))
+            ));
             rows = [[
                 "Participant code",
                 "Session number",
                 "Archived",
                 "Archive note",
-                "Link to transcript"
+                "Link to transcript",
+                ...Array.from(
+                    { length: maximumCodes },
+                    (_, index) => `C${index + 1}`
+                ),
+                ...Array.from(
+                    { length: maximumThemes },
+                    (_, index) => `T${index + 1}`
+                )
             ], ...payload.cases.map(item => [
                 participantCode(item),
                 sessionNumber(item),
                 item.archivedAt || "",
                 item.archiveNote || "",
-                transcriptUrl(item)
+                transcriptUrl(item),
+                ...Array.from(
+                    { length: maximumCodes },
+                    (_, index) => (item.codes || []).find(
+                        code => code.code_number === index + 1
+                    )?.code_label || ""
+                ),
+                ...Array.from(
+                    { length: maximumThemes },
+                    (_, index) => (item.themes || []).find(
+                        theme => theme.theme_number === index + 1
+                    )?.theme_label || ""
+                )
             ])];
         } else if (activeView === "cases") {
             const orderedCases = casesForCaseAndKeywordForm();
