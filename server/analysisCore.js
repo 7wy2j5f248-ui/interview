@@ -1024,6 +1024,68 @@ export async function generateAutomaticCaseAnalysis(
             inputTokenCount = (inputTokenCount || 0)
                 + themeResponse.usage.input_tokens;
         }
+
+        if (!validated.complete) {
+            const themeRepairResponse = await openaiClient.responses.create({
+                model,
+                store: false,
+                text: {
+                    format: {
+                        type: "json_schema",
+                        name: "corrected_case_theme_assignment",
+                        strict: true,
+                        schema: automaticThemeSchema
+                    }
+                },
+                input: [{
+                    role: "system",
+                    content: "Return a complete corrected theme assignment. Every supplied code number must appear in at least one code_numbers array. Pay special attention to the explicitly listed missing numbers. Use broad one- or two-word subject labels only. Return the entire replacement theme list."
+                }, {
+                    role: "user",
+                    content: JSON.stringify({
+                        codeCount: validated.codes.length,
+                        requiredCodeNumbers: validated.codes.map(
+                            (_, index) => index + 1
+                        ),
+                        previouslyMissingCodeNumbers:
+                            validated.unassignedCodeNumbers,
+                        previousThemes: validated.themes,
+                        codes: validated.codes.map((code, index) => ({
+                            code_number: index + 1,
+                            label: code.label,
+                            rationale: code.rationale
+                        }))
+                    })
+                }]
+            });
+            const repairedThemes = validateAutomaticThemes(
+                parseStructuredResponse(
+                    themeRepairResponse,
+                    "Corrected case theme assignment"
+                )?.themes,
+                validated.codes
+            );
+            validated = {
+                ...validated,
+                themes: repairedThemes.themes,
+                unassignedCodeNumbers:
+                    repairedThemes.unassignedCodeNumbers,
+                invalidEvidence: validated.invalidEvidence
+                    + repairedThemes.invalidThemes,
+                complete: Boolean(
+                    repairedThemes.themes.length
+                    && !repairedThemes.unassignedCodeNumbers.length
+                    && validated.caseInterpretation
+                )
+            };
+
+            if (Number.isInteger(
+                themeRepairResponse?.usage?.input_tokens
+            )) {
+                inputTokenCount = (inputTokenCount || 0)
+                    + themeRepairResponse.usage.input_tokens;
+            }
+        }
     }
 
     return {
