@@ -14,6 +14,10 @@ const archiveMigrationUrl = new URL(
     "../supabase/migrations/20260827155638_add_case_archive_and_queue_wakeup.sql",
     import.meta.url
 );
+const demographicMigrationUrl = new URL(
+    "../supabase/migrations/20260827164457_activate_v3_demographics_for_unfinished_cases.sql",
+    import.meta.url
+);
 
 test("automatic case analysis retains exact keyword offsets and local hierarchy", () => {
     const result = validateAutomaticCaseAnalysis({
@@ -286,6 +290,31 @@ test("v2 preserves superseded reports and restarts the FIFO queue", async () => 
     assert.match(migration, /where superseded_at is null/);
     assert.match(migration, /case-analysis-v2-no-conversational-courtesies/);
     assert.match(migration, /status = 'pending'/);
+});
+
+test("v3 saves evidenced demographics atomically without replacing completed reports", async () => {
+    const migration = await readFile(demographicMigrationUrl, "utf8");
+    const worker = await readFile(
+        new URL("../server/automaticCaseAnalysis.js", import.meta.url),
+        "utf8"
+    );
+    const core = await readFile(
+        new URL("../server/analysisCore.js", import.meta.url),
+        "utf8"
+    );
+
+    assert.match(migration, /participant_descriptors as descriptor/);
+    assert.match(migration, /descriptorSources/);
+    assert.match(migration, /descriptor_sources/);
+    assert.match(migration, /stored_demographics/);
+    assert.match(migration, /case-analysis-v3-evidence-backed-demographics/);
+    assert.match(migration, /where archived_at is null\s+and status <> 'completed'/);
+    assert.doesNotMatch(migration, /update public\.qualitative_case_reports/);
+    assert.match(migration, /from public, anon, authenticated/);
+    assert.match(worker, /demographics: analysis\.demographics/);
+    assert.match(worker, /descriptorSources: analysis\.descriptorSources/);
+    assert.match(core, /source_message_id/);
+    assert.match(core, /extraction_method: AUTOMATIC_CASE_ANALYSIS_VERSION/);
 });
 
 test("automatic dashboard exposes every transcript independently of analysis completion", async () => {
