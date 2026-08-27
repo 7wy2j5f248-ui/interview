@@ -438,12 +438,17 @@ export function validateAutomaticCaseAnalysis(value, availableMessages) {
     const allCodesAssigned = codes.every((_, index) =>
         assignedCodeNumbers.has(index + 1)
     );
+    const unassignedCodeNumbers = codes
+        .map((_, index) => index + 1)
+        .filter(number => !assignedCodeNumbers.has(number));
 
     return {
         codes,
         themes,
         caseInterpretation,
         invalidEvidence,
+        droppedCodes,
+        unassignedCodeNumbers,
         complete: Boolean(
             codes.length
             && themes.length
@@ -879,7 +884,8 @@ export async function generateAutomaticCaseAnalysis(
     messages,
     { model = QUALITATIVE_ANALYSIS_MODEL } = {}
 ) {
-    const response = await openaiClient.responses.create({
+    const systemInstruction = "Read this single completed participant transcript line by line. Work strictly from evidence upward. First identify every analytically meaningful word or short phrase in the participant's original_text and return it verbatim as keyword evidence with its exact message_id. Never return translated wording as exact_text. Then categorize those keyword occurrences into participant-specific codes. Codes are concise category names and may be abstractions such as 'Work patterns' or 'Media use'; they do not need to repeat transcript wording. Finally group related code numbers into broad one- or two-word themes. Every code must belong to at least one theme. Do not compare this case with any participant. Do not invent, paraphrase, omit, or rewrite keyword evidence. Return all substantive keyword occurrences needed to make the code system inspectable. Codes and themes are proposals for researcher review, not confirmed findings.";
+    const createResponse = input => openaiClient.responses.create({
         model,
         store: false,
         text: {
@@ -890,31 +896,64 @@ export async function generateAutomaticCaseAnalysis(
                 schema: automaticCaseSchema
             }
         },
-        input: [
+        input
+    });
+    const transcriptJson = messagesForModel(messages);
+    const response = await createResponse([
+        { role: "system", content: systemInstruction },
+        {
+            role: "user",
+            content: `Completed participant transcript (JSON):\n${transcriptJson}`
+        }
+    ]);
+    const draft = parseStructuredResponse(
+        response,
+        "Automatic individual case analysis"
+    );
+    let validated = validateAutomaticCaseAnalysis(draft, messages);
+    let inputTokenCount = Number.isInteger(response?.usage?.input_tokens)
+        ? response.usage.input_tokens
+        : null;
+
+    if (!validated.complete) {
+        const repairResponse = await createResponse([
             {
                 role: "system",
-                content: "Read this single completed participant transcript line by line. Work strictly from evidence upward. First identify every analytically meaningful word or short phrase in the participant's original_text and return it verbatim as keyword evidence with its exact message_id. Never return translated wording as exact_text. Then categorize those keyword occurrences into participant-specific codes. Codes are concise category names and may be abstractions such as 'Work patterns' or 'Media use'; they do not need to repeat transcript wording. Finally group related code numbers into broad one- or two-word themes. Every code must belong to at least one theme. Do not compare this case with any participant. Do not invent, paraphrase, omit, or rewrite keyword evidence. Return all substantive keyword occurrences needed to make the code system inspectable. Codes and themes are proposals for researcher review, not confirmed findings."
+                content: systemInstruction
+                    + " Correct the supplied draft into a complete replacement. Preserve valid exact evidence. Remove or replace non-verbatim evidence, restore any dropped code using exact evidence, and assign every code number to at least one valid theme. Return the entire corrected JSON object."
             },
             {
                 role: "user",
-                content: `Completed participant transcript (JSON):\n${messagesForModel(messages)}`
+                content: [
+                    `Completed participant transcript (JSON):\n${transcriptJson}`,
+                    `Draft requiring correction (JSON):\n${JSON.stringify(draft)}`,
+                    "Validation problems (JSON):",
+                    JSON.stringify({
+                        invalidEvidence: validated.invalidEvidence,
+                        droppedCodes: validated.droppedCodes,
+                        unassignedCodeNumbers:
+                            validated.unassignedCodeNumbers
+                    })
+                ].join("\n\n")
             }
-        ]
-    });
+        ]);
+        validated = validateAutomaticCaseAnalysis(
+            parseStructuredResponse(
+                repairResponse,
+                "Corrected automatic individual case analysis"
+            ),
+            messages
+        );
 
-    const validated = validateAutomaticCaseAnalysis(
-        parseStructuredResponse(
-            response,
-            "Automatic individual case analysis"
-        ),
-        messages
-    );
+        if (Number.isInteger(repairResponse?.usage?.input_tokens)) {
+            inputTokenCount = (inputTokenCount || 0)
+                + repairResponse.usage.input_tokens;
+        }
+    }
 
     return {
         ...validated,
-        inputTokenCount: Number.isInteger(response?.usage?.input_tokens)
-            ? response.usage.input_tokens
-            : null
+        inputTokenCount
     };
 }
 

@@ -183,7 +183,9 @@ export async function processOldestAutomaticCase(
                 "The automatic individual case report was incomplete and was not saved. "
                 + `Validated ${analysis.codes.length} codes, `
                 + `${analysis.themes.length} themes, and `
-                + `${analysis.invalidEvidence} invalid evidence records.`
+                + `${analysis.invalidEvidence} invalid evidence records; `
+                + `${analysis.droppedCodes} codes were dropped and `
+                + `${analysis.unassignedCodeNumbers.length} codes were unassigned.`
             );
         }
 
