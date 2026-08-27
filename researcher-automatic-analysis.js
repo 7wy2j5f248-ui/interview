@@ -270,6 +270,12 @@
 
     function render() {
         const counts = payload.counts || {};
+        const completedCases = payload.cases.filter(
+            caseRecord => caseRecord.status === "completed"
+        );
+        const casesWithMarkedKeywords = completedCases.filter(
+            caseRecord => (caseRecord.highlights || []).length > 0
+        ).length;
         ["pending", "processing", "completed", "failed"].forEach(key => {
             document.getElementById(
                 `automaticAnalysis${key[0].toUpperCase()}${key.slice(1)}Count`
@@ -293,7 +299,7 @@
             });
         document.getElementById("automaticAnalysisDescription").textContent =
             activeView === "cases"
-                ? "Form 1: demographic data and the transcript with exact keyword evidence highlighted by code colour."
+                ? `Form 1: demographic data and the transcript with exact keyword evidence highlighted by code colour. ${casesWithMarkedKeywords} of ${completedCases.length} completed cases currently have marked keywords.`
                 : activeView === "codes"
                     ? "Form 2: each case starts at C1. Headers are positional only; participant-specific code content stays inside cells."
                     : activeView === "themes"
@@ -563,15 +569,11 @@
         URL.revokeObjectURL(link.href);
     }
 
-    async function load() {
-        setStatus("Loading automatic case reports…");
-        const requestedScope = activeView === "archive"
-            ? "archived"
-            : "active";
+    async function fetchDashboardPage(requestedScope, page) {
         const response = await fetch(
-            `/api/automatic-analysis?scope=${requestedScope}`,
+            `/api/automatic-analysis?scope=${requestedScope}&page=${page}`,
             {
-            headers: { Authorization: `Bearer ${token()}` }
+                headers: { Authorization: `Bearer ${token()}` }
             }
         );
         const data = await response.json().catch(() => ({}));
@@ -580,7 +582,29 @@
             throw new Error(data.error || "Automatic case reports could not be loaded.");
         }
 
-        payload = data;
+        return data;
+    }
+
+    async function load() {
+        setStatus("Loading automatic case reports…");
+        const requestedScope = activeView === "archive"
+            ? "archived"
+            : "active";
+        const firstPage = await fetchDashboardPage(requestedScope, 1);
+        const totalCases = Object.values(firstPage.counts || {}).reduce(
+            (total, value) => total + Number(value || 0),
+            0
+        );
+        const pageSize = Math.max(1, Number(firstPage.pageSize) || 100);
+        const pageCount = Math.ceil(totalCases / pageSize);
+        const cases = [...(firstPage.cases || [])];
+
+        for (let page = 2; page <= pageCount; page += 1) {
+            const nextPage = await fetchDashboardPage(requestedScope, page);
+            cases.push(...(nextPage.cases || []));
+        }
+
+        payload = { ...firstPage, cases };
         loadedScope = requestedScope;
         gate.hidden = true;
         workspace.hidden = false;
@@ -588,8 +612,8 @@
         openRequestedTranscript();
         setStatus(
             requestedScope === "archived"
-                ? `${data.cases.length} archived cases on this page.`
-                : `${data.counts.completed || 0} complete active case reports. The queue always processes the earliest completed transcript first.`
+                ? `${cases.length} archived cases.`
+                : `${firstPage.counts.completed || 0} complete active case reports. The queue always processes the earliest completed transcript first.`
         );
     }
 

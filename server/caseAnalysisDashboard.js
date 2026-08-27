@@ -3,6 +3,7 @@ import { authorizeResearcher } from "./researcherAuth.js";
 import { loadParticipantCodeMap } from "./participantCodes.js";
 
 const PAGE_SIZE = 100;
+const DATABASE_PAGE_SIZE = 1000;
 const DEMOGRAPHIC_FIELDS = Object.freeze([
     "current_country",
     "country_of_origin",
@@ -37,6 +38,26 @@ async function requireData(query, message) {
     }
 
     return data || [];
+}
+
+async function requireAllData(queryFactory, message) {
+    const records = [];
+
+    for (let from = 0; ; from += DATABASE_PAGE_SIZE) {
+        const { data, error } = await queryFactory().range(
+            from,
+            from + DATABASE_PAGE_SIZE - 1
+        );
+
+        if (error) {
+            throw new Error(message, { cause: error });
+        }
+
+        records.push(...(data || []));
+        if (!data || data.length < DATABASE_PAGE_SIZE) break;
+    }
+
+    return records;
 }
 
 function archiveScope(query, scope) {
@@ -158,35 +179,41 @@ export async function handleCaseAnalysisDashboard(req, res) {
         const reportIds = reports.map(report => report.id);
         const [codes, themes, highlights, themeCodes] =
             await Promise.all([
-                reportIds.length ? requireData(
-                    supabase
+                reportIds.length ? requireAllData(
+                    () => supabase
                         .from("qualitative_case_codes")
                         .select("id, report_id, code_number, code_label, rationale, color_slot")
                         .in("report_id", reportIds)
+                        .order("report_id", { ascending: true })
                         .order("code_number", { ascending: true }),
                     "Case codes could not be loaded."
                 ) : [],
-                reportIds.length ? requireData(
-                    supabase
+                reportIds.length ? requireAllData(
+                    () => supabase
                         .from("qualitative_case_themes")
                         .select("id, report_id, theme_number, theme_label, rationale")
                         .in("report_id", reportIds)
+                        .order("report_id", { ascending: true })
                         .order("theme_number", { ascending: true }),
                     "Case themes could not be loaded."
                 ) : [],
-                reportIds.length ? requireData(
-                    supabase
+                reportIds.length ? requireAllData(
+                    () => supabase
                         .from("qualitative_case_keyword_highlights")
                         .select("id, report_id, code_id, keyword_number, message_id, exact_text, start_offset, end_offset")
                         .in("report_id", reportIds)
+                        .order("report_id", { ascending: true })
                         .order("keyword_number", { ascending: true }),
                     "Transcript keyword highlights could not be loaded."
                 ) : [],
-                reportIds.length ? requireData(
-                    supabase
+                reportIds.length ? requireAllData(
+                    () => supabase
                         .from("qualitative_case_theme_codes")
                         .select("report_id, theme_id, code_id")
-                        .in("report_id", reportIds),
+                        .in("report_id", reportIds)
+                        .order("report_id", { ascending: true })
+                        .order("theme_id", { ascending: true })
+                        .order("code_id", { ascending: true }),
                     "Theme-to-code relationships could not be loaded."
                 ) : []
             ]);

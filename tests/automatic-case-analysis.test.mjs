@@ -238,3 +238,30 @@ test("automatic dashboard exposes every transcript independently of analysis com
     assert.match(script, /\/api\/messages\?session=/);
     assert.match(script, /Verified match/);
 });
+
+test("Cases and keywords loads every case and every stored highlight", async () => {
+    const dashboard = await readFile(
+        new URL("../server/caseAnalysisDashboard.js", import.meta.url),
+        "utf8"
+    );
+    const script = await readFile(
+        new URL("../researcher-automatic-analysis.js", import.meta.url),
+        "utf8"
+    );
+    const html = await readFile(
+        new URL("../researcher.html", import.meta.url),
+        "utf8"
+    );
+
+    assert.match(dashboard, /async function requireAllData/);
+    assert.match(dashboard, /DATABASE_PAGE_SIZE = 1000/);
+    assert.match(
+        dashboard,
+        /qualitative_case_keyword_highlights[\s\S]*\.order\("report_id"[\s\S]*\.order\("keyword_number"/
+    );
+    assert.match(script, /async function fetchDashboardPage/);
+    assert.match(script, /for \(let page = 2; page <= pageCount; page \+= 1\)/);
+    assert.match(script, /casesWithMarkedKeywords/);
+    assert.match(script, /completed cases currently have marked keywords/);
+    assert.match(html, /researcher-automatic-analysis\.js\?version=20260827-keyword-refresh/);
+});
