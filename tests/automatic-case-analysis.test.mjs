@@ -259,6 +259,10 @@ test("researcher dashboard uses cases, positional codes, and positional themes",
     assert.match(script, /renderArchive/);
     assert.match(script, /Restore to active analysis/);
     assert.match(script, /action: shouldArchive \? "archive" : "restore"/);
+    assert.match(script, /function casesForCaseAndKeywordForm/);
+    assert.match(script, /leftCompleted \? -1 : 1/);
+    assert.match(script, /analysisCompletedAt/);
+    assert.match(script, /completed case reports are shown first, newest first/);
     assert.doesNotMatch(script, /"Demographic data",\s*"Case report"/);
 });
 
@@ -442,7 +446,7 @@ test("Cases and keywords loads every case and every stored highlight", async () 
     assert.match(script, /const remainingPages = await Promise\.all/);
     assert.match(script, /casesWithMarkedKeywords/);
     assert.match(script, /completed cases currently have marked keywords/);
-    assert.match(html, /researcher-automatic-analysis\.js\?version=20260827-unlock-fresh-v2/);
+    assert.match(html, /researcher-automatic-analysis\.js\?version=20260827-completed-first-v3/);
     assert.match(html, /automaticAnalysisGateStatus/);
     assert.match(script, /cache: "no-store"/);
     assert.match(script, /searchParams\.set\("fresh"/);

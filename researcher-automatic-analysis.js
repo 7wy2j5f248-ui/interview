@@ -154,6 +154,35 @@
         return button;
     }
 
+    function casesForCaseAndKeywordForm() {
+        return [...payload.cases].sort((left, right) => {
+            const leftCompleted = left.status === "completed";
+            const rightCompleted = right.status === "completed";
+
+            if (leftCompleted !== rightCompleted) {
+                return leftCompleted ? -1 : 1;
+            }
+
+            if (leftCompleted) {
+                return new Date(
+                    right.analysisCompletedAt || right.sourceCompletedAt || 0
+                ) - new Date(
+                    left.analysisCompletedAt || left.sourceCompletedAt || 0
+                );
+            }
+
+            if (left.status === "processing" && right.status !== "processing") {
+                return -1;
+            }
+            if (right.status === "processing" && left.status !== "processing") {
+                return 1;
+            }
+
+            return new Date(left.sourceCompletedAt || 0)
+                - new Date(right.sourceCompletedAt || 0);
+        });
+    }
+
     function renderCases() {
         const { scroll, table } = createTable([
             "Participant code",
@@ -164,7 +193,7 @@
         ]);
         const body = document.createElement("tbody");
 
-        payload.cases.forEach(caseRecord => {
+        casesForCaseAndKeywordForm().forEach(caseRecord => {
             const row = document.createElement("tr");
             createCell(row, caseRecord.caseNumber, "analysisIdentifierCell");
             const transcriptCell = document.createElement("td");
@@ -313,7 +342,7 @@
             });
         document.getElementById("automaticAnalysisDescription").textContent =
             activeView === "cases"
-                ? `Form 1: demographic data and the transcript with exact keyword evidence highlighted by code colour. ${casesWithMarkedKeywords} of ${completedCases.length} completed cases currently have marked keywords.`
+                ? `Form 1: ${completedCases.length} completed case reports are shown first, newest first, so this table visibly advances with the counter. ${casesWithMarkedKeywords} completed cases currently have marked keywords. All other active transcripts remain available below them while their reports wait or process.`
                 : activeView === "codes"
                     ? "Form 2: each case starts at C1. Headers are positional only; participant-specific code content stays inside cells."
                     : activeView === "themes"
@@ -543,6 +572,7 @@
                 transcriptUrl(item)
             ])];
         } else if (activeView === "cases") {
+            const orderedCases = casesForCaseAndKeywordForm();
             rows = [[
                 "Participant code",
                 "Link to transcript",
@@ -550,7 +580,7 @@
                 ...FORM_ONE_DEMOGRAPHIC_COLUMNS.map(([, label]) => label),
                 "Case report"
             ],
-                ...payload.cases.map(item => [
+                ...orderedCases.map(item => [
                     item.caseNumber,
                     transcriptUrl(item),
                     item.language || "—",
