@@ -272,6 +272,9 @@ test("researcher dashboard uses cases, positional codes, and positional themes",
     assert.match(script, /URLSearchParams\(window\.location\.search\)\.get\("case"\)/);
     assert.match(script, /openRequestedTranscript\(\)/);
     assert.match(script, /Open case report/);
+    assert.match(script, /function archiveCaseButton/);
+    assert.match(script, /button\.textContent = caseRecord\.hasReport[\s\S]*?"Archive"/);
+    assert.match(script, /setArchiveState\(caseRecord, true\)/);
     assert.match(script, /renderArchive/);
     assert.match(script, /Restore to active analysis/);
     assert.match(script, /action: shouldArchive \? "archive" : "restore"/);
@@ -568,7 +571,7 @@ test("Cases and keywords loads every case and every stored highlight", async () 
     assert.match(script, /const remainingPages = await Promise\.all/);
     assert.match(script, /casesWithMarkedKeywords/);
     assert.match(script, /reports currently have marked keywords/);
-    assert.match(html, /researcher-automatic-analysis\.js\?version=20260827-separated-session-v5/);
+    assert.match(html, /researcher-automatic-analysis\.js\?version=20260827-direct-archive-v6/);
     assert.match(html, /automaticAnalysisGateStatus/);
     assert.match(script, /cache: "no-store"/);
     assert.match(script, /searchParams\.set\("fresh"/);

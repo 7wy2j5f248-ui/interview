@@ -166,6 +166,21 @@
         return button;
     }
 
+    function archiveCaseButton(caseRecord) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "worksheetTranscriptButton";
+        button.textContent = caseRecord.hasReport
+            ? "Archive"
+            : "Available after completion";
+        button.disabled = !caseRecord.hasReport
+            || caseRecord.status !== "completed";
+        button.addEventListener("click", () =>
+            setArchiveState(caseRecord, true)
+        );
+        return button;
+    }
+
     function casesForCaseAndKeywordForm() {
         return [...payload.cases].sort((left, right) => {
             const leftCompleted = left.hasReport;
@@ -195,7 +210,8 @@
             "Link to transcript",
             "Language",
             ...FORM_ONE_DEMOGRAPHIC_COLUMNS.map(([, label]) => label),
-            "Case report"
+            "Case report",
+            "Archive"
         ]);
         const body = document.createElement("tbody");
 
@@ -214,6 +230,9 @@
             const reportCell = document.createElement("td");
             reportCell.appendChild(caseReportButton(caseRecord));
             row.appendChild(reportCell);
+            const archiveCell = document.createElement("td");
+            archiveCell.appendChild(archiveCaseButton(caseRecord));
+            row.appendChild(archiveCell);
             body.appendChild(row);
         });
 
@@ -357,7 +376,7 @@
             });
         document.getElementById("automaticAnalysisDescription").textContent =
             activeView === "cases"
-                ? `Form 1: ${completedCases.length} available case reports are shown first in permanent participant-code order, matching Forms 2 and 3. ${casesWithMarkedKeywords} reports currently have marked keywords. Transcripts awaiting their first report remain available below them in the same stable order.`
+                ? `Form 1: ${completedCases.length} available case reports are shown first in permanent participant-code order, matching Forms 2 and 3. ${casesWithMarkedKeywords} reports currently have marked keywords. Use Archive on a completed row to remove it from active analysis; it can later be restored from the Archive tab. Transcripts awaiting their first report remain available below them in the same stable order.`
                 : activeView === "codes"
                     ? "Form 2: each case starts at C1. Headers are positional only; participant-specific code content stays inside cells."
                     : activeView === "themes"
