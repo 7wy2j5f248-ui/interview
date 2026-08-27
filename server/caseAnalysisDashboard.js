@@ -96,6 +96,7 @@ export async function handleCaseAnalysisDashboard(req, res) {
             supabase
                 .from("qualitative_case_reports")
                 .select("id, session_id, case_number, participant_id, participant_code, language, demographics, case_interpretation, analysis_version, model, source_completed_at, completed_at")
+                .is("superseded_at", null)
                 .in("session_id", sessionIds),
             "Individual case reports could not be loaded."
         );

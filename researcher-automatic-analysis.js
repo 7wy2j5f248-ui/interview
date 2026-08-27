@@ -2,7 +2,19 @@
     "use strict";
 
     const TOKEN_STORAGE_KEY = "researcherDashboardToken";
-    const COLOR_COUNT = 12;
+    const STANDARD_DEMOGRAPHIC_COLUMNS = Object.freeze([
+        ["current_country", "Current country"],
+        ["current_region", "Current region"],
+        ["country_of_origin", "Country of origin"],
+        ["diaspora_status", "Diaspora status"],
+        ["gender", "Gender"],
+        ["age", "Age"],
+        ["birth_year", "Birth year"],
+        ["birth_cohort", "Birth cohort"],
+        ["youth_status", "Youth status"],
+        ["education_level", "Education"],
+        ["social_identity", "Social identity"]
+    ]);
     let payload = { counts: {}, cases: [] };
     let activeView = "cases";
     let refreshTimer = null;
@@ -12,6 +24,7 @@
     const status = document.getElementById("automaticAnalysisStatus");
     const tableHost = document.getElementById("automaticAnalysisTable");
     const dialog = document.getElementById("automaticTranscriptDialog");
+    const reportDialog = document.getElementById("automaticCaseReportDialog");
 
     function token() {
         return sessionStorage.getItem(TOKEN_STORAGE_KEY) || "";
@@ -45,6 +58,39 @@
             .join("; ") || "Not recorded";
     }
 
+    function titleFromKey(key) {
+        return key.replaceAll("_", " ").replace(
+            /^./,
+            character => character.toUpperCase()
+        );
+    }
+
+    function demographicColumns() {
+        const additionalKeys = [...new Set(payload.cases.flatMap(item =>
+            Object.keys(item.demographics?.additional_descriptors || {})
+        ))].sort();
+
+        return [
+            ...STANDARD_DEMOGRAPHIC_COLUMNS.map(([key, label]) => ({
+                key,
+                label,
+                additional: false
+            })),
+            ...additionalKeys.map(key => ({
+                key,
+                label: titleFromKey(key),
+                additional: true
+            }))
+        ];
+    }
+
+    function demographicValue(caseRecord, column) {
+        const value = column.additional
+            ? caseRecord.demographics?.additional_descriptors?.[column.key]
+            : caseRecord.demographics?.[column.key];
+        return displayValue(value);
+    }
+
     function createCell(row, value, className = "") {
         const cell = document.createElement("td");
         cell.textContent = value;
@@ -74,21 +120,38 @@
         return { scroll, table };
     }
 
-    function openButton(caseRecord, label = "Open annotated transcript") {
+    function transcriptButton(caseRecord) {
         const button = document.createElement("button");
         button.type = "button";
         button.className = "worksheetTranscriptButton";
-        button.textContent = label;
+        button.textContent = "Open annotated transcript";
         button.disabled = caseRecord.status !== "completed";
         button.addEventListener("click", () => openTranscript(caseRecord));
         return button;
     }
 
+    function caseReportButton(caseRecord) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "worksheetTranscriptButton";
+        button.textContent = caseRecord.status === "completed"
+            ? "Open case report"
+            : caseRecord.status === "processing"
+                ? "Analysing"
+                : caseRecord.status === "failed"
+                    ? "Needs attention"
+                    : "Waiting";
+        button.disabled = caseRecord.status !== "completed";
+        button.addEventListener("click", () => openCaseReport(caseRecord));
+        return button;
+    }
+
     function renderCases() {
+        const columns = demographicColumns();
         const { scroll, table } = createTable([
             "Case number",
             "Language",
-            "Demographic data",
+            ...columns.map(column => column.label),
             "Case report",
             "Annotated transcript"
         ]);
@@ -98,17 +161,15 @@
             const row = document.createElement("tr");
             createCell(row, caseRecord.caseNumber, "analysisIdentifierCell");
             createCell(row, caseRecord.language || "—");
-            createCell(row, demographicsText(caseRecord.demographics));
-            const reportText = caseRecord.status === "completed"
-                ? caseRecord.caseInterpretation
-                : caseRecord.status === "processing"
-                    ? "Analysing this complete case now"
-                    : caseRecord.status === "failed"
-                        ? "Analysis needs attention"
-                        : "Waiting in earliest-completed-first order";
-            createCell(row, reportText || "—");
+            columns.forEach(column => createCell(
+                row,
+                demographicValue(caseRecord, column)
+            ));
+            const reportCell = document.createElement("td");
+            reportCell.appendChild(caseReportButton(caseRecord));
+            row.appendChild(reportCell);
             const transcriptCell = document.createElement("td");
-            transcriptCell.appendChild(openButton(caseRecord));
+            transcriptCell.appendChild(transcriptButton(caseRecord));
             row.appendChild(transcriptCell);
             body.appendChild(row);
         });
@@ -265,6 +326,56 @@
         dialog.showModal();
     }
 
+    function openCaseReport(caseRecord) {
+        document.getElementById("automaticCaseReportHeading").textContent =
+            `${caseRecord.caseNumber} · individual case report`;
+        const identity = caseRecord.transcriptIdentity;
+        document.getElementById("automaticCaseReportIdentity").textContent =
+            `Participant code: ${identity.participantCode} · Session ID: ${identity.sessionId}`;
+        const content = document.getElementById("automaticCaseReportContent");
+        content.replaceChildren();
+        const interpretationHeading = document.createElement("h3");
+        interpretationHeading.textContent = "Case interpretation";
+        const interpretation = document.createElement("p");
+        interpretation.textContent = caseRecord.caseInterpretation;
+        content.append(interpretationHeading, interpretation);
+
+        const themeHeading = document.createElement("h3");
+        themeHeading.textContent = "Themes and codes";
+        content.appendChild(themeHeading);
+        const codeById = new Map((caseRecord.codes || []).map(code => [
+            code.id,
+            code
+        ]));
+        const mappingsByTheme = (caseRecord.themeCodes || []).reduce(
+            (groups, mapping) => {
+                const values = groups.get(mapping.theme_id) || [];
+                values.push(mapping.code_id);
+                groups.set(mapping.theme_id, values);
+                return groups;
+            },
+            new Map()
+        );
+        (caseRecord.themes || []).forEach(theme => {
+            const section = document.createElement("section");
+            const heading = document.createElement("h4");
+            heading.textContent = `T${theme.theme_number}: ${theme.theme_label}`;
+            const rationale = document.createElement("p");
+            rationale.textContent = theme.rationale;
+            const list = document.createElement("ul");
+            (mappingsByTheme.get(theme.id) || []).forEach(codeId => {
+                const code = codeById.get(codeId);
+                if (!code) return;
+                const item = document.createElement("li");
+                item.textContent = `C${code.code_number}: ${code.code_label} — ${code.rationale}`;
+                list.appendChild(item);
+            });
+            section.append(heading, rationale, list);
+            content.appendChild(section);
+        });
+        reportDialog.showModal();
+    }
+
     function csvValue(value) {
         return `"${String(value ?? "").replaceAll('"', '""')}"`;
     }
@@ -274,12 +385,18 @@
         let rows;
 
         if (activeView === "cases") {
-            rows = [["Case number", "Language", "Demographic data", "Case report"],
+            const columns = demographicColumns();
+            rows = [[
+                "Case number",
+                "Language",
+                ...columns.map(column => column.label),
+                "Case report"
+            ],
                 ...payload.cases.map(item => [
                     item.caseNumber,
                     item.language || "",
-                    demographicsText(item.demographics),
-                    item.caseInterpretation || item.status
+                    ...columns.map(column => demographicValue(item, column)),
+                    item.status === "completed" ? "Available" : item.status
                 ])];
         } else {
             const recordsKey = activeView;
@@ -355,6 +472,8 @@
         }));
     document.getElementById("automaticTranscriptCloseButton")
         .addEventListener("click", () => dialog.close());
+    document.getElementById("automaticCaseReportCloseButton")
+        .addEventListener("click", () => reportDialog.close());
 
     if (token()) {
         document.getElementById("automaticAnalysisToken").value = token();

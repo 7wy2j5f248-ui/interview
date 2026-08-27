@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { validateAutomaticCaseAnalysis } from "../server/analysisCore.js";
+import {
+    isConversationalCourtesy,
+    validateAutomaticCaseAnalysis
+} from "../server/analysisCore.js";
 
 const migrationUrl = new URL(
     "../supabase/migrations/20260827143920_automatic_case_analysis_pipeline.sql",
@@ -90,6 +93,37 @@ test("invalid extra evidence is omitted without discarding an otherwise exact ca
     assert.equal(result.codes[0].highlights.length, 1);
 });
 
+test("greetings and conversational courtesies are never retained as keywords", () => {
+    assert.equal(isConversationalCourtesy("Hello!"), true);
+    assert.equal(isConversationalCourtesy("谢谢"), true);
+    assert.equal(isConversationalCourtesy("مرحبا"), true);
+    assert.equal(isConversationalCourtesy("work on weekends"), false);
+
+    const result = validateAutomaticCaseAnalysis({
+        codes: [{
+            label: "Greeting",
+            rationale: "Routine conversation.",
+            keyword_evidence: [{
+                message_id: "message-1",
+                exact_text: "Hello"
+            }]
+        }],
+        themes: [{
+            label: "Conversation",
+            rationale: "Routine conversation.",
+            code_numbers: [1]
+        }],
+        case_interpretation: "A greeting occurred."
+    }, [{
+        id: "message-1",
+        originalText: "Hello!",
+        englishText: "Hello!"
+    }]);
+
+    assert.equal(result.complete, false);
+    assert.equal(result.codes.length, 0);
+});
+
 test("formal completion enqueues a strict FIFO atomic case pipeline", async () => {
     const migration = await readFile(migrationUrl, "utf8");
     const chat = await readFile(new URL("../api/chat.js", import.meta.url), "utf8");
@@ -114,9 +148,28 @@ test("researcher dashboard uses cases, positional codes, and positional themes",
     assert.match(html, /2 · Codes/);
     assert.match(html, /3 · Themes/);
     assert.match(html, /Download current form/);
+    assert.match(html, /automaticCaseReportDialog/);
     assert.match(script, /Array\.from\(\{ length: maximum \}[^\n]*`\$\{prefix\}\$\{index \+ 1\}`/);
     assert.match(script, /Participant ID:/);
     assert.match(script, /start_offset/);
+    assert.match(script, /STANDARD_DEMOGRAPHIC_COLUMNS/);
+    assert.match(script, /Open case report/);
+    assert.doesNotMatch(script, /"Demographic data",\s*"Case report"/);
+});
+
+test("v2 preserves superseded reports and restarts the FIFO queue", async () => {
+    const migration = await readFile(
+        new URL(
+            "../supabase/migrations/20260827152027_refine_automatic_case_analysis_v2.sql",
+            import.meta.url
+        ),
+        "utf8"
+    );
+
+    assert.match(migration, /superseded_at/);
+    assert.match(migration, /where superseded_at is null/);
+    assert.match(migration, /case-analysis-v2-no-conversational-courtesies/);
+    assert.match(migration, /status = 'pending'/);
 });
 
 test("automatic dashboard selects only stored transcript columns", async () => {

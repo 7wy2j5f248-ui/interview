@@ -4,7 +4,7 @@ import { DEFAULT_OPENAI_MODEL } from "./modelConfiguration.js";
 export const QUALITATIVE_ANALYSIS_MODEL = DEFAULT_OPENAI_MODEL;
 export const QUALITATIVE_ANALYSIS_VERSION = "task-014-v7-complete-cases-before-summary";
 export const AUTOMATIC_CASE_ANALYSIS_VERSION =
-    "case-analysis-v1-keywords-codes-themes";
+    "case-analysis-v2-no-conversational-courtesies";
 export const DEFAULT_ANALYSIS_BATCH_SIZE = 40;
 export const MAX_THEME_SUBJECT_WORDS = 2;
 export const MAX_THEME_SUBJECT_LENGTH = 60;
@@ -328,6 +328,42 @@ const automaticThemeSchema = {
     additionalProperties: false
 };
 
+const CONVERSATIONAL_COURTESIES = new Set([
+    "hi", "hello", "hello there", "hey", "greetings", "good morning",
+    "good afternoon", "good evening", "thanks", "thank you",
+    "thank you very much", "bye", "goodbye",
+    "你好", "您好", "早上好", "下午好", "晚上好", "谢谢", "再见",
+    "مرحبا", "أهلا", "السلام عليكم", "شكرا", "مع السلامة",
+    "hola", "buenos días", "buenas tardes", "gracias", "adiós",
+    "bonjour", "bonsoir", "merci", "au revoir",
+    "olá", "bom dia", "boa tarde", "obrigado", "obrigada", "tchau",
+    "merhaba", "günaydın", "teşekkürler", "hoşça kal",
+    "नमस्ते", "नमस्कार", "धन्यवाद", "अलविदा",
+    "হ্যালো", "নমস্কার", "ধন্যবাদ", "বিদায়",
+    "xin chào", "chào bạn", "cảm ơn", "tạm biệt",
+    "வணக்கம்", "நன்றி", "பிரியாவிடை",
+    "habari", "jambo", "asante", "kwa heri",
+    "سلام", "السلام علیکم", "شکریہ", "خدا حافظ",
+    "halo", "selamat pagi", "terima kasih", "sampai jumpa",
+    "salaan", "mahadsanid", "nabad gelyo",
+    "မင်္ဂလာပါ", "ကျေးဇူးတင်ပါတယ်", "နှုတ်ဆက်ပါတယ်",
+    "درود", "سلام", "صبح بخیر", "تشکر", "ممنون", "خداحافظ"
+].map(value => normalizedCourtesy(value)));
+
+function normalizedCourtesy(value) {
+    return (typeof value === "string" ? value : "")
+        .normalize("NFKC")
+        .toLocaleLowerCase()
+        .replace(/[\p{P}\p{S}]+/gu, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+}
+
+export function isConversationalCourtesy(value) {
+    const normalized = normalizedCourtesy(value);
+    return Boolean(normalized) && CONVERSATIONAL_COURTESIES.has(normalized);
+}
+
 function exactTextOccurrences(source, phrase) {
     const sourceText = typeof source === "string" ? source : "";
     const exactText = normalizedText(phrase);
@@ -426,7 +462,10 @@ export function validateAutomaticCaseAnalysis(value, availableMessages) {
                 evidence?.exact_text
             );
 
-            if (!message || !occurrences.length) {
+            if (!message
+                || isConversationalCourtesy(evidence?.exact_text)
+                || !occurrences.length
+            ) {
                 invalidEvidence += 1;
                 return;
             }
@@ -901,7 +940,7 @@ export async function generateAutomaticCaseAnalysis(
     messages,
     { model = QUALITATIVE_ANALYSIS_MODEL } = {}
 ) {
-    const systemInstruction = "Read this single completed participant transcript line by line. Work strictly from evidence upward. First identify every analytically meaningful word or short phrase in the participant's original_text and return it verbatim as keyword evidence with its exact message_id. Never return translated wording as exact_text. Then categorize those keyword occurrences into participant-specific codes. Codes are concise category names and may be abstractions such as 'Work patterns' or 'Media use'; they do not need to repeat transcript wording. Finally group related code numbers into broad one- or two-word themes. Every code must belong to at least one theme. Do not compare this case with any participant. Do not invent, paraphrase, omit, or rewrite keyword evidence. Return all substantive keyword occurrences needed to make the code system inspectable. Codes and themes are proposals for researcher review, not confirmed findings.";
+    const systemInstruction = "Read this single completed participant transcript line by line. Work strictly from evidence upward. First identify analytically meaningful words or short phrases in the participant's original_text and return them verbatim as keyword evidence with their exact message_id. Keywords are research evidence, not every word in the conversation. Never select greetings, introductions, thanks, farewells, politeness formulas, interviewer-directed courtesies, or other phatic conversational language as keywords or codes. Examples to exclude include hello, hi, good morning, thank you, and their equivalents in every interview language. Never return translated wording as exact_text. Then categorize the substantive keyword occurrences into participant-specific codes. Codes are concise category names and may be abstractions such as 'Work patterns' or 'Media use'; they do not need to repeat transcript wording. Finally group related code numbers into broad one- or two-word themes. Every code must belong to at least one theme. Do not compare this case with any participant. Do not invent or paraphrase evidence. Return the substantive keyword occurrences needed to make the code system inspectable without flooding it with routine conversation. Codes and themes are proposals for researcher review, not confirmed findings.";
     const createResponse = input => openaiClient.responses.create({
         model,
         store: false,
