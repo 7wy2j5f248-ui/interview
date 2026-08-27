@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { handleMessages } from "../api/messages.js";
 import { loadParticipantCodeMap } from "../server/participantCodes.js";
+import { ensureEnglishTranslations } from "../server/messageTranslation.js";
 
 const migration = await readFile(new URL(
     "../supabase/migrations/20260827070012_add_private_participant_codes.sql",
@@ -41,6 +42,15 @@ function transcriptClient(messages, codeRows = []) {
                     },
                     async order() {
                         return { data: messages, error: null };
+                    },
+                    update(values) {
+                        return {
+                            async eq(_column, id) {
+                                const item = messages.find(message => message.id === id);
+                                Object.assign(item, values);
+                                return { error: null };
+                            }
+                        };
                     }
                 };
                 return query;
@@ -180,4 +190,39 @@ test("transcript endpoint refuses ambiguous participant identity", async () => {
 
     assert.equal(response.statusCode, 409);
     assert.match(response.payload.error, /identity could not be verified/);
+});
+
+test("automatic translation preserves original text and stores English separately", async () => {
+    const messages = [
+        {
+            id: "message-zh-1",
+            Message: "我通常十点睡觉。",
+            Language: "zh",
+            EnglishTranslation: null
+        },
+        {
+            id: "message-fr-1",
+            Message: "Je me réveille tôt.",
+            Language: "fr",
+            EnglishTranslation: null
+        }
+    ];
+    const originals = messages.map(message => message.Message);
+    const result = await ensureEnglishTranslations(
+        transcriptClient(messages),
+        {},
+        messages,
+        {
+            concurrency: 2,
+            translateMessage: async (_openai, message) =>
+                message.startsWith("我")
+                    ? "I usually go to bed at ten."
+                    : "I wake up early."
+        }
+    );
+
+    assert.equal(result.translated, 2);
+    assert.deepEqual(messages.map(message => message.Message), originals);
+    assert.equal(messages[0].EnglishTranslation, "I usually go to bed at ten.");
+    assert.equal(messages[1].EnglishTranslation, "I wake up early.");
 });

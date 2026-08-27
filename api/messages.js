@@ -2,44 +2,12 @@ import OpenAI from "openai";
 import { createClient } from "@supabase/supabase-js";
 import { authorizeResearcher } from "../server/researcherAuth.js";
 import { loadParticipantCodeMap } from "../server/participantCodes.js";
+import {
+    ensureEnglishTranslations,
+    translateMessageToEnglish
+} from "../server/messageTranslation.js";
 
-function textFromResponse(response) {
-    const candidates = [
-        response?.output_text,
-        ...(response?.output || []).flatMap(item =>
-            (item?.content || []).map(content => content?.text)
-        )
-    ];
-
-    return candidates.find(candidate =>
-        typeof candidate === "string" && candidate.trim()
-    )?.trim() || "";
-}
-
-export async function translateMessageToEnglish(openaiClient, message) {
-    const response = await openaiClient.responses.create({
-        model: "gpt-5.1",
-        input: [
-            {
-                role: "system",
-                content: "Translate the interview message into natural English. Preserve its meaning, tone, names, numbers, and formatting. Return only the English translation."
-            },
-            {
-                role: "user",
-                content: message
-            }
-        ]
-    });
-
-    return textFromResponse(response);
-}
-
-function needsEnglishTranslation(item) {
-    const language = normalizedLanguage(item);
-    const existingTranslation = normalizedTranslation(item);
-
-    return Boolean(language && language !== "en" && !existingTranslation);
-}
+export { translateMessageToEnglish };
 
 function normalizedLanguage(item) {
     return typeof item.Language === "string"
@@ -152,44 +120,16 @@ export async function handleMessages(
             });
         }
 
-        for (const item of messages) {
-            if (!needsEnglishTranslation(item)) {
-                continue;
+        await ensureEnglishTranslations(
+            supabaseClient,
+            openaiClient,
+            messages,
+            {
+                concurrency: 4,
+                translateMessage,
+                onError: logTranslationFailure
             }
-
-            let stage = "generation";
-
-            try {
-                const generatedTranslation = await translateMessage(
-                    openaiClient,
-                    item.Message
-                );
-                const translation = typeof generatedTranslation === "string"
-                    ? generatedTranslation.trim()
-                    : "";
-
-                if (!translation) {
-                    throw new Error("Message translation was empty.");
-                }
-
-                stage = "persistence";
-
-                const { error: updateError } = await supabaseClient
-                    .from("interview_messages")
-                    .update({ EnglishTranslation: translation })
-                    .eq("id", item.id);
-
-                if (updateError) {
-                    throw new Error("Message translation could not be saved.", {
-                        cause: updateError
-                    });
-                }
-
-                item.EnglishTranslation = translation;
-            } catch (error) {
-                logTranslationFailure(item, stage, error);
-            }
-        }
+        );
 
         return res.status(200).json({
             identity: {

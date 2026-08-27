@@ -6,6 +6,7 @@ import {
 } from "./analysisCore.js";
 import { normalizeOpenAIModel } from "./modelConfiguration.js";
 import { loadParticipantCodeMap } from "./participantCodes.js";
+import { ensureEnglishTranslations } from "./messageTranslation.js";
 
 const WORKER_PATH = "/api/automatic-analysis";
 
@@ -69,7 +70,7 @@ async function claimOldestCase(supabaseClient) {
     return Array.isArray(data) ? data[0] || null : data || null;
 }
 
-async function loadCompletedCase(supabaseClient, job) {
+async function loadCompletedCase(supabaseClient, openaiClient, job) {
     const [{ data: session, error: sessionError }, messageResult] =
         await Promise.all([
             supabaseClient
@@ -96,7 +97,14 @@ async function loadCompletedCase(supabaseClient, job) {
         });
     }
 
-    const prepared = prepareParticipantMessages(messageResult.data || []);
+    const transcriptMessages = messageResult.data || [];
+    await ensureEnglishTranslations(
+        supabaseClient,
+        openaiClient,
+        transcriptMessages,
+        { concurrency: 4, failOnError: true }
+    );
+    const prepared = prepareParticipantMessages(transcriptMessages);
 
     if (!prepared.messages.length) {
         throw new Error("The completed transcript has no participant evidence.");
@@ -143,7 +151,11 @@ export async function processOldestAutomaticCase(
     }
 
     try {
-        const source = await loadCompletedCase(supabaseClient, job);
+        const source = await loadCompletedCase(
+            supabaseClient,
+            openaiClient,
+            job
+        );
         const model = normalizeOpenAIModel(
             process.env.AUTOMATIC_ANALYSIS_MODEL
                 || process.env.QUALITATIVE_ANALYSIS_MODEL

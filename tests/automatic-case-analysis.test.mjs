@@ -30,6 +30,10 @@ const atomicReplacementGrantMigrationUrl = new URL(
     "../supabase/migrations/20260827171800_grant_atomic_report_supersede.sql",
     import.meta.url
 );
+const automaticTranslationMigrationUrl = new URL(
+    "../supabase/migrations/20260827183500_backfill_completed_transcript_translations.sql",
+    import.meta.url
+);
 
 test("automatic case analysis retains exact keyword offsets and local hierarchy", () => {
     const result = validateAutomaticCaseAnalysis({
@@ -414,6 +418,26 @@ test("new automatic reports use English while preserving original keyword eviden
 
     assert.match(core, /entire analytical report must be written in English/);
     assert.match(core, /exact_text keyword evidence remains verbatim/);
+});
+
+test("formal completion automatically translates before case analysis", async () => {
+    const migration = await readFile(automaticTranslationMigrationUrl, "utf8");
+    const worker = await readFile(
+        new URL("../server/automaticCaseAnalysis.js", import.meta.url),
+        "utf8"
+    );
+
+    assert.match(worker, /ensureEnglishTranslations/);
+    assert.match(worker, /failOnError: true/);
+    assert.ok(
+        worker.indexOf("await ensureEnglishTranslations")
+        < worker.indexOf("const analysis = await generateAutomaticCaseAnalysis")
+    );
+    assert.match(migration, /job\.archived_at is null/);
+    assert.match(migration, /session\.completed = true/);
+    assert.match(migration, /message\."Language"/);
+    assert.match(migration, /message\."EnglishTranslation"/);
+    assert.doesNotMatch(migration, /qualitative_case_reports/);
 });
 
 test("automatic dashboard exposes every transcript independently of analysis completion", async () => {
