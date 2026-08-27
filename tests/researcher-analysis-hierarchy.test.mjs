@@ -27,6 +27,14 @@ test("dashboard exposes three named workbook worksheets", () => {
     assert.match(script, /let activeAnalysisView = "themes"/);
 });
 
+test("opening the local dashboard redirects to the live HTTPS site", () => {
+    assert.match(html, /window\.location\.protocol === "file:"/);
+    assert.match(
+        html,
+        /window\.location\.replace\("https:\/\/intervu\.quest\/researcher\.html"\)/
+    );
+});
+
 test("Worksheet 1 retains metadata and is the only worksheet with transcript links", () => {
     const themeSource = functionSource("renderThemeWorksheet", "selectedThemeItem");
     const codeSource = functionSource("renderCodeWorksheet", "renderKeywordWorksheet");
