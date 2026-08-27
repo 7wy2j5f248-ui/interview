@@ -84,6 +84,11 @@
     }
 
     function sessionNumber(caseRecord) {
+        if (Number.isInteger(caseRecord.sessionNumber)
+            && caseRecord.sessionNumber > 0) {
+            return caseRecord.sessionNumber;
+        }
+
         const match = String(caseRecord.caseNumber || "").match(/-S(\d+)$/i);
         return match ? Number.parseInt(match[1], 10) : "—";
     }
@@ -159,7 +164,7 @@
             : caseRecord.status === "processing"
                 ? "Analysing"
                 : caseRecord.status === "failed"
-                    ? "Needs attention"
+                    ? "Human review required"
                     : "Waiting";
         button.disabled = !caseRecord.hasReport;
         button.addEventListener("click", () => openCaseReport(caseRecord));
@@ -228,6 +233,41 @@
             const archiveCell = document.createElement("td");
             archiveCell.appendChild(archiveCaseButton(caseRecord));
             row.appendChild(archiveCell);
+            createCell(row, caseRecord.language || "—");
+            FORM_ONE_DEMOGRAPHIC_COLUMNS.forEach(([key]) => createCell(
+                row,
+                demographicValue(caseRecord, key)
+            ));
+            body.appendChild(row);
+        });
+
+        table.appendChild(body);
+        tableHost.replaceChildren(scroll);
+    }
+
+    function renderIncomplete() {
+        const { scroll, table } = createTable([
+            "Participant code",
+            "Session number",
+            "Link to transcript",
+            "Why it needs attention",
+            "Brief partial-case summary",
+            "Last activity",
+            "Language",
+            ...FORM_ONE_DEMOGRAPHIC_COLUMNS.map(([, label]) => label)
+        ]);
+        const body = document.createElement("tbody");
+
+        casesForCaseAndKeywordForm().forEach(caseRecord => {
+            const row = document.createElement("tr");
+            createCell(row, participantCode(caseRecord), "analysisIdentifierCell");
+            createCell(row, sessionNumber(caseRecord), "analysisIdentifierCell");
+            const transcriptCell = document.createElement("td");
+            transcriptCell.appendChild(transcriptButton(caseRecord));
+            row.appendChild(transcriptCell);
+            createCell(row, caseRecord.completionRemark || "Incomplete");
+            createCell(row, caseRecord.briefSummary || "No recorded material");
+            createCell(row, formatTimestamp(caseRecord.lastActivityAt));
             createCell(row, caseRecord.language || "—");
             FORM_ONE_DEMOGRAPHIC_COLUMNS.forEach(([key]) => createCell(
                 row,
@@ -402,9 +442,13 @@
         });
         document.getElementById("automaticAnalysisCompletedCount").textContent =
             completedCases.length;
+        document.getElementById("automaticAnalysisIncompleteCount").textContent =
+            counts.incomplete || 0;
 
         if (activeView === "archive") {
             renderArchive();
+        } else if (activeView === "incomplete") {
+            renderIncomplete();
         } else if (activeView === "cases") {
             renderCases();
         } else {
@@ -425,7 +469,9 @@
                     ? "Form 2: each case starts at C1. Headers are positional only; participant-specific code content stays inside cells."
                     : activeView === "themes"
                         ? "Form 3: each case starts at T1. Headers are positional only; participant-specific theme content stays inside cells."
-                        : "Archived cases are excluded from every active analysis form and from future automatic reanalysis. Each archived row preserves its transcript, report, language, demographic columns, positional C1–Cn codes, positional T1–Tn themes, and archive history.";
+                        : activeView === "incomplete"
+                            ? "Form 4 · Needs attention: unfinished interviews are separate from Forms 1–3. Each row preserves its transcript and separated demographic fields, summarizes only the material actually recorded, and states how incomplete the interview is. No themes, codes, or keywords are assigned before formal completion."
+                            : "Archived cases are excluded from every active analysis form and from future automatic reanalysis. Each archived row preserves its transcript, report, language, demographic columns, positional C1–Cn codes, positional T1–Tn themes, and archive history.";
     }
 
     function highlightedText(message, caseRecord) {
@@ -694,6 +740,28 @@
                     )?.theme_label || ""
                 )
             ])];
+        } else if (activeView === "incomplete") {
+            rows = [[
+                "Participant code",
+                "Session number",
+                "Link to transcript",
+                "Why it needs attention",
+                "Brief partial-case summary",
+                "Last activity",
+                "Language",
+                ...FORM_ONE_DEMOGRAPHIC_COLUMNS.map(([, label]) => label)
+            ], ...casesForCaseAndKeywordForm().map(item => [
+                participantCode(item),
+                sessionNumber(item),
+                transcriptUrl(item),
+                item.completionRemark || "Incomplete",
+                item.briefSummary || "No recorded material",
+                item.lastActivityAt || "",
+                item.language || "—",
+                ...FORM_ONE_DEMOGRAPHIC_COLUMNS.map(([key]) =>
+                    demographicValue(item, key)
+                )
+            ])];
         } else if (activeView === "cases") {
             const orderedCases = casesForCaseAndKeywordForm();
             rows = [[
@@ -763,7 +831,9 @@
         setStatus("Loading automatic case reports…");
         const requestedScope = activeView === "archive"
             ? "archived"
-            : "active";
+            : activeView === "incomplete"
+                ? "incomplete"
+                : "active";
         const firstPage = await fetchDashboardPage(requestedScope, 1);
         const totalCases = Object.values(firstPage.counts || {}).reduce(
             (total, value) => total + Number(value || 0),
@@ -800,7 +870,9 @@
         setStatus(
             requestedScope === "archived"
                 ? `${cases.length} archived cases.`
-                : `${cases.filter(item => item.hasReport).length} active case reports are available. The queue always processes the earliest completed transcript first.`
+                : requestedScope === "incomplete"
+                    ? `${cases.length} incomplete transcripts need attention. They remain separate from completed-transcript analysis.`
+                    : `${cases.filter(item => item.hasReport).length} active case reports are available. Retryable cases may pause briefly; later completed cases continue while exhausted failures remain marked for human review.`
         );
     }
 
@@ -850,7 +922,9 @@
             activeView = button.dataset.automaticAnalysisView;
             const requestedScope = activeView === "archive"
                 ? "archived"
-                : "active";
+                : activeView === "incomplete"
+                    ? "incomplete"
+                    : "active";
             if (requestedScope !== loadedScope) {
                 await load().catch(error => setStatus(error.message, true));
             } else {

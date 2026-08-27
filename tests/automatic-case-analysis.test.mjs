@@ -42,6 +42,10 @@ const independentTranslationQueueMigrationUrl = new URL(
     "../supabase/migrations/20260827182114_add_independent_transcript_translation_queue.sql",
     import.meta.url
 );
+const allSessionCaseCodesMigrationUrl = new URL(
+    "../supabase/migrations/20260827211500_assign_case_codes_to_all_sessions.sql",
+    import.meta.url
+);
 
 test("automatic case analysis retains exact keyword offsets and local hierarchy", () => {
     const result = validateAutomaticCaseAnalysis({
@@ -246,6 +250,7 @@ test("researcher dashboard uses cases, positional codes, and positional themes",
     assert.match(html, /1 · Cases &amp; keywords/);
     assert.match(html, /2 · Codes/);
     assert.match(html, /3 · Themes/);
+    assert.match(html, /4 · Incomplete transcripts/);
     assert.match(html, /data-automatic-analysis-view="archive"/);
     assert.match(html, /Download current form/);
     assert.match(html, /automaticCaseReportDialog/);
@@ -298,6 +303,34 @@ test("researcher dashboard uses cases, positional codes, and positional themes",
     assert.match(script, /caseRecord\.hasReport/);
     assert.match(dashboard, /hasReport: Boolean\(report\)/);
     assert.doesNotMatch(script, /"Demographic data",\s*"Case report"/);
+});
+
+test("Form 4 keeps incomplete transcripts separate and marks why they need attention", async () => {
+    const html = await readFile(new URL("../researcher.html", import.meta.url), "utf8");
+    const script = await readFile(
+        new URL("../researcher-automatic-analysis.js", import.meta.url),
+        "utf8"
+    );
+    const dashboard = await readFile(
+        new URL("../server/caseAnalysisDashboard.js", import.meta.url),
+        "utf8"
+    );
+    const migration = await readFile(allSessionCaseCodesMigrationUrl, "utf8");
+
+    assert.match(html, /data-automatic-analysis-view="incomplete"/);
+    assert.match(html, /automaticAnalysisIncompleteCount/);
+    assert.match(script, /function renderIncomplete/);
+    assert.match(script, /Why it needs attention/);
+    assert.match(script, /Brief partial-case summary/);
+    assert.match(script, /No themes, codes, or keywords are assigned before formal completion/);
+    assert.match(script, /requestedScope === "incomplete"/);
+    assert.match(dashboard, /function incompleteCompletionRemark/);
+    assert.match(dashboard, /function incompleteCaseSummary/);
+    assert.match(dashboard, /\.eq\("completed", false\)/);
+    assert.match(dashboard, /formal completion signal missing/);
+    assert.match(dashboard, /participantResponseCount/);
+    assert.match(migration, /ensure_session_case_code_mapping/);
+    assert.match(migration, /from every interview session, complete or incomplete/);
 });
 
 test("researcher archive is durable, auditable, and excluded from future claims", async () => {
@@ -548,7 +581,10 @@ test("automatic dashboard exposes every transcript independently of analysis com
     assert.match(dashboard, /loadParticipantCodeMap/);
     assert.match(dashboard, /transcriptIdentity/);
     assert.doesNotMatch(dashboard, /\.select\([^)]*TranslationState/);
-    assert.doesNotMatch(dashboard, /\.from\("interview_messages"\)/);
+    assert.match(
+        dashboard,
+        /loadIncompleteDashboard[\s\S]*\.from\("interview_messages"\)/
+    );
     assert.match(script, /button\.disabled = !caseRecord\.transcriptIdentity\?\.sessionId/);
     assert.match(script, /\/api\/messages\?session=/);
     assert.match(script, /Verified match/);
@@ -582,7 +618,7 @@ test("Cases and keywords loads every case and every stored highlight", async () 
     assert.match(script, /const remainingPages = await Promise\.all/);
     assert.match(script, /casesWithMarkedKeywords/);
     assert.match(script, /reports currently have marked keywords/);
-    assert.match(html, /researcher-automatic-analysis\.js\?version=20260827-demographic-archive-v9/);
+    assert.match(html, /researcher-automatic-analysis\.js\?version=20260827-incomplete-form-v10/);
     assert.match(html, /automaticAnalysisGateStatus/);
     assert.match(script, /cache: "no-store"/);
     assert.match(script, /searchParams\.set\("fresh"/);

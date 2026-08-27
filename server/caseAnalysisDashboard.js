@@ -89,6 +89,181 @@ function archiveScope(query, scope) {
         : query.is("archived_at", null);
 }
 
+function incompleteCompletionRemark(session, now = Date.now()) {
+    if (session?.session_status === "timed_out") {
+        return "Partially completed — inactivity timeout";
+    }
+
+    if (session?.session_status === "abandoned") {
+        return "Partially completed — interview ended";
+    }
+
+    const lastActivity = Date.parse(
+        session?.last_activity_at || session?.created_at || ""
+    );
+    const timeoutMinutes = Number(session?.inactivity_timeout_minutes) || 30;
+    const timeoutAt = Number.isFinite(lastActivity)
+        ? lastActivity + timeoutMinutes * 60 * 1000
+        : null;
+
+    return timeoutAt !== null && timeoutAt <= now
+        ? "Partially completed — inactive past timeout"
+        : "In progress";
+}
+
+function compactEvidencePreview(value, maximumLength = 180) {
+    const text = typeof value === "string"
+        ? value.replace(/\s+/g, " ").trim()
+        : "";
+
+    if (text.length <= maximumLength) return text;
+    return `${text.slice(0, maximumLength - 1).trimEnd()}…`;
+}
+
+function incompleteCaseSummary(session, messages) {
+    const participantMessages = (messages || []).filter(message =>
+        String(message.Speaker || "").toLowerCase() === "user"
+    );
+    const interviewerMessages = (messages || []).filter(message =>
+        String(message.Speaker || "").toLowerCase() === "ai"
+    );
+    const latestParticipantMessage = participantMessages.at(-1);
+    const language = String(
+        latestParticipantMessage?.Language || session?.language || ""
+    ).trim().toLowerCase();
+    const preview = compactEvidencePreview(
+        latestParticipantMessage?.EnglishTranslation
+        || (language === "en" ? latestParticipantMessage?.Message : "")
+    );
+    const recorded = `${participantMessages.length} participant response${
+        participantMessages.length === 1 ? "" : "s"
+    } and ${interviewerMessages.length} interviewer turn${
+        interviewerMessages.length === 1 ? "" : "s"
+    } recorded.`;
+
+    return {
+        participantResponseCount: participantMessages.length,
+        interviewerTurnCount: interviewerMessages.length,
+        briefSummary: preview
+            ? `${recorded} Latest available participant response: “${preview}”`
+            : `${recorded} No English response preview is available; open the transcript to inspect the recorded material.`
+    };
+}
+
+async function loadIncompleteDashboard(supabase, page, from) {
+    const [{ count, error: countError }, sessions] = await Promise.all([
+        supabase
+            .from("interview_sessions")
+            .select("session_id", { count: "exact", head: true })
+            .eq("completed", false),
+        requireData(
+            supabase
+                .from("interview_sessions")
+                .select("session_id, participant_id, language, completed, created_at, updated_at, last_activity_at, ended_at, session_status, end_reason, timed_out_at, inactivity_timeout_minutes")
+                .eq("completed", false)
+                .order("created_at", { ascending: true })
+                .order("session_id", { ascending: true })
+                .range(from, from + PAGE_SIZE - 1),
+            "Incomplete interview sessions could not be loaded."
+        )
+    ]);
+
+    if (countError) {
+        throw new Error("Incomplete interview total could not be loaded.", {
+            cause: countError
+        });
+    }
+
+    const sessionIds = sessions.map(session => session.session_id);
+    const participantIds = sessions.map(session => session.participant_id);
+    const [descriptors, participantCodes, caseCodes, messages] =
+        await Promise.all([
+        sessionIds.length ? requireData(
+            supabase
+                .from("participant_descriptors")
+                .select("session_id, current_country, current_region, country_of_origin, diaspora_status, gender, age, birth_year, birth_cohort, youth_status, education_level, social_identity, additional_descriptors")
+                .in("session_id", sessionIds),
+            "Incomplete-session demographic details could not be loaded."
+        ) : [],
+        loadParticipantCodeMap(supabase, participantIds),
+        sessionIds.length ? requireData(
+            supabase
+                .from("case_code_map")
+                .select("session_id, case_number, session_number")
+                .in("session_id", sessionIds),
+            "Incomplete-session case codes could not be loaded."
+        ) : [],
+        sessionIds.length ? requireAllData(
+            () => supabase
+                .from("interview_messages")
+                .select("id, Session, Language, Speaker, Message, EnglishTranslation, Timestamp")
+                .in("Session", sessionIds)
+                .order("Session", { ascending: true })
+                .order("Timestamp", { ascending: true })
+                .order("id", { ascending: true }),
+            "Incomplete-session transcript evidence could not be loaded."
+        ) : []
+    ]);
+    const descriptorBySession = new Map(descriptors.map(descriptor => [
+        descriptor.session_id,
+        descriptor
+    ]));
+    const caseCodeBySession = new Map(caseCodes.map(caseCode => [
+        caseCode.session_id,
+        caseCode
+    ]));
+    const messagesBySession = groupedBy(messages, "Session");
+
+    return {
+        page,
+        pageSize: PAGE_SIZE,
+        scope: "incomplete",
+        generatedAt: new Date().toISOString(),
+        counts: { incomplete: count || 0 },
+        cases: sessions.map(session => {
+            const participantCode = participantCodes.get(
+                session.participant_id
+            ) || null;
+            const caseCode = caseCodeBySession.get(session.session_id);
+            const partial = incompleteCaseSummary(
+                session,
+                messagesBySession.get(session.session_id) || []
+            );
+            const lifecycleRemark = incompleteCompletionRemark(session);
+
+            return {
+                caseNumber: caseCode?.case_number || participantCode,
+                sessionNumber: caseCode?.session_number || null,
+                status: "incomplete",
+                hasReport: false,
+                language: session.language || null,
+                createdAt: session.created_at,
+                lastActivityAt: session.last_activity_at,
+                endedAt: session.ended_at,
+                sessionStatus: session.session_status,
+                endReason: session.end_reason,
+                timedOutAt: session.timed_out_at,
+                inactivityTimeoutMinutes: session.inactivity_timeout_minutes,
+                completionRemark: lifecycleRemark === "In progress"
+                    ? `${lifecycleRemark} — ${partial.participantResponseCount} participant response${partial.participantResponseCount === 1 ? "" : "s"} recorded; formal completion signal not yet received`
+                    : `${lifecycleRemark} — ${partial.participantResponseCount} participant response${partial.participantResponseCount === 1 ? "" : "s"} recorded; formal completion signal missing`,
+                briefSummary: partial.briefSummary,
+                participantResponseCount: partial.participantResponseCount,
+                interviewerTurnCount: partial.interviewerTurnCount,
+                demographics: mergedDemographics(
+                    null,
+                    descriptorBySession.get(session.session_id) || {}
+                ),
+                transcriptIdentity: {
+                    participantCode,
+                    participantId: session.participant_id,
+                    sessionId: session.session_id
+                }
+            };
+        })
+    };
+}
+
 async function loadCounts(supabase, scope) {
     const statuses = ["pending", "processing", "completed", "failed"];
     const values = await Promise.all(statuses.map(async status => {
@@ -143,10 +318,18 @@ export async function handleCaseAnalysisDashboard(req, res) {
         { auth: { persistSession: false, autoRefreshToken: false } }
     );
     const page = Math.max(1, Number.parseInt(req.query?.page, 10) || 1);
-    const scope = req.query?.scope === "archived" ? "archived" : "active";
+    const scope = ["active", "archived", "incomplete"].includes(
+        req.query?.scope
+    ) ? req.query.scope : "active";
     const from = (page - 1) * PAGE_SIZE;
 
     try {
+        if (scope === "incomplete") {
+            return res.status(200).json(
+                await loadIncompleteDashboard(supabase, page, from)
+            );
+        }
+
         const jobsQuery = archiveScope(
             supabase
                 .from("automatic_case_analysis_jobs")

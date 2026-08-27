@@ -752,11 +752,13 @@
             <div class="analysisMetric"><strong id="automaticAnalysisProcessingCount">0</strong>Processing</div>
             <div class="analysisMetric"><strong id="automaticAnalysisCompletedCount">0</strong>Available reports</div>
             <div class="analysisMetric"><strong id="automaticAnalysisFailedCount">0</strong>Needs attention</div>
+            <div class="analysisMetric"><strong id="automaticAnalysisIncompleteCount">0</strong>Incomplete transcripts</div>
         </div>
         <nav class="analysisViewTabs" aria-label="Automatic analysis forms">
             <button type="button" data-automatic-analysis-view="cases" aria-pressed="true">1 · Cases &amp; keywords</button>
             <button type="button" data-automatic-analysis-view="codes" aria-pressed="false">2 · Codes</button>
             <button type="button" data-automatic-analysis-view="themes" aria-pressed="false">3 · Themes</button>
+            <button type="button" data-automatic-analysis-view="incomplete" aria-pressed="false">4 · Incomplete transcripts</button>
             <button type="button" data-automatic-analysis-view="archive" aria-pressed="false">Archive</button>
         </nav>
         <p id="automaticAnalysisDescription" class="muted"></p>
@@ -1610,7 +1612,7 @@ document.getElementById("periodResetButton").addEventListener("click", () => {
 loadStatistics();
 
 </script>
-<script src="researcher-automatic-analysis.js?version=20260827-demographic-archive-v9"></script>
+<script src="researcher-automatic-analysis.js?version=20260827-incomplete-form-v10"></script>
     
 </body>
 </html>
