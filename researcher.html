@@ -418,6 +418,45 @@
             font-weight: 700;
         }
 
+        .automaticPipelineNote {
+            background: #edf7f1;
+            border: 1px solid #9fc8ad;
+            border-radius: 0.6rem;
+            color: #184b31;
+            padding: 0.85rem 1rem;
+        }
+
+        .automaticAnalysisTable td {
+            min-width: 10rem;
+            vertical-align: top;
+        }
+
+        .keywordLegend {
+            border-radius: 999px;
+            display: inline-block;
+            margin: 0.25rem;
+            padding: 0.3rem 0.65rem;
+        }
+
+        mark[class^="keywordColor"] {
+            border-radius: 0.2rem;
+            color: #172033;
+            padding: 0.05rem 0.15rem;
+        }
+
+        .keywordColor1 { background: #ffe08a; }
+        .keywordColor2 { background: #bdebd2; }
+        .keywordColor3 { background: #bcd9ff; }
+        .keywordColor4 { background: #f7c4df; }
+        .keywordColor5 { background: #d9c7ff; }
+        .keywordColor6 { background: #ffc6ad; }
+        .keywordColor7 { background: #c9eb8e; }
+        .keywordColor8 { background: #9ce5e3; }
+        .keywordColor9 { background: #f7b7b7; }
+        .keywordColor10 { background: #d6d6d6; }
+        .keywordColor11 { background: #e5c39b; }
+        .keywordColor12 { background: #c8c4ef; }
+
         .analysisDiscussion {
             background: #f8fafc;
             border: 1px solid #cbd7e7;
@@ -675,7 +714,64 @@
     <p id="legacyNote" class="legacyNote" hidden></p>
 </section>
 
-<section id="analysisSection" class="panel" aria-labelledby="analysisHeading">
+<section id="analysisSection" class="panel" aria-labelledby="automaticAnalysisHeading">
+    <h2 id="automaticAnalysisHeading">Automatic Individual Case Analysis</h2>
+    <p class="automaticPipelineNote">
+        Analysis starts automatically when an interview receives its formal
+        completion signal. Complete transcripts are processed one case at a
+        time, from the earliest completion onward. Opening this dashboard does
+        not start or control the analysis.
+    </p>
+    <p>
+        The sequence is evidence first: exact keywords are highlighted in the
+        transcript and colour-grouped into participant-specific codes; codes
+        are then grouped into participant-specific themes. C1 and T1 restart
+        for every case and never carry a fixed meaning across participants.
+    </p>
+
+    <div id="automaticAnalysisTokenGate">
+        <label>
+            Researcher dashboard token
+            <input id="automaticAnalysisToken" type="password" autocomplete="current-password">
+        </label>
+        <div class="actionRow">
+            <button id="automaticAnalysisUnlockButton" type="button">Unlock case analysis</button>
+        </div>
+    </div>
+
+    <div id="automaticAnalysisWorkspace" hidden>
+        <div class="actionRow">
+            <button id="automaticAnalysisRefreshButton" type="button">Refresh progress</button>
+            <button id="automaticAnalysisDownloadButton" type="button">Download current form</button>
+            <button id="automaticAnalysisLockButton" type="button">Lock workspace</button>
+        </div>
+        <p id="automaticAnalysisStatus" class="muted" role="status"></p>
+        <div class="analysisOverview" aria-label="Automatic analysis progress">
+            <div class="analysisMetric"><strong id="automaticAnalysisPendingCount">0</strong>Waiting</div>
+            <div class="analysisMetric"><strong id="automaticAnalysisProcessingCount">0</strong>Processing</div>
+            <div class="analysisMetric"><strong id="automaticAnalysisCompletedCount">0</strong>Complete reports</div>
+            <div class="analysisMetric"><strong id="automaticAnalysisFailedCount">0</strong>Needs attention</div>
+        </div>
+        <nav class="analysisViewTabs" aria-label="Automatic analysis forms">
+            <button type="button" data-automatic-analysis-view="cases" aria-pressed="true">1 · Cases &amp; keywords</button>
+            <button type="button" data-automatic-analysis-view="codes" aria-pressed="false">2 · Codes</button>
+            <button type="button" data-automatic-analysis-view="themes" aria-pressed="false">3 · Themes</button>
+        </nav>
+        <p id="automaticAnalysisDescription" class="muted"></p>
+        <div id="automaticAnalysisTable"></div>
+    </div>
+</section>
+
+<dialog id="automaticTranscriptDialog">
+    <button id="automaticTranscriptCloseButton" type="button">Close transcript</button>
+    <h2 id="automaticTranscriptHeading">Annotated transcript</h2>
+    <p id="automaticTranscriptIdentity" class="transcriptIdentity"></p>
+    <p><strong>Demographic data:</strong> <span id="automaticTranscriptDemographics"></span></p>
+    <div id="automaticTranscriptLegend" aria-label="Code colour legend"></div>
+    <div id="automaticTranscriptMessages"></div>
+</dialog>
+
+<section id="legacyAnalysisSection" class="panel" aria-labelledby="analysisHeading" hidden>
     <h2 id="analysisHeading">Researcher Data Analysis Dashboard</h2>
     <p>
         <strong>Case workflow:</strong>
@@ -1502,7 +1598,7 @@ document.getElementById("periodResetButton").addEventListener("click", () => {
 loadStatistics();
 
 </script>
-<script src="researcher-analysis.js"></script>
+<script src="researcher-automatic-analysis.js"></script>
     
 </body>
 </html>

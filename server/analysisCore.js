@@ -3,6 +3,8 @@ import { DEFAULT_OPENAI_MODEL } from "./modelConfiguration.js";
 
 export const QUALITATIVE_ANALYSIS_MODEL = DEFAULT_OPENAI_MODEL;
 export const QUALITATIVE_ANALYSIS_VERSION = "task-014-v7-complete-cases-before-summary";
+export const AUTOMATIC_CASE_ANALYSIS_VERSION =
+    "case-analysis-v1-keywords-codes-themes";
 export const DEFAULT_ANALYSIS_BATCH_SIZE = 40;
 export const MAX_THEME_SUBJECT_WORDS = 2;
 export const MAX_THEME_SUBJECT_LENGTH = 60;
@@ -267,6 +269,188 @@ const suggestionSchema = {
     required: ["items"],
     additionalProperties: false
 };
+
+const automaticCaseSchema = {
+    type: "object",
+    properties: {
+        codes: {
+            type: "array",
+            items: {
+                type: "object",
+                properties: {
+                    label: { type: "string" },
+                    rationale: { type: "string" },
+                    keyword_evidence: {
+                        type: "array",
+                        items: {
+                            type: "object",
+                            properties: {
+                                message_id: { type: "string" },
+                                exact_text: { type: "string" }
+                            },
+                            required: ["message_id", "exact_text"],
+                            additionalProperties: false
+                        }
+                    }
+                },
+                required: ["label", "rationale", "keyword_evidence"],
+                additionalProperties: false
+            }
+        },
+        themes: {
+            type: "array",
+            items: {
+                type: "object",
+                properties: {
+                    label: { type: "string" },
+                    rationale: { type: "string" },
+                    code_numbers: {
+                        type: "array",
+                        items: { type: "integer" }
+                    }
+                },
+                required: ["label", "rationale", "code_numbers"],
+                additionalProperties: false
+            }
+        },
+        case_interpretation: { type: "string" }
+    },
+    required: ["codes", "themes", "case_interpretation"],
+    additionalProperties: false
+};
+
+function exactTextOccurrences(source, phrase) {
+    const sourceText = typeof source === "string" ? source : "";
+    const exactText = normalizedText(phrase);
+
+    if (!sourceText || !exactText) {
+        return [];
+    }
+
+    const haystack = sourceText.toLocaleLowerCase();
+    const needle = exactText.toLocaleLowerCase();
+    const occurrences = [];
+    let startOffset = 0;
+
+    while (startOffset <= haystack.length - needle.length) {
+        const matchOffset = haystack.indexOf(needle, startOffset);
+
+        if (matchOffset < 0) {
+            break;
+        }
+
+        occurrences.push({
+            exactText: sourceText.slice(
+                matchOffset,
+                matchOffset + exactText.length
+            ),
+            startOffset: matchOffset,
+            endOffset: matchOffset + exactText.length
+        });
+        startOffset = matchOffset + Math.max(needle.length, 1);
+    }
+
+    return occurrences;
+}
+
+export function validateAutomaticCaseAnalysis(value, availableMessages) {
+    const messagesById = new Map(
+        (Array.isArray(availableMessages) ? availableMessages : [])
+            .map(message => [message.id, message])
+    );
+    const codes = [];
+    const usedHighlights = new Set();
+    let invalidEvidence = 0;
+
+    (Array.isArray(value?.codes) ? value.codes : []).forEach(rawCode => {
+        const label = normalizedText(rawCode?.label);
+        const rationale = normalizedText(rawCode?.rationale);
+        const highlights = [];
+
+        (Array.isArray(rawCode?.keyword_evidence)
+            ? rawCode.keyword_evidence
+            : []
+        ).forEach(evidence => {
+            const messageId = normalizedText(evidence?.message_id);
+            const message = messagesById.get(messageId);
+            const occurrences = exactTextOccurrences(
+                message?.originalText,
+                evidence?.exact_text
+            );
+
+            if (!message || !occurrences.length) {
+                invalidEvidence += 1;
+                return;
+            }
+
+            occurrences.forEach(occurrence => {
+                const key = `${messageId}:${occurrence.startOffset}:${occurrence.endOffset}`;
+
+                if (usedHighlights.has(key)) {
+                    return;
+                }
+
+                usedHighlights.add(key);
+                highlights.push({ messageId, ...occurrence });
+            });
+        });
+
+        if (!label || !rationale || !highlights.length) {
+            invalidEvidence += 1;
+            return;
+        }
+
+        codes.push({ label, rationale, highlights });
+    });
+
+    const themes = [];
+    const assignedCodeNumbers = new Set();
+
+    (Array.isArray(value?.themes) ? value.themes : []).forEach(rawTheme => {
+        const label = normalizedText(rawTheme?.label);
+        const rationale = normalizedText(rawTheme?.rationale);
+        const codeNumbers = [...new Set(
+            (Array.isArray(rawTheme?.code_numbers)
+                ? rawTheme.code_numbers
+                : []
+            ).filter(number =>
+                Number.isInteger(number)
+                && number > 0
+                && number <= codes.length
+            )
+        )];
+
+        if (!isShortThemeSubject(label)
+            || !rationale
+            || !codeNumbers.length
+        ) {
+            invalidEvidence += 1;
+            return;
+        }
+
+        codeNumbers.forEach(number => assignedCodeNumbers.add(number));
+        themes.push({ label, rationale, codeNumbers });
+    });
+
+    const caseInterpretation = normalizedText(value?.case_interpretation);
+    const allCodesAssigned = codes.every((_, index) =>
+        assignedCodeNumbers.has(index + 1)
+    );
+
+    return {
+        codes,
+        themes,
+        caseInterpretation,
+        invalidEvidence,
+        complete: Boolean(
+            codes.length
+            && themes.length
+            && caseInterpretation
+            && invalidEvidence === 0
+            && allCodesAssigned
+        )
+    };
+}
 
 const evidenceSchema = {
     type: "object",
@@ -677,6 +861,50 @@ export async function generateSuggestionsForBatch(
 
     const validated = validateSuggestedItems(
         parseStructuredResponse(response, "AI qualitative-analysis output"),
+        messages
+    );
+
+    return {
+        ...validated,
+        inputTokenCount: Number.isInteger(response?.usage?.input_tokens)
+            ? response.usage.input_tokens
+            : null
+    };
+}
+
+export async function generateAutomaticCaseAnalysis(
+    openaiClient,
+    messages,
+    { model = QUALITATIVE_ANALYSIS_MODEL } = {}
+) {
+    const response = await openaiClient.responses.create({
+        model,
+        store: false,
+        text: {
+            format: {
+                type: "json_schema",
+                name: "automatic_individual_case_analysis",
+                strict: true,
+                schema: automaticCaseSchema
+            }
+        },
+        input: [
+            {
+                role: "system",
+                content: "Read this single completed participant transcript line by line. Work strictly from evidence upward. First identify every analytically meaningful word or short phrase in the participant's original_text and return it verbatim as keyword evidence with its exact message_id. Never return translated wording as exact_text. Then categorize those keyword occurrences into participant-specific codes. Codes are concise category names and may be abstractions such as 'Work patterns' or 'Media use'; they do not need to repeat transcript wording. Finally group related code numbers into broad one- or two-word themes. Every code must belong to at least one theme. Do not compare this case with any participant. Do not invent, paraphrase, omit, or rewrite keyword evidence. Return all substantive keyword occurrences needed to make the code system inspectable. Codes and themes are proposals for researcher review, not confirmed findings."
+            },
+            {
+                role: "user",
+                content: `Completed participant transcript (JSON):\n${messagesForModel(messages)}`
+            }
+        ]
+    });
+
+    const validated = validateAutomaticCaseAnalysis(
+        parseStructuredResponse(
+            response,
+            "Automatic individual case analysis"
+        ),
         messages
     );
 

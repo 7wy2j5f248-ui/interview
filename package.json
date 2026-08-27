@@ -6,6 +6,7 @@
     "@google-cloud/speech": "^7.0.0",
     "@google-cloud/text-to-speech": "^6.4.1",
     "@supabase/supabase-js": "^2.50.0",
+    "@vercel/functions": "^3.9.5",
     "@vercel/oidc": "^3.8.1",
     "exceljs": "^4.4.0",
     "google-auth-library": "^11.0.0",

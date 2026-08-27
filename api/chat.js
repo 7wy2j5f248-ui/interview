@@ -10,6 +10,7 @@ import {
   refreshInterviewSessionMetrics,
   resolveInactivityTimeoutMinutes
 } from "../server/sessionLifecycle.js";
+import { scheduleAutomaticCaseAnalysis } from "../server/automaticCaseAnalysis.js";
 
 const supportedInterviewLanguages = Object.freeze({
   en: "English",
@@ -387,6 +388,10 @@ Return final_question_answered as true when the participant's current message an
         sessionSupabaseClient,
         activeSessionId
       );
+
+      // Formal completion persists the durable queue item in PostgreSQL.
+      // This request only wakes the worker; a wake-up failure never loses work.
+      scheduleAutomaticCaseAnalysis(req);
     }
 
     return res.status(200).json({
