@@ -48,6 +48,26 @@ test("Worksheet 1 retains metadata and is the only worksheet with transcript lin
     assert.doesNotMatch(keywordSource, /openTranscript|openProvenance/);
 });
 
+test("Worksheet 1 uses fixed participant-specific T1 to T8 slots", () => {
+    const source = functionSource("renderThemeWorksheet", "selectedThemeItem");
+
+    assert.match(script, /const PARTICIPANT_THEME_SLOT_COUNT = 8/);
+    assert.match(script, /function participantThemeRecords/);
+    assert.match(source, /participantThemeSlotIdentifier\(slotIndex\)/);
+    assert.match(source, /participantThemeRecords\(participant\)/);
+    assert.match(source, /expressionButton\(\s*theme\.label,\s*theme\.item/);
+    assert.match(source, /participantThemeCell/);
+    assert.doesNotMatch(
+        source,
+        /themes\.forEach\(theme => appendHeader|theme\.label,\s*theme\.identifier/
+    );
+    assert.doesNotMatch(source, /relationCell/);
+    assert.match(
+        script,
+        /T1–T8 are participant-specific positions/
+    );
+});
+
 test("Worksheet 2 has one row model for each participant-code relationship", () => {
     const source = functionSource("renderCodeWorksheet", "renderKeywordWorksheet");
     assert.match(source, /participantRecords\(\)\.forEach\(participant/);

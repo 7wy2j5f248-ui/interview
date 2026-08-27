@@ -1016,6 +1016,22 @@
         "Education"
     ];
 
+    const PARTICIPANT_THEME_SLOT_COUNT = 8;
+
+    function participantThemeSlotIdentifier(index) {
+        return `T${index + 1}`;
+    }
+
+    function participantThemeRecords(participant) {
+        return activeItems().filter(item =>
+            itemSupportsParticipant(item, participant)
+        ).map((item, index) => ({
+            identifier: participantThemeSlotIdentifier(index),
+            label: workingTheme(item),
+            item
+        }));
+    }
+
     function themeRecords() {
         return activeItems().map((item, index) => ({
             identifier: worksheetIdentifier("T", index),
@@ -1191,7 +1207,6 @@
     }
 
     function renderThemeWorksheet(container) {
-        const themes = themeRecords();
         const participants = participantRecords();
         const table = worksheetTable("themeWorksheet");
         const head = document.createElement("thead");
@@ -1202,11 +1217,12 @@
             headingRow,
             label
         ));
-        themes.forEach(theme => appendHeader(
-            headingRow,
-            theme.label,
-            theme.identifier
-        ));
+        Array.from({ length: PARTICIPANT_THEME_SLOT_COUNT }).forEach(
+            (_, slotIndex) => appendHeader(
+                headingRow,
+                participantThemeSlotIdentifier(slotIndex)
+            )
+        );
         head.appendChild(headingRow);
         table.appendChild(head);
 
@@ -1234,23 +1250,38 @@
                 row,
                 String(value)
             ));
-            themes.forEach(theme => {
-                const evidenceIds = participantEvidence(
-                    theme.item,
-                    participant
-                ).map(evidence => evidence.messageId);
-                if (itemSupportsParticipant(theme.item, participant)) {
-                    relationCell(row, uniqueValues(evidenceIds));
-                } else {
-                    appendCell(row, "—", "analysisEmptyCell");
+            const participantThemes = participantThemeRecords(participant);
+            Array.from({ length: PARTICIPANT_THEME_SLOT_COUNT }).forEach(
+                (_, slotIndex) => {
+                    const theme = participantThemes[slotIndex];
+                    if (!theme) {
+                        appendCell(row, "—", "analysisEmptyCell");
+                        return;
+                    }
+                    const cell = document.createElement("td");
+                    cell.className = "participantThemeCell";
+                    cell.dataset.themeSlot = theme.identifier;
+                    cell.appendChild(expressionButton(
+                        theme.label,
+                        theme.item
+                    ));
+                    row.appendChild(cell);
                 }
-            });
+            );
+            if (participantThemes.length > PARTICIPANT_THEME_SLOT_COUNT) {
+                const finalCell = row.lastElementChild;
+                const overflow = document.createElement("span");
+                overflow.className = "analysisColumnDetail";
+                overflow.textContent = `+${participantThemes.length - PARTICIPANT_THEME_SLOT_COUNT} additional themes in the individual analysis`;
+                finalCell.appendChild(overflow);
+            }
             body.appendChild(row);
         });
         if (!participants.length) {
             appendEmptyRow(
                 body,
-                2 + participantMetadataHeadings.length + themes.length,
+                2 + participantMetadataHeadings.length
+                    + PARTICIPANT_THEME_SLOT_COUNT,
                 "No interview participants are available in this corpus scope."
             );
         }
@@ -1456,7 +1487,7 @@
         if (activeAnalysisView === "themes") {
             breadcrumb.textContent = "Worksheet 1 · Participants & Themes";
             description.textContent =
-                "One row per participant. This is the only worksheet with a direct link to the complete transcript.";
+                "One row per participant. T1–T8 are participant-specific positions: each cell contains that participant’s own theme, and themes in the same column are not assumed to have the same meaning. This is the only worksheet with a direct link to the complete transcript.";
             renderThemeWorksheet(container);
             renderDiscussionPanel(item);
             return;
@@ -1484,8 +1515,10 @@
         );
         document.getElementById("analysisParticipantCount").textContent =
             String(participantRecords().length);
-        document.getElementById("analysisThemeCount").textContent =
-            String(items.length);
+        document.getElementById("analysisThemeCount").textContent = String(
+            participantRecords().reduce((total, participant) =>
+                total + participantThemeRecords(participant).length, 0)
+        );
         document.getElementById("analysisCodeCount").textContent = String(
             uniqueValues(items.flatMap(item => workingList(
                 item,
