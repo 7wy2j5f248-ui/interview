@@ -98,7 +98,7 @@ function keywordGroupValue(group) {
     )} each · ${values.join("; ")}`;
 }
 
-function keywordGroupNote(group) {
+function keywordGroupReference(group) {
     const lines = [
         `K${group.rank}: ${group.mentionCount} validated ${plural(
             group.mentionCount,
@@ -123,6 +123,68 @@ function keywordGroupNote(group) {
     });
 
     return lines.join("\n");
+}
+
+function excelColumnName(columnNumber) {
+    let value = columnNumber;
+    let name = "";
+    while (value > 0) {
+        value -= 1;
+        name = String.fromCharCode(65 + (value % 26)) + name;
+        value = Math.floor(value / 26);
+    }
+    return name;
+}
+
+function internalLink(text, sheetName, cellAddress) {
+    const displayText = String(text).replaceAll('"', '""');
+    return {
+        formula: `HYPERLINK("#'${sheetName}'!${cellAddress}","${displayText}")`,
+        result: text
+    };
+}
+
+function buildReferenceRows(cases) {
+    const rows = [];
+    const destinations = new Map();
+    const reportColumn = DEMOGRAPHIC_FIELDS.length + 4;
+
+    const addReference = (key, record) => {
+        const rowNumber = rows.length + 2;
+        destinations.set(key, rowNumber);
+        rows.push({
+            referenceId: `R${String(rows.length + 1).padStart(6, "0")}`,
+            ...record
+        });
+    };
+
+    cases.forEach((item, caseIndex) => {
+        const caseRow = caseIndex + 2;
+        if (item.caseInterpretation) {
+            addReference(`${caseIndex}:report`, {
+                participant: participantCode(item),
+                sessionNumber: sessionNumber(item),
+                sessionId: item.sessionId,
+                sourceCell: `${excelColumnName(reportColumn)}${caseRow}`,
+                referenceType: "Case briefing",
+                rank: "",
+                details: item.caseInterpretation
+            });
+        }
+        item.rankedKeywordGroups.forEach(group => {
+            addReference(`${caseIndex}:keyword:${group.rank}`, {
+                participant: participantCode(item),
+                sessionNumber: sessionNumber(item),
+                sessionId: item.sessionId,
+                sourceCell: `${excelColumnName(reportColumn + group.rank)}${caseRow}`,
+                referenceType: "Keyword evidence",
+                rank: `K${group.rank}`,
+                details: keywordGroupReference(group)
+            });
+        });
+    });
+
+    return { rows, destinations };
 }
 
 function codeGroupValue(group) {
@@ -295,7 +357,12 @@ export async function loadActiveCases(supabase) {
     }));
 }
 
-function addCasesSheet(workbook, cases, { streaming = false } = {}) {
+function addCasesSheet(
+    workbook,
+    cases,
+    referenceDestinations,
+    { streaming = false } = {}
+) {
     const maximumKeywords = Math.max(
         0,
         ...cases.map(item => item.rankedKeywordGroups.length)
@@ -323,27 +390,87 @@ function addCasesSheet(workbook, cases, { streaming = false } = {}) {
         }))
     ];
     prepareSheet(sheet, cases.length + 1, streaming);
-    cases.forEach(item => {
+    cases.forEach((item, caseIndex) => {
+        const reportReferenceRow = referenceDestinations.get(`${caseIndex}:report`);
         const row = {
             participant: participantCode(item),
             sessionNumber: sessionNumber(item),
             language: item.language || "",
-            reportStatus: item.hasReport ? "Available" : item.status
+            reportStatus: item.hasReport
+                ? (reportReferenceRow
+                    ? internalLink("Available", "4 Notes & sources", `A${reportReferenceRow}`)
+                    : "Available")
+                : item.status
         };
         DEMOGRAPHIC_FIELDS.forEach(([key]) => {
             row[key] = cleanValue(item.demographics?.[key]);
         });
         item.rankedKeywordGroups.forEach(group => {
-            row[`keyword_${group.rank}`] = keywordGroupValue(group);
+            const referenceRow = referenceDestinations.get(
+                `${caseIndex}:keyword:${group.rank}`
+            );
+            const value = keywordGroupValue(group);
+            row[`keyword_${group.rank}`] = referenceRow
+                ? internalLink(value, "4 Notes & sources", `A${referenceRow}`)
+                : value;
         });
         appendRow(sheet, row, streaming, worksheetRow => {
-            if (item.caseInterpretation) {
-                worksheetRow.getCell("reportStatus").note = item.caseInterpretation;
+            if (reportReferenceRow) {
+                worksheetRow.getCell("reportStatus").font = {
+                    color: { argb: "FF0563C1" },
+                    underline: true
+                };
             }
             item.rankedKeywordGroups.forEach(group => {
-                worksheetRow.getCell(`keyword_${group.rank}`).note =
-                    keywordGroupNote(group);
+                worksheetRow.getCell(`keyword_${group.rank}`).font = {
+                    color: { argb: "FF0563C1" },
+                    underline: true
+                };
             });
+        });
+    });
+    finishSheet(sheet, streaming);
+}
+
+function addReferencesSheet(workbook, referenceRows, { streaming = false } = {}) {
+    const sheet = workbook.addWorksheet(
+        "4 Notes & sources",
+        streaming
+            ? { views: [{ state: "frozen", xSplit: 2, ySplit: 1 }] }
+            : undefined
+    );
+    sheet.columns = [
+        { header: "Reference", key: "referenceId", width: 12 },
+        { header: "P#", key: "participant", width: 9 },
+        { header: "S#", key: "sessionNumber", width: 5 },
+        { header: "Session ID", key: "sessionId", width: 18 },
+        { header: "Source cell", key: "sourceCell", width: 14 },
+        { header: "Reference type", key: "referenceType", width: 18 },
+        { header: "Rank", key: "rank", width: 8 },
+        { header: "Full briefing or source evidence", key: "details", width: 80 }
+    ];
+    prepareSheet(sheet, referenceRows.length + 1, streaming);
+    referenceRows.forEach(reference => {
+        appendRow(sheet, {
+            ...reference,
+            sourceCell: internalLink(
+                reference.sourceCell,
+                "1 Cases & keywords",
+                reference.sourceCell
+            )
+        }, streaming, row => {
+            const visualLineCount = String(reference.details || "")
+                .split("\n")
+                .reduce((total, line) => total + Math.max(1, Math.ceil(line.length / 90)), 0);
+            row.height = Math.min(180, Math.max(30, visualLineCount * 15));
+            row.getCell("sourceCell").font = {
+                color: { argb: "FF0563C1" },
+                underline: true
+            };
+            row.getCell("details").alignment = {
+                vertical: "top",
+                wrapText: true
+            };
         });
     });
     finishSheet(sheet, streaming);
@@ -436,9 +563,11 @@ export async function writeRankedAnalysisWorkbook(
     workbook.creator = "PLI Researcher Dashboard";
     workbook.created = createdAt;
     workbook.modified = createdAt;
-    addCasesSheet(workbook, cases, { streaming: true });
+    const references = buildReferenceRows(cases);
+    addCasesSheet(workbook, cases, references.destinations, { streaming: true });
     addCodesSheet(workbook, cases, { streaming: true });
     addThemesSheet(workbook, cases, { streaming: true });
+    addReferencesSheet(workbook, references.rows, { streaming: true });
     await workbook.commit();
 }
 

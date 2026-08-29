@@ -4,6 +4,7 @@ import { PassThrough } from "node:stream";
 import { finished } from "node:stream/promises";
 import { readFile, readdir } from "node:fs/promises";
 import ExcelJS from "exceljs";
+import JSZip from "jszip";
 import {
     writeRankedAnalysisWorkbook
 } from "../api/automatic-analysis-ranked-export.js";
@@ -27,7 +28,7 @@ async function workbookBuffer(cases) {
     return Buffer.concat(chunks);
 }
 
-test("complete workbook uses the shared ranking and contains Forms 1-3", async () => {
+test("complete workbook uses the shared ranking and contains compact linked references", async () => {
     const ranked = rankAnalysisCase({
         caseNumber: "P0001-S01",
         participantCode: "P0001",
@@ -64,7 +65,7 @@ test("complete workbook uses the shared ranking and contains Forms 1-3", async (
 
     assert.deepEqual(
         workbook.worksheets.map(sheet => sheet.name),
-        ["1 Cases & keywords", "2 Codes", "3 Themes"]
+        ["1 Cases & keywords", "2 Codes", "3 Themes", "4 Notes & sources"]
     );
     const formOne = workbook.getWorksheet("1 Cases & keywords");
     const headers = formOne.getRow(1).values.slice(1);
@@ -72,10 +73,10 @@ test("complete workbook uses the shared ranking and contains Forms 1-3", async (
     assert.ok(!headers.includes("Session ID"));
     assert.ok(!headers.includes("Case interpretation"));
     const reportColumn = headers.indexOf("Case report") + 1;
-    assert.equal(formOne.getRow(2).getCell(reportColumn).value, "Available");
-    assert.match(
-        JSON.stringify(formOne.getRow(2).getCell(reportColumn).note),
-        /Interpretation/
+    assert.equal(formOne.getRow(2).getCell(reportColumn).value.result, "Available");
+    assert.equal(
+        formOne.getRow(2).getCell(reportColumn).value.formula,
+        "HYPERLINK(\"#'4 Notes & sources'!A2\",\"Available\")"
     );
     assert.equal(formOne.getRow(2).height, 18);
     assert.equal(formOne.getColumn(1).width, 9);
@@ -87,6 +88,14 @@ test("complete workbook uses the shared ranking and contains Forms 1-3", async (
     assert.match(
         workbook.getWorksheet("3 Themes").getCell("D2").value,
         /^3 mentions each · Strong theme \(1 code, 1 keyword\)$/
+    );
+    const references = workbook.getWorksheet("4 Notes & sources");
+    assert.equal(references.getCell("A2").value, "R000001");
+    assert.equal(references.getCell("F2").value, "Case briefing");
+    assert.equal(references.getCell("H2").value, "Interpretation");
+    assert.equal(
+        references.getCell("E2").value.formula,
+        "HYPERLINK(\"#'1 Cases & keywords'!P2\",\"P2\")"
     );
 });
 
@@ -155,15 +164,18 @@ test("workbook groups equal mention ranks and uses stored English source text", 
     const headers = formOne.getRow(1).values.slice(1);
     const keywordColumn = headers.indexOf("K1") + 1;
     const keywordCell = formOne.getRow(2).getCell(keywordColumn);
-    assert.match(keywordCell.value, /^2 mentions each/);
-    assert.match(keywordCell.value, /I go to bed late\./);
-    assert.match(keywordCell.value, /I work night shifts\./);
-    assert.doesNotMatch(keywordCell.value, /晚睡|夜班/);
-    const keywordNote = JSON.stringify(keywordCell.note);
-    assert.match(keywordNote, /晚睡/);
-    assert.match(keywordNote, /夜班/);
-    assert.match(keywordNote, /message-1/);
-    assert.match(keywordNote, /message-4/);
+    assert.match(keywordCell.value.result, /^2 mentions each/);
+    assert.match(keywordCell.value.result, /I go to bed late\./);
+    assert.match(keywordCell.value.result, /I work night shifts\./);
+    assert.doesNotMatch(keywordCell.value.result, /晚睡|夜班/);
+    assert.match(keywordCell.value.formula, /#'4 Notes & sources'!A3/);
+
+    const references = workbook.getWorksheet("4 Notes & sources");
+    const keywordReference = references.getCell("H3").value;
+    assert.match(keywordReference, /晚睡/);
+    assert.match(keywordReference, /夜班/);
+    assert.match(keywordReference, /message-1/);
+    assert.match(keywordReference, /message-4/);
 
     const codeSheet = workbook.getWorksheet("2 Codes");
     assert.equal(codeSheet.getCell("D1").value, "C1");
@@ -205,7 +217,47 @@ test("streamed complete workbook represents 10,000 cases in one file", async () 
 
     assert.equal(workbook.getWorksheet("1 Cases & keywords").rowCount, 10_001);
     assert.equal(workbook.getWorksheet("1 Cases & keywords").getCell("A10001").value, "P10000");
-    assert.equal(workbook.worksheets.length, 3);
+    assert.equal(workbook.worksheets.length, 4);
+    assert.equal(workbook.getWorksheet("4 Notes & sources").rowCount, 1);
+});
+
+test("generated XLSX package contains no legacy comments or VML drawings", async () => {
+    const ranked = rankAnalysisCase({
+        caseNumber: "P0003-S01",
+        participantCode: "P0003",
+        sessionNumber: 1,
+        sessionId: "session-3",
+        status: "completed",
+        hasReport: true,
+        language: "zh",
+        demographics: {},
+        caseInterpretation: "Compact case briefing.",
+        codes: [{ id: "code-1", code_number: 1, code_label: "Sleep" }],
+        themes: [{ id: "theme-1", theme_number: 1, theme_label: "Rest" }],
+        themeCodes: [{ theme_id: "theme-1", code_id: "code-1" }],
+        highlights: [{
+            id: "highlight-1",
+            code_id: "code-1",
+            message_id: "message-1",
+            exact_text: "晚睡",
+            source_language: "zh",
+            english_translation: "I go to bed late."
+        }]
+    });
+    const zip = await JSZip.loadAsync(await workbookBuffer([ranked]));
+    const paths = Object.keys(zip.files);
+    const commentsOrVml = paths.filter(path =>
+        /^xl\/comments\d+\.xml$/i.test(path)
+        || /^xl\/drawings\/vmlDrawing\d+\.vml$/i.test(path)
+    );
+    assert.deepEqual(commentsOrVml, []);
+
+    const contentTypes = await zip.file("[Content_Types].xml").async("string");
+    const caseSheet = await zip.file("xl/worksheets/sheet1.xml").async("string");
+    assert.doesNotMatch(contentTypes, /comments/i);
+    assert.doesNotMatch(caseSheet, /legacyDrawing/i);
+    assert.ok(!zip.file("xl/worksheets/_rels/sheet1.xml.rels"));
+    assert.match(caseSheet, /HYPERLINK\(&quot;#&apos;4 Notes &amp; sources&apos;!A2&quot;/);
 });
 
 test("10,000-ID related reads are bounded but no longer sequential", async () => {
