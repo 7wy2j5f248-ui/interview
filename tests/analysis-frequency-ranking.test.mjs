@@ -33,6 +33,46 @@ test("validated keyword grouping normalizes case and whitespace deterministicall
     );
 });
 
+test("equal keyword frequencies share one dense rank group", () => {
+    const highlights = [
+        ...Array.from({ length: 5 }, (_, index) =>
+            highlight(`b${index}`, "c1", "bedtime")
+        ),
+        ...Array.from({ length: 5 }, (_, index) =>
+            highlight(`s${index}`, "c1", "sleep time")
+        ),
+        highlight("w1", "c1", "work"),
+        highlight("a1", "c1", "alarm")
+    ];
+    const ranked = rankAnalysisCase({
+        hasReport: true,
+        codes: [{ id: "c1", code_number: 1, code_label: "Sleep" }],
+        themes: [],
+        themeCodes: [],
+        highlights
+    });
+    const reversed = rankAnalysisCase({
+        hasReport: true,
+        codes: [{ id: "c1", code_number: 1, code_label: "Sleep" }],
+        themes: [],
+        themeCodes: [],
+        highlights: [...highlights].reverse()
+    });
+
+    assert.deepEqual(ranked.rankedKeywordGroups, reversed.rankedKeywordGroups);
+    assert.equal(ranked.rankedKeywordGroups.length, 2);
+    assert.equal(ranked.rankedKeywordGroups[0].mentionCount, 5);
+    assert.deepEqual(
+        ranked.rankedKeywordGroups[0].items.map(item => item.text),
+        ["bedtime", "sleep time"]
+    );
+    assert.equal(ranked.rankedKeywordGroups[1].mentionCount, 1);
+    assert.deepEqual(
+        ranked.rankedKeywordGroups[1].items.map(item => item.text),
+        ["alarm", "work"]
+    );
+});
+
 test("codes prioritize total validated mentions over distinct keyword count", () => {
     const ranked = rankAnalysisCase({
         hasReport: true,
@@ -58,6 +98,35 @@ test("codes prioritize total validated mentions over distinct keyword count", ()
     assert.equal(ranked.rankedCodes[1].keywordCount, 3);
     assert.equal(ranked.codes[0].code_number, 1);
     assert.equal(ranked.codes[0].original_code_number, 2);
+});
+
+test("code mention ties share one rank and ignore distinct keyword count", () => {
+    const ranked = rankAnalysisCase({
+        hasReport: true,
+        codes: [
+            { id: "z", code_number: 1, code_label: "Zulu varied" },
+            { id: "a", code_number: 2, code_label: "Alpha repeated" }
+        ],
+        themes: [],
+        themeCodes: [],
+        highlights: [
+            highlight("z1", "z", "one"),
+            highlight("z2", "z", "two"),
+            highlight("z3", "z", "three"),
+            ...Array.from({ length: 3 }, (_, index) =>
+                highlight(`a${index}`, "a", "repeat")
+            )
+        ]
+    });
+
+    assert.equal(ranked.rankedCodeGroups.length, 1);
+    assert.equal(ranked.rankedCodeGroups[0].mentionCount, 3);
+    assert.deepEqual(
+        ranked.rankedCodeGroups[0].items.map(code => code.code_label),
+        ["Alpha repeated", "Zulu varied"]
+    );
+    assert.deepEqual(ranked.rankedCodes.map(code => code.rank), [1, 1]);
+    assert.deepEqual(ranked.codes.map(code => code.code_number), [1, 1]);
 });
 
 test("themes prioritize mentions before supporting codes and distinct keywords", () => {
@@ -97,6 +166,44 @@ test("themes prioritize mentions before supporting codes and distinct keywords",
     assert.equal(ranked.rankedThemes[2].codeCount, 2);
     assert.equal(ranked.themes[0].theme_number, 1);
     assert.equal(ranked.themes[0].original_theme_number, 2);
+});
+
+test("theme mention ties share one rank and ignore supporting-code count", () => {
+    const ranked = rankAnalysisCase({
+        hasReport: true,
+        codes: [
+            { id: "a", code_number: 1, code_label: "Alpha code" },
+            { id: "z1", code_number: 2, code_label: "Zulu first" },
+            { id: "z2", code_number: 3, code_label: "Zulu second" }
+        ],
+        themes: [
+            { id: "z", theme_number: 1, theme_label: "Zulu theme" },
+            { id: "a-theme", theme_number: 2, theme_label: "Alpha theme" }
+        ],
+        themeCodes: [
+            { theme_id: "a-theme", code_id: "a" },
+            { theme_id: "z", code_id: "z1" },
+            { theme_id: "z", code_id: "z2" }
+        ],
+        highlights: [
+            ...Array.from({ length: 4 }, (_, index) =>
+                highlight(`a${index}`, "a", "repeat")
+            ),
+            highlight("z1", "z1", "one"),
+            highlight("z2", "z1", "two"),
+            highlight("z3", "z2", "three"),
+            highlight("z4", "z2", "four")
+        ]
+    });
+
+    assert.equal(ranked.rankedThemeGroups.length, 1);
+    assert.equal(ranked.rankedThemeGroups[0].mentionCount, 4);
+    assert.deepEqual(
+        ranked.rankedThemeGroups[0].items.map(theme => theme.theme_label),
+        ["Alpha theme", "Zulu theme"]
+    );
+    assert.deepEqual(ranked.rankedThemes.map(theme => theme.rank), [1, 1]);
+    assert.deepEqual(ranked.themes.map(theme => theme.theme_number), [1, 1]);
 });
 
 test("zero evidence and missing mappings receive deterministic zero-valued ranks", () => {

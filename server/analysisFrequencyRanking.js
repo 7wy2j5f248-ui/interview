@@ -15,6 +15,18 @@ function deterministicRecordCompare(left, right, labelKey) {
         || deterministicTextCompare(left?.id, right?.id);
 }
 
+function cleanText(value) {
+    return typeof value === "string"
+        ? value.normalize("NFKC").replace(/\s+/g, " ").trim()
+        : "";
+}
+
+function normalizedLanguage(value) {
+    return typeof value === "string"
+        ? value.trim().toLocaleLowerCase("en-US")
+        : "";
+}
+
 export function normalizedKeyword(value) {
     return typeof value === "string"
         ? value.normalize("NFKC").toLocaleLowerCase("en-US").replace(/\s+/g, " ").trim()
@@ -22,9 +34,7 @@ export function normalizedKeyword(value) {
 }
 
 function displayKeyword(value) {
-    return typeof value === "string"
-        ? value.normalize("NFKC").replace(/\s+/g, " ").trim()
-        : "";
+    return cleanText(value);
 }
 
 export function groupedValidatedKeywords(highlights) {
@@ -37,9 +47,20 @@ export function groupedValidatedKeywords(highlights) {
         const current = groups.get(key) || {
             normalizedText: key,
             variants: new Set(),
+            englishSourceTexts: new Set(),
+            sourceMessageIds: new Set(),
             count: 0
         };
         if (text) current.variants.add(text);
+        const language = normalizedLanguage(highlight?.source_language);
+        const englishSourceText = cleanText(highlight?.english_translation);
+        if (language && language !== "en" && englishSourceText) {
+            current.englishSourceTexts.add(englishSourceText);
+        }
+        if (highlight?.message_id !== null
+            && highlight?.message_id !== undefined) {
+            current.sourceMessageIds.add(String(highlight.message_id));
+        }
         current.count += 1;
         groups.set(key, current);
     });
@@ -49,6 +70,10 @@ export function groupedValidatedKeywords(highlights) {
             normalizedText: group.normalizedText,
             text: [...group.variants].sort(deterministicTextCompare)[0]
                 || group.normalizedText,
+            englishSourceTexts: [...group.englishSourceTexts]
+                .sort(deterministicTextCompare),
+            sourceMessageIds: [...group.sourceMessageIds]
+                .sort(deterministicTextCompare),
             count: group.count
         }))
         .sort((left, right) =>
@@ -58,6 +83,45 @@ export function groupedValidatedKeywords(highlights) {
                 right.normalizedText
             )
         );
+}
+
+export function groupEqualMentionRanks(items, countKey) {
+    const groups = [];
+
+    (items || []).forEach(item => {
+        const mentionCount = Number(item?.[countKey]) || 0;
+        const current = groups.at(-1);
+        if (!current || current.mentionCount !== mentionCount) {
+            groups.push({
+                rank: groups.length + 1,
+                mentionCount,
+                items: [item]
+            });
+            return;
+        }
+        current.items.push(item);
+    });
+
+    return groups;
+}
+
+function keywordComparisonText(keyword) {
+    return keyword.englishSourceTexts?.length
+        ? keyword.englishSourceTexts.join(" / ")
+        : keyword.text;
+}
+
+function keywordFrequencyGroups(keywords) {
+    return groupEqualMentionRanks(keywords, "count").map(group => ({
+        ...group,
+        count: group.mentionCount,
+        text: [...new Set(group.items.map(keywordComparisonText).filter(Boolean))]
+            .sort(deterministicTextCompare)
+            .join("; "),
+        originalText: group.items.map(item => item.text)
+            .sort(deterministicTextCompare)
+            .join("; ")
+    }));
 }
 
 function codeDisplayLabel(code) {
@@ -94,7 +158,10 @@ export function rankAnalysisCase(
                 ...unranked,
                 rankedCodes: [],
                 rankedThemes: [],
-                rankedKeywords: []
+                rankedKeywords: [],
+                rankedCodeGroups: [],
+                rankedThemeGroups: [],
+                rankedKeywordGroups: []
             }
             : unranked;
     }
@@ -125,15 +192,18 @@ export function rankAnalysisCase(
         })
         .sort((left, right) =>
             right.occurrenceCount - left.occurrenceCount
-            || right.keywordCount - left.keywordCount
             || deterministicRecordCompare(left, right, "code_label")
-        )
-        .map((code, index) => ({
-            ...code,
-            rank: index + 1
-        }));
+        );
+    const rankedCodeGroups = groupEqualMentionRanks(
+        rankedCodes,
+        "occurrenceCount"
+    );
+    rankedCodeGroups.forEach(group => {
+        group.items = group.items.map(code => ({ ...code, rank: group.rank }));
+    });
+    const rankedCodeItems = rankedCodeGroups.flatMap(group => group.items);
 
-    const validCodeIds = new Set(rankedCodes.map(code => code.id));
+    const validCodeIds = new Set(rankedCodeItems.map(code => code.id));
     const mappings = Array.isArray(caseRecord.themeCodes)
         ? caseRecord.themeCodes
         : [];
@@ -161,16 +231,18 @@ export function rankAnalysisCase(
         })
         .sort((left, right) =>
             right.occurrenceCount - left.occurrenceCount
-            || right.codeCount - left.codeCount
-            || right.keywordCount - left.keywordCount
             || deterministicRecordCompare(left, right, "theme_label")
-        )
-        .map((theme, index) => ({
-            ...theme,
-            rank: index + 1
-        }));
+        );
+    const rankedThemeGroups = groupEqualMentionRanks(
+        rankedThemes,
+        "occurrenceCount"
+    );
+    rankedThemeGroups.forEach(group => {
+        group.items = group.items.map(theme => ({ ...theme, rank: group.rank }));
+    });
+    const rankedThemeItems = rankedThemeGroups.flatMap(group => group.items);
 
-    const displayCodes = rankedCodes.map(code => ({
+    const displayCodes = rankedCodeItems.map(code => ({
         ...code,
         original_code_label: code.code_label,
         code_number: code.rank,
@@ -180,7 +252,7 @@ export function rankAnalysisCase(
         },
         code_label: codeDisplayLabel(code)
     }));
-    const displayThemes = rankedThemes.map(theme => ({
+    const displayThemes = rankedThemeItems.map(theme => ({
         ...theme,
         original_theme_label: theme.theme_label,
         theme_number: theme.rank,
@@ -192,19 +264,23 @@ export function rankAnalysisCase(
         theme_label: themeDisplayLabel(theme)
     }));
     const rankedKeywords = groupedValidatedKeywords(highlights);
+    const rankedKeywordGroups = keywordFrequencyGroups(rankedKeywords);
 
     const rankedCase = {
         ...caseRecord,
         codes: displayCodes,
         themes: displayThemes,
-        keywordFrequency: rankedKeywords
+        keywordFrequency: rankedKeywordGroups
     };
     return includeRankedCollections
         ? {
             ...rankedCase,
-            rankedCodes,
-            rankedThemes,
-            rankedKeywords
+            rankedCodes: rankedCodeItems,
+            rankedThemes: rankedThemeItems,
+            rankedKeywords,
+            rankedCodeGroups,
+            rankedThemeGroups,
+            rankedKeywordGroups
         }
         : rankedCase;
 }

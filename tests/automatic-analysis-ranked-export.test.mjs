@@ -66,8 +66,120 @@ test("complete workbook uses the shared ranking and contains Forms 1-3", async (
         workbook.worksheets.map(sheet => sheet.name),
         ["1 Cases & keywords", "2 Codes", "3 Themes"]
     );
-    assert.match(workbook.getWorksheet("2 Codes").getCell("D2").value, /^Strong · 1, 3$/);
-    assert.match(workbook.getWorksheet("3 Themes").getCell("D2").value, /^Strong theme · 3, 1, 1$/);
+    const formOne = workbook.getWorksheet("1 Cases & keywords");
+    const headers = formOne.getRow(1).values.slice(1);
+    assert.deepEqual(headers.slice(0, 3), ["P#", "S#", "Language"]);
+    assert.ok(!headers.includes("Session ID"));
+    assert.ok(!headers.includes("Case interpretation"));
+    const reportColumn = headers.indexOf("Case report") + 1;
+    assert.equal(formOne.getRow(2).getCell(reportColumn).value, "Available");
+    assert.match(
+        JSON.stringify(formOne.getRow(2).getCell(reportColumn).note),
+        /Interpretation/
+    );
+    assert.equal(formOne.getRow(2).height, 18);
+    assert.equal(formOne.getColumn(1).width, 9);
+    assert.equal(formOne.getColumn(2).width, 5);
+    assert.match(
+        workbook.getWorksheet("2 Codes").getCell("D2").value,
+        /^3 mentions each · Strong \(1 keyword\)$/
+    );
+    assert.match(
+        workbook.getWorksheet("3 Themes").getCell("D2").value,
+        /^3 mentions each · Strong theme \(1 code, 1 keyword\)$/
+    );
+});
+
+test("workbook groups equal mention ranks and uses stored English source text", async () => {
+    const ranked = rankAnalysisCase({
+        caseNumber: "P0002-S01",
+        participantCode: "P0002",
+        sessionNumber: 1,
+        sessionId: "session-2",
+        status: "completed",
+        hasReport: true,
+        language: "zh",
+        demographics: {},
+        caseInterpretation: "Late sleep and night work recur in this case.",
+        codes: [
+            { id: "work", code_number: 1, code_label: "Work schedule" },
+            { id: "sleep", code_number: 2, code_label: "Sleep patterns" }
+        ],
+        themes: [
+            { id: "work-theme", theme_number: 1, theme_label: "Work" },
+            { id: "sleep-theme", theme_number: 2, theme_label: "Sleep" }
+        ],
+        themeCodes: [
+            { theme_id: "work-theme", code_id: "work" },
+            { theme_id: "sleep-theme", code_id: "sleep" }
+        ],
+        highlights: [
+            {
+                id: "s1",
+                code_id: "sleep",
+                message_id: "message-1",
+                exact_text: "晚睡",
+                source_language: "zh",
+                english_translation: "I go to bed late."
+            },
+            {
+                id: "s2",
+                code_id: "sleep",
+                message_id: "message-2",
+                exact_text: "晚睡",
+                source_language: "zh",
+                english_translation: "I go to bed late."
+            },
+            {
+                id: "w1",
+                code_id: "work",
+                message_id: "message-3",
+                exact_text: "夜班",
+                source_language: "zh",
+                english_translation: "I work night shifts."
+            },
+            {
+                id: "w2",
+                code_id: "work",
+                message_id: "message-4",
+                exact_text: "夜班",
+                source_language: "zh",
+                english_translation: "I work night shifts."
+            }
+        ]
+    });
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(await workbookBuffer([ranked]));
+
+    const formOne = workbook.getWorksheet("1 Cases & keywords");
+    const headers = formOne.getRow(1).values.slice(1);
+    const keywordColumn = headers.indexOf("K1") + 1;
+    const keywordCell = formOne.getRow(2).getCell(keywordColumn);
+    assert.match(keywordCell.value, /^2 mentions each/);
+    assert.match(keywordCell.value, /I go to bed late\./);
+    assert.match(keywordCell.value, /I work night shifts\./);
+    assert.doesNotMatch(keywordCell.value, /晚睡|夜班/);
+    const keywordNote = JSON.stringify(keywordCell.note);
+    assert.match(keywordNote, /晚睡/);
+    assert.match(keywordNote, /夜班/);
+    assert.match(keywordNote, /message-1/);
+    assert.match(keywordNote, /message-4/);
+
+    const codeSheet = workbook.getWorksheet("2 Codes");
+    assert.equal(codeSheet.getCell("D1").value, "C1");
+    assert.equal(codeSheet.getCell("E1").value, null);
+    assert.match(
+        codeSheet.getCell("D2").value,
+        /^2 mentions each · Sleep patterns \(1 keyword\); Work schedule \(1 keyword\)$/
+    );
+
+    const themeSheet = workbook.getWorksheet("3 Themes");
+    assert.equal(themeSheet.getCell("D1").value, "T1");
+    assert.equal(themeSheet.getCell("E1").value, null);
+    assert.match(
+        themeSheet.getCell("D2").value,
+        /^2 mentions each · Sleep \(1 code, 1 keyword\); Work \(1 code, 1 keyword\)$/
+    );
 });
 
 test("streamed complete workbook represents 10,000 cases in one file", async () => {
@@ -83,7 +195,10 @@ test("streamed complete workbook represents 10,000 cases in one file", async () 
         caseInterpretation: "",
         rankedCodes: [],
         rankedThemes: [],
-        rankedKeywords: []
+        rankedKeywords: [],
+        rankedCodeGroups: [],
+        rankedThemeGroups: [],
+        rankedKeywordGroups: []
     }));
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(await workbookBuffer(cases));
@@ -136,6 +251,7 @@ test("active export excludes archived jobs and legacy URL redirects to the canon
         rankedExport,
         /automatic_case_analysis_jobs[\s\S]*\.is\("archived_at", null\)/
     );
+    assert.match(rankedExport, /select\("id, Language, EnglishTranslation"\)/);
     assert.deepEqual(vercelConfig.redirects, [{
         source: "/api/automatic-analysis-export",
         destination: "/api/automatic-analysis-ranked-export",
