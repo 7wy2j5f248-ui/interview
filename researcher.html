@@ -726,9 +726,9 @@
         The sequence is evidence first: exact keywords are highlighted in the
         transcript and colour-grouped into participant-specific codes; codes
         are then grouped into participant-specific themes. Within each case,
-        K1, C1, and T1 are deterministic ordinal rankings of validated
-        evidence, not generation order; they never carry a fixed meaning
-        across participants.
+        K1, C1, and T1 are deterministic mention-count levels of validated
+        evidence, not generation order. Equal mention totals share the same
+        level, and the labels never carry a fixed meaning across participants.
     </p>
 
     <div id="automaticAnalysisTokenGate">
@@ -1614,7 +1614,7 @@ document.getElementById("periodResetButton").addEventListener("click", () => {
 loadStatistics();
 
 </script>
-<script src="researcher-automatic-analysis.js?version=20260829-server-ranked-v11"></script>
+<script src="researcher-automatic-analysis.js?version=20260829-tied-ranks-v12"></script>
     
 </body>
 </html>

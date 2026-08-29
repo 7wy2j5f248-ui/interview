@@ -11,7 +11,7 @@
     const button = originalButton.cloneNode(true);
     button.id = originalButton.id;
     button.textContent = "Download complete Excel (Forms 1–3)";
-    button.title = "Downloads every active case in one Excel workbook. Ordinal K/C/T positions use PLI's validated-evidence ranking; the 100-case dashboard page size does not limit this export.";
+    button.title = "Downloads every active case in one Excel workbook. K/C/T levels use total validated mentions, and equal mention counts share one rank cell; the 100-case dashboard page size does not limit this export.";
     originalButton.replaceWith(button);
 
     if (lockButton) {
@@ -30,7 +30,7 @@
         button.disabled = true;
         const oldLabel = button.textContent;
         button.textContent = "Preparing complete Excel…";
-        status.textContent = "Preparing the complete corpus. Keywords are ordered by validated frequency, codes by total validated keyword mentions then distinct keywords, and themes by total validated mentions, supporting codes, then distinct keywords.";
+        status.textContent = "Preparing the complete corpus. Total validated mentions define each K/C/T level, and equal mention counts are grouped together. Keyword, code, and theme ties are ordered alphabetically inside their shared rank cell.";
         status.className = "muted";
 
         try {

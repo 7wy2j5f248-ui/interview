@@ -227,7 +227,7 @@
             ...FORM_ONE_DEMOGRAPHIC_COLUMNS.map(([, label]) => label),
             ...Array.from(
                 { length: maximumKeywords },
-                (_, index) => `K${index + 1} · validated frequency`
+                (_, index) => `K${index + 1} · mention level`
             )
         ]);
         const body = document.createElement("tbody");
@@ -254,7 +254,11 @@
                 const keyword = caseRecord.keywordFrequency?.[index];
                 const cell = createCell(
                     row,
-                    keyword ? `${keyword.text} (${keyword.count})` : "—"
+                    keyword
+                        ? `${keyword.count} mention${
+                            keyword.count === 1 ? "" : "s"
+                        } each · ${keyword.text}`
+                        : "—"
                 );
                 if (keyword) {
                     cell.title = `${keyword.count} validated occurrence${
@@ -328,23 +332,35 @@
             const row = document.createElement("tr");
             createCell(row, participantCode(caseRecord), "analysisIdentifierCell");
             createCell(row, sessionNumber(caseRecord), "analysisIdentifierCell");
-            const byNumber = new Map((caseRecord[recordsKey] || []).map(record => [
-                record[numberKey],
-                record
-            ]));
+            const byNumber = (caseRecord[recordsKey] || []).reduce(
+                (groups, record) => {
+                    const values = groups.get(record[numberKey]) || [];
+                    values.push(record);
+                    groups.set(record[numberKey], values);
+                    return groups;
+                },
+                new Map()
+            );
 
             for (let number = 1; number <= maximum; number += 1) {
-                const record = byNumber.get(number);
+                const records = byNumber.get(number) || [];
                 const cell = document.createElement("td");
 
-                if (record) {
-                    const button = document.createElement("button");
-                    button.type = "button";
-                    button.className = "worksheetExpressionButton";
-                    button.textContent = record[labelKey];
-                    button.title = record.rationale;
-                    button.addEventListener("click", () => openTranscript(caseRecord));
-                    cell.appendChild(button);
+                if (records.length) {
+                    records.forEach(record => {
+                        const line = document.createElement("div");
+                        const button = document.createElement("button");
+                        button.type = "button";
+                        button.className = "worksheetExpressionButton";
+                        button.textContent = record[labelKey];
+                        button.title = record.rationale;
+                        button.addEventListener(
+                            "click",
+                            () => openTranscript(caseRecord)
+                        );
+                        line.appendChild(button);
+                        cell.appendChild(line);
+                    });
                 } else {
                     cell.textContent = "—";
                     cell.className = "analysisEmptyCell";
@@ -424,26 +440,39 @@
                 demographicValue(caseRecord, key)
             ));
 
-            const codeByNumber = new Map((caseRecord.codes || []).map(code => [
-                code.code_number,
-                code
-            ]));
+            const codeByNumber = (caseRecord.codes || []).reduce((groups, code) => {
+                const values = groups.get(code.code_number) || [];
+                values.push(code);
+                groups.set(code.code_number, values);
+                return groups;
+            }, new Map());
             for (let number = 1; number <= maximumCodes; number += 1) {
-                const code = codeByNumber.get(number);
-                const cell = createCell(row, code?.code_label || "—");
-                cell.title = code?.rationale || "";
-                if (!code) cell.className = "analysisEmptyCell";
+                const codes = codeByNumber.get(number) || [];
+                const cell = createCell(
+                    row,
+                    codes.map(code => code.code_label).join(" | ") || "—"
+                );
+                cell.title = codes.map(code => code.rationale).join("\n");
+                if (!codes.length) cell.className = "analysisEmptyCell";
             }
 
-            const themeByNumber = new Map((caseRecord.themes || []).map(theme => [
-                theme.theme_number,
-                theme
-            ]));
+            const themeByNumber = (caseRecord.themes || []).reduce(
+                (groups, theme) => {
+                    const values = groups.get(theme.theme_number) || [];
+                    values.push(theme);
+                    groups.set(theme.theme_number, values);
+                    return groups;
+                },
+                new Map()
+            );
             for (let number = 1; number <= maximumThemes; number += 1) {
-                const theme = themeByNumber.get(number);
-                const cell = createCell(row, theme?.theme_label || "—");
-                cell.title = theme?.rationale || "";
-                if (!theme) cell.className = "analysisEmptyCell";
+                const themes = themeByNumber.get(number) || [];
+                const cell = createCell(
+                    row,
+                    themes.map(theme => theme.theme_label).join(" | ") || "—"
+                );
+                cell.title = themes.map(theme => theme.rationale).join("\n");
+                if (!themes.length) cell.className = "analysisEmptyCell";
             }
 
             body.appendChild(row);
@@ -490,14 +519,14 @@
             });
         document.getElementById("automaticAnalysisDescription").textContent =
             activeView === "cases"
-                ? `Form 1: ${completedCases.length} available case reports are shown first in permanent participant-code order, matching Forms 2 and 3. ${casesWithMarkedKeywords} reports currently have validated keyword evidence, ranked by occurrence count with deterministic alphabetical ties. Use Archive on a completed row to remove it from active analysis; it can later be restored from the Archive tab. Transcripts awaiting their first report remain available below them in the same stable order.`
+                ? `Form 1: ${completedCases.length} available case reports are shown first in permanent participant-code order, matching Forms 2 and 3. ${casesWithMarkedKeywords} reports currently have validated keyword evidence, grouped into equal mention-count levels with deterministic alphabetical ordering inside each tie. Use Archive on a completed row to remove it from active analysis; it can later be restored from the Archive tab. Transcripts awaiting their first report remain available below them in the same stable order.`
                 : activeView === "codes"
-                    ? "Form 2: each case starts at C1. Codes rank by total validated keyword mentions, then distinct validated keywords, then a deterministic alphabetical tie-breaker. Headers are positional only; participant-specific code content stays inside cells."
+                    ? "Form 2: each case starts at C1. Total validated mentions are the sole grading criterion; equal-mention codes share one rank cell and are ordered alphabetically inside that tied group. Distinct keyword counts remain reference metadata only."
                     : activeView === "themes"
-                        ? "Form 3: each case starts at T1. Themes rank by total validated keyword mentions, then supporting codes, then distinct validated keywords, then a deterministic alphabetical tie-breaker. Headers are positional only; participant-specific theme content stays inside cells."
+                        ? "Form 3: each case starts at T1. Total validated mentions are the sole grading criterion; equal-mention themes share one rank cell and are ordered alphabetically inside that tied group. Supporting-code and distinct-keyword counts remain reference metadata only."
                         : activeView === "incomplete"
                             ? "Form 4 · Needs attention: unfinished interviews are separate from Forms 1–3. Each row preserves its transcript and separated demographic fields, summarizes only the material actually recorded, and states how incomplete the interview is. No themes, codes, or keywords are assigned before formal completion."
-                            : "Archived cases are excluded from every active analysis form and from future automatic reanalysis. Each archived row preserves its transcript, report, language, demographic columns, positional C1–Cn codes, positional T1–Tn themes, and archive history.";
+                            : "Archived cases are excluded from every active analysis form and from future automatic reanalysis. Each archived row preserves its transcript, report, language, demographic columns, mention-ranked C1–Cn code groups, mention-ranked T1–Tn theme groups, and archive history.";
     }
 
     function highlightedText(message, caseRecord) {
@@ -819,8 +848,19 @@
             ));
             rows = [["Participant code", "Session number", ...Array.from({ length: maximum }, (_, index) => `${prefix}${index + 1}`)],
                 ...completed.map(item => {
-                    const records = new Map((item[recordsKey] || []).map(record => [record[numberKey], record[labelKey]]));
-                    return [participantCode(item), sessionNumber(item), ...Array.from({ length: maximum }, (_, index) => records.get(index + 1) || "")];
+                    const records = (item[recordsKey] || []).reduce(
+                        (groups, record) => {
+                            const values = groups.get(record[numberKey]) || [];
+                            values.push(record[labelKey]);
+                            groups.set(record[numberKey], values);
+                            return groups;
+                        },
+                        new Map()
+                    );
+                    return [participantCode(item), sessionNumber(item), ...Array.from(
+                        { length: maximum },
+                        (_, index) => (records.get(index + 1) || []).join(" | ")
+                    )];
                 })];
         }
 

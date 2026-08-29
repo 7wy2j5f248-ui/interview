@@ -287,10 +287,10 @@ test("researcher dashboard uses cases, positional codes, and positional themes",
     assert.match(script, /renderArchive/);
     assert.match(script, /maximumCodes/);
     assert.match(script, /maximumThemes/);
-    assert.match(script, /code\?\.code_label/);
-    assert.match(script, /theme\?\.theme_label/);
-    assert.match(script, /positional C1–Cn codes/);
-    assert.match(script, /positional T1–Tn themes/);
+    assert.match(script, /codes\.map\(code => code\.code_label\)\.join/);
+    assert.match(script, /themes\.map\(theme => theme\.theme_label\)\.join/);
+    assert.match(script, /mention-ranked C1–Cn code groups/);
+    assert.match(script, /mention-ranked T1–Tn theme groups/);
     assert.match(script, /preserves its transcript, report, language, demographic columns/);
     assert.match(
         script,
@@ -632,7 +632,7 @@ test("Cases and keywords loads every case and every stored highlight", async () 
     assert.match(script, /DASHBOARD_PAGE_CONCURRENCY = 4/);
     assert.match(script, /casesWithMarkedKeywords/);
     assert.match(script, /reports currently have validated keyword evidence/);
-    assert.match(html, /researcher-automatic-analysis\.js\?version=20260829-server-ranked-v11/);
+    assert.match(html, /researcher-automatic-analysis\.js\?version=20260829-tied-ranks-v12/);
     assert.match(html, /automaticAnalysisGateStatus/);
     assert.match(script, /cache: "no-store"/);
     assert.match(script, /searchParams\.set\("fresh"/);
