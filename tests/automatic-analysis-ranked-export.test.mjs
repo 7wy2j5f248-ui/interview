@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { PassThrough } from "node:stream";
 import { finished } from "node:stream/promises";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import ExcelJS from "exceljs";
 import {
     writeRankedAnalysisWorkbook
@@ -122,25 +122,37 @@ test("10,000-ID related reads are bounded but no longer sequential", async () =>
     assert.ok(maximumActive <= 8);
 });
 
-test("active export excludes archived jobs and legacy route shares the canonical handler", async () => {
+test("active export excludes archived jobs and legacy URL redirects to the canonical handler", async () => {
     const rankedExport = await readFile(
         new URL("../api/automatic-analysis-ranked-export.js", import.meta.url),
         "utf8"
     );
-    const legacyExport = await readFile(
-        new URL("../api/automatic-analysis-export.js", import.meta.url),
+    const vercelConfig = JSON.parse(await readFile(
+        new URL("../vercel.json", import.meta.url),
         "utf8"
-    );
+    ));
 
     assert.match(
         rankedExport,
         /automatic_case_analysis_jobs[\s\S]*\.is\("archived_at", null\)/
     );
-    assert.match(
-        legacyExport,
-        /from "\.\/automatic-analysis-ranked-export\.js"/
-    );
-    assert.doesNotMatch(legacyExport, /writeBuffer|code_number|theme_number/);
+    assert.deepEqual(vercelConfig.redirects, [{
+        source: "/api/automatic-analysis-export",
+        destination: "/api/automatic-analysis-ranked-export",
+        permanent: true
+    }]);
+});
+
+test("Vercel function entries remain within the Hobby deployment limit", async () => {
+    const apiFiles = (await readdir(new URL("../api/", import.meta.url)))
+        .filter(name => name.endsWith(".js"))
+        .sort();
+
+    assert.ok(apiFiles.length <= 12);
+    assert.equal(apiFiles.length, 11);
+    assert.ok(!apiFiles.includes("participants.js"));
+    assert.ok(!apiFiles.includes("sessions.js"));
+    assert.ok(!apiFiles.includes("automatic-analysis-export.js"));
 });
 
 test("keyword columns are rebuilt from each fully loaded page set", async () => {
