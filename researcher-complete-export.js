@@ -10,8 +10,8 @@
 
     const button = originalButton.cloneNode(true);
     button.id = originalButton.id;
-    button.textContent = "Download complete Excel (Forms 1–3)";
-    button.title = "Downloads every active case in one Excel workbook. The 100-case dashboard page size does not limit this export.";
+    button.textContent = "Download complete Excel (frequency-ranked)";
+    button.title = "Downloads every active case in one Excel workbook. Keywords, codes, and themes are ranked by evidential frequency/support; the 100-case dashboard page size does not limit this export.";
     originalButton.replaceWith(button);
 
     if (lockButton) {
@@ -29,12 +29,12 @@
 
         button.disabled = true;
         const oldLabel = button.textContent;
-        button.textContent = "Preparing complete Excel…";
-        status.textContent = "Preparing one Excel workbook containing the complete active corpus in Forms 1–3. This can take longer for very large datasets.";
+        button.textContent = "Preparing ranked Excel…";
+        status.textContent = "Preparing the complete corpus. Keywords are ordered by frequency, codes by total keyword mentions, and themes by supporting codes and mentions.";
         status.className = "muted";
 
         try {
-            const response = await fetch("/api/automatic-analysis-export", {
+            const response = await fetch("/api/automatic-analysis-ranked-export", {
                 cache: "no-store",
                 headers: {
                     Authorization: `Bearer ${token}`
@@ -44,14 +44,14 @@
             if (!response.ok) {
                 const data = await response.json().catch(() => ({}));
                 throw new Error(
-                    data.error || "The complete Excel export could not be generated."
+                    data.error || "The frequency-ranked Excel export could not be generated."
                 );
             }
 
             const blob = await response.blob();
             const disposition = response.headers.get("Content-Disposition") || "";
             const filename = disposition.match(/filename="([^"]+)"/)?.[1]
-                || "PLI-complete-analysis.xlsx";
+                || "PLI-frequency-ranked-analysis.xlsx";
             const caseCount = response.headers.get("X-PLI-Case-Count");
             const link = document.createElement("a");
             const url = URL.createObjectURL(blob);
@@ -63,8 +63,8 @@
             URL.revokeObjectURL(url);
 
             status.textContent = caseCount
-                ? `Complete Excel downloaded: ${caseCount} active cases across Forms 1–3.`
-                : "Complete Excel downloaded with Forms 1–3.";
+                ? `Frequency-ranked Excel downloaded: ${caseCount} active cases across Forms 1–3.`
+                : "Frequency-ranked Excel downloaded with Forms 1–3.";
             status.className = "muted";
         } catch (error) {
             status.textContent = error.message;
