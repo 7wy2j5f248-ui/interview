@@ -31,8 +31,11 @@ function cleanValue(value) {
 function mergedDemographics(report, descriptor) {
     const result = {};
     DEMOGRAPHIC_FIELDS.forEach(([field]) => {
-        result[field] = descriptor?.[field] ?? null;
-        const reported = report?.demographics?.[field];
+        result[field] = descriptor?.[field]
+            ?? descriptor?.additional_descriptors?.[field]
+            ?? null;
+        const reported = report?.demographics?.[field]
+            ?? report?.demographics?.additional_descriptors?.[field];
         if (reported !== null && reported !== undefined && reported !== "") {
             result[field] = reported;
         }
@@ -158,7 +161,7 @@ async function loadActiveCases(supabase) {
             sessionIds,
             chunk => supabase
                 .from("participant_descriptors")
-                .select("session_id, current_country, current_region, country_of_origin, diaspora_status, gender, age, birth_year, birth_cohort, youth_status, occupation, education_level, social_identity, additional_descriptors")
+                .select("session_id, current_country, current_region, country_of_origin, diaspora_status, gender, age, birth_year, birth_cohort, youth_status, education_level, social_identity, additional_descriptors")
                 .in("session_id", chunk)
                 .order("session_id", { ascending: true }),
             "Participant descriptors could not be loaded for export."
