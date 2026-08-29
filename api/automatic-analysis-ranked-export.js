@@ -39,10 +39,7 @@ function groupedKeywords(highlights) {
     (highlights || []).forEach(highlight => {
         const key = normalizedKeyword(highlight.exact_text);
         if (!key) return;
-        const current = groups.get(key) || {
-            text: highlight.exact_text,
-            count: 0
-        };
+        const current = groups.get(key) || { text: highlight.exact_text, count: 0 };
         current.count += 1;
         groups.set(key, current);
     });
@@ -70,10 +67,7 @@ function mergedDemographics(report, descriptor) {
 async function allRows(queryFactory, message) {
     const rows = [];
     for (let from = 0; ; from += DATABASE_PAGE_SIZE) {
-        const { data, error } = await queryFactory().range(
-            from,
-            from + DATABASE_PAGE_SIZE - 1
-        );
+        const { data, error } = await queryFactory().range(from, from + DATABASE_PAGE_SIZE - 1);
         if (error) throw new Error(message, { cause: error });
         rows.push(...(data || []));
         if (!data || data.length < DATABASE_PAGE_SIZE) return rows;
@@ -101,9 +95,7 @@ function groupBy(rows, key) {
 }
 
 function participantCode(caseRecord) {
-    return caseRecord.participantCode
-        || String(caseRecord.caseNumber || "").split("-S")[0]
-        || "";
+    return caseRecord.participantCode || String(caseRecord.caseNumber || "").split("-S")[0] || "";
 }
 
 function sessionNumber(caseRecord) {
@@ -117,12 +109,9 @@ function sessionNumber(caseRecord) {
 function sortCases(cases) {
     return [...cases].sort((left, right) => {
         const participantOrder = participantCode(left).localeCompare(
-            participantCode(right),
-            undefined,
-            { numeric: true }
+            participantCode(right), undefined, { numeric: true }
         );
-        return participantOrder || Number(sessionNumber(left) || 0)
-            - Number(sessionNumber(right) || 0);
+        return participantOrder || Number(sessionNumber(left) || 0) - Number(sessionNumber(right) || 0);
     });
 }
 
@@ -156,11 +145,7 @@ function rankCase(caseRecord) {
         .map((code, index) => ({
             ...code,
             rank: index + 1,
-            ...(codeStats.get(code.id) || {
-                keywordCount: 0,
-                occurrenceCount: 0,
-                keywords: []
-            })
+            ...(codeStats.get(code.id) || { keywordCount: 0, occurrenceCount: 0, keywords: [] })
         }));
 
     const themeMappings = caseRecord.themeCodes || [];
@@ -183,8 +168,8 @@ function rankCase(caseRecord) {
             };
         })
         .sort((left, right) =>
-            right.codeCount - left.codeCount
-            || right.occurrenceCount - left.occurrenceCount
+            right.occurrenceCount - left.occurrenceCount
+            || right.codeCount - left.codeCount
             || right.keywordCount - left.keywordCount
             || String(left.theme_label || "").localeCompare(
                 String(right.theme_label || ""), undefined, { sensitivity: "base" }
