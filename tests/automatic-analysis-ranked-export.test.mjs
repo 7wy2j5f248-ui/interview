@@ -246,12 +246,20 @@ test("active export excludes archived jobs and legacy URL redirects to the canon
         new URL("../vercel.json", import.meta.url),
         "utf8"
     ));
+    const highlightSources = await readFile(
+        new URL("../server/analysisHighlightSources.js", import.meta.url),
+        "utf8"
+    );
 
     assert.match(
         rankedExport,
         /automatic_case_analysis_jobs[\s\S]*\.is\("archived_at", null\)/
     );
-    assert.match(rankedExport, /select\("id, Language, EnglishTranslation"\)/);
+    assert.match(rankedExport, /enrichAnalysisHighlightSources/);
+    assert.match(
+        highlightSources,
+        /select\("id, Language, EnglishTranslation"\)/
+    );
     assert.deepEqual(vercelConfig.redirects, [{
         source: "/api/automatic-analysis-export",
         destination: "/api/automatic-analysis-ranked-export",

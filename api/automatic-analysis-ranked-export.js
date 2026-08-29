@@ -2,6 +2,7 @@ import ExcelJS from "exceljs";
 import { createClient } from "@supabase/supabase-js";
 import { authorizeResearcher } from "../server/researcherAuth.js";
 import { rankAnalysisCase } from "../server/analysisFrequencyRanking.js";
+import { enrichAnalysisHighlightSources } from "../server/analysisHighlightSources.js";
 import {
     allRows,
     createTaskLimiter,
@@ -255,27 +256,11 @@ export async function loadActiveCases(supabase) {
             .in("report_id", chunk)
             .order("report_id", { ascending: true }), "Theme-code mappings could not be loaded for export.")
     ]);
-    const sourceMessages = await relatedRows(
-        highlights.map(highlight => highlight.message_id),
-        chunk => supabase
-            .from("interview_messages")
-            .select("id, Language, EnglishTranslation")
-            .in("id", chunk)
-            .order("id", { ascending: true }),
-        "Stored English source translations could not be loaded for export."
+    const exportHighlights = await enrichAnalysisHighlightSources(
+        supabase,
+        highlights,
+        { schedule }
     );
-    const sourceMessageById = new Map(sourceMessages.map(message => [
-        String(message.id),
-        message
-    ]));
-    const exportHighlights = highlights.map(highlight => {
-        const source = sourceMessageById.get(String(highlight.message_id));
-        return {
-            ...highlight,
-            source_language: source?.Language || null,
-            english_translation: source?.EnglishTranslation || null
-        };
-    });
 
     const reportBySession = new Map(reports.map(row => [row.session_id, row]));
     const sessionById = new Map(sessions.map(row => [row.session_id, row]));

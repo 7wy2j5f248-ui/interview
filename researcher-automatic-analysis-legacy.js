@@ -3,6 +3,11 @@
 
     const TOKEN_STORAGE_KEY = "researcherDashboardToken";
     const DASHBOARD_PAGE_CONCURRENCY = 4;
+    const DASHBOARD_REQUEST_TIMEOUT_MS = 20000;
+    const COMPACT_IDENTIFIER_HEADERS = Object.freeze([
+        { label: "P#", className: "analysisIdentifierColumn" },
+        { label: "S#", className: "analysisIdentifierColumn" }
+    ]);
     const FORM_ONE_DEMOGRAPHIC_COLUMNS = Object.freeze([
         ["current_country", "Country of residence"],
         ["current_region", "Region of residence"],
@@ -123,6 +128,19 @@
         return cell;
     }
 
+    function createIdentifierCells(row, caseRecord) {
+        createCell(
+            row,
+            participantCode(caseRecord),
+            "analysisIdentifierCell analysisIdentifierColumn"
+        );
+        createCell(
+            row,
+            sessionNumber(caseRecord),
+            "analysisIdentifierCell analysisIdentifierColumn"
+        );
+    }
+
     function createTable(headers) {
         const scroll = document.createElement("div");
         scroll.className = "tableScroll";
@@ -132,9 +150,13 @@
         const row = document.createElement("tr");
 
         headers.forEach(header => {
+            const definition = typeof header === "string"
+                ? { label: header }
+                : header;
             const cell = document.createElement("th");
             cell.scope = "col";
-            cell.textContent = header;
+            cell.textContent = definition.label;
+            cell.className = definition.className || "";
             row.appendChild(cell);
         });
 
@@ -218,8 +240,7 @@
             )
         );
         const { scroll, table } = createTable([
-            "Participant code",
-            "Session number",
+            ...COMPACT_IDENTIFIER_HEADERS,
             "Link to transcript",
             "Case report",
             "Archive",
@@ -227,15 +248,19 @@
             ...FORM_ONE_DEMOGRAPHIC_COLUMNS.map(([, label]) => label),
             ...Array.from(
                 { length: maximumKeywords },
-                (_, index) => `K${index + 1} · mention level`
+                (_, index) => ({
+                    label: `K${index + 1} · mention level`,
+                    className: index === 0
+                        ? "analysisKeywordColumn analysisPrimaryKeywordColumn"
+                        : "analysisKeywordColumn"
+                })
             )
         ]);
         const body = document.createElement("tbody");
 
         orderedCases.forEach(caseRecord => {
             const row = document.createElement("tr");
-            createCell(row, participantCode(caseRecord), "analysisIdentifierCell");
-            createCell(row, sessionNumber(caseRecord), "analysisIdentifierCell");
+            createIdentifierCells(row, caseRecord);
             const transcriptCell = document.createElement("td");
             transcriptCell.appendChild(transcriptButton(caseRecord));
             row.appendChild(transcriptCell);
@@ -258,12 +283,30 @@
                         ? `${keyword.count} mention${
                             keyword.count === 1 ? "" : "s"
                         } each · ${keyword.text}`
-                        : "—"
+                        : "—",
+                    index === 0
+                        ? "analysisKeywordColumn analysisPrimaryKeywordColumn"
+                        : "analysisKeywordColumn"
                 );
                 if (keyword) {
-                    cell.title = `${keyword.count} validated occurrence${
-                        keyword.count === 1 ? "" : "s"
-                    }`;
+                    const sourceMessageIds = [...new Set(
+                        (keyword.items || []).flatMap(item =>
+                            item.sourceMessageIds || []
+                        )
+                    )];
+                    cell.title = [
+                        `${keyword.count} validated occurrence${
+                            keyword.count === 1 ? "" : "s"
+                        } for each tied keyword.`,
+                        keyword.originalText
+                            ? `Original evidence: ${keyword.originalText}`
+                            : "",
+                        sourceMessageIds.length
+                            ? `Source message ID${sourceMessageIds.length === 1 ? "" : "s"}: ${
+                                sourceMessageIds.join(", ")
+                            }`
+                            : ""
+                    ].filter(Boolean).join("\n");
                 } else {
                     cell.className = "analysisEmptyCell";
                 }
@@ -277,8 +320,7 @@
 
     function renderIncomplete() {
         const { scroll, table } = createTable([
-            "Participant code",
-            "Session number",
+            ...COMPACT_IDENTIFIER_HEADERS,
             "Link to transcript",
             "Why it needs attention",
             "Brief partial-case summary",
@@ -290,8 +332,7 @@
 
         casesForCaseAndKeywordForm().forEach(caseRecord => {
             const row = document.createElement("tr");
-            createCell(row, participantCode(caseRecord), "analysisIdentifierCell");
-            createCell(row, sessionNumber(caseRecord), "analysisIdentifierCell");
+            createIdentifierCells(row, caseRecord);
             const transcriptCell = document.createElement("td");
             transcriptCell.appendChild(transcriptButton(caseRecord));
             row.appendChild(transcriptCell);
@@ -322,16 +363,14 @@
             Math.max(0, ...(item[recordsKey] || []).map(record => record[numberKey]))
         ));
         const { scroll, table } = createTable([
-            "Participant code",
-            "Session number",
+            ...COMPACT_IDENTIFIER_HEADERS,
             ...Array.from({ length: maximum }, (_, index) => `${prefix}${index + 1}`)
         ]);
         const body = document.createElement("tbody");
 
         completed.forEach(caseRecord => {
             const row = document.createElement("tr");
-            createCell(row, participantCode(caseRecord), "analysisIdentifierCell");
-            createCell(row, sessionNumber(caseRecord), "analysisIdentifierCell");
+            createIdentifierCells(row, caseRecord);
             const byNumber = (caseRecord[recordsKey] || []).reduce(
                 (groups, record) => {
                     const values = groups.get(record[numberKey]) || [];
@@ -392,8 +431,7 @@
             Math.max(0, ...(item.themes || []).map(theme => theme.theme_number))
         ));
         const { scroll, table } = createTable([
-            "Participant code",
-            "Session number",
+            ...COMPACT_IDENTIFIER_HEADERS,
             "Archived",
             "Archive note",
             "Link to transcript",
@@ -414,8 +452,7 @@
 
         payload.cases.forEach(caseRecord => {
             const row = document.createElement("tr");
-            createCell(row, participantCode(caseRecord), "analysisIdentifierCell");
-            createCell(row, sessionNumber(caseRecord), "analysisIdentifierCell");
+            createIdentifierCells(row, caseRecord);
             createCell(row, formatTimestamp(caseRecord.archivedAt));
             createCell(row, caseRecord.archiveNote || "—");
             const transcriptCell = document.createElement("td");
@@ -757,8 +794,8 @@
                 Math.max(0, ...(item.themes || []).map(theme => theme.theme_number))
             ));
             rows = [[
-                "Participant code",
-                "Session number",
+                "P#",
+                "S#",
                 "Archived",
                 "Archive note",
                 "Link to transcript",
@@ -797,8 +834,8 @@
             ])];
         } else if (activeView === "incomplete") {
             rows = [[
-                "Participant code",
-                "Session number",
+                "P#",
+                "S#",
                 "Link to transcript",
                 "Why it needs attention",
                 "Brief partial-case summary",
@@ -820,8 +857,8 @@
         } else if (activeView === "cases") {
             const orderedCases = casesForCaseAndKeywordForm();
             rows = [[
-                "Participant code",
-                "Session number",
+                "P#",
+                "S#",
                 "Link to transcript",
                 "Language",
                 ...FORM_ONE_DEMOGRAPHIC_COLUMNS.map(([, label]) => label),
@@ -846,7 +883,7 @@
             const maximum = Math.max(0, ...completed.map(item =>
                 Math.max(0, ...(item[recordsKey] || []).map(record => record[numberKey]))
             ));
-            rows = [["Participant code", "Session number", ...Array.from({ length: maximum }, (_, index) => `${prefix}${index + 1}`)],
+            rows = [["P#", "S#", ...Array.from({ length: maximum }, (_, index) => `${prefix}${index + 1}`)],
                 ...completed.map(item => {
                     const records = (item[recordsKey] || []).reduce(
                         (groups, record) => {
@@ -877,13 +914,32 @@
         requestUrl.searchParams.set("scope", requestedScope);
         requestUrl.searchParams.set("page", String(page));
         requestUrl.searchParams.set("fresh", `${Date.now()}-${page}`);
-        const response = await fetch(
-            requestUrl,
-            {
-                cache: "no-store",
-                headers: { Authorization: `Bearer ${token()}` }
-            }
+        const controller = new AbortController();
+        const timeout = window.setTimeout(
+            () => controller.abort(),
+            DASHBOARD_REQUEST_TIMEOUT_MS
         );
+        let response;
+
+        try {
+            response = await fetch(
+                requestUrl,
+                {
+                    cache: "no-store",
+                    headers: { Authorization: `Bearer ${token()}` },
+                    signal: controller.signal
+                }
+            );
+        } catch (error) {
+            if (error?.name === "AbortError") {
+                throw new Error(
+                    "The dashboard request timed out. Please try unlocking again."
+                );
+            }
+            throw error;
+        } finally {
+            window.clearTimeout(timeout);
+        }
         const data = await response.json().catch(() => ({}));
 
         if (!response.ok) {
