@@ -108,8 +108,8 @@
                 };
             })
             .sort((left, right) =>
-                right.supportStats.codeCount - left.supportStats.codeCount
-                || right.supportStats.occurrenceCount - left.supportStats.occurrenceCount
+                right.supportStats.occurrenceCount - left.supportStats.occurrenceCount
+                || right.supportStats.codeCount - left.supportStats.codeCount
                 || right.supportStats.keywordCount - left.supportStats.keywordCount
                 || String(left.theme_label || "").localeCompare(
                     String(right.theme_label || ""),
@@ -141,6 +141,85 @@
         if (!rawUrl) return false;
         const url = new URL(rawUrl, window.location.origin);
         return url.pathname === "/api/automatic-analysis";
+    }
+
+    function participantCode(caseRecord) {
+        return caseRecord?.transcriptIdentity?.participantCode
+            || String(caseRecord?.caseNumber || "").split("-S")[0]
+            || "—";
+    }
+
+    function sessionNumber(caseRecord) {
+        if (Number.isInteger(caseRecord?.sessionNumber)
+            && caseRecord.sessionNumber > 0) {
+            return String(caseRecord.sessionNumber);
+        }
+        const match = String(caseRecord?.caseNumber || "").match(/-S(\d+)$/i);
+        return match ? String(Number.parseInt(match[1], 10)) : "—";
+    }
+
+    function currentScope() {
+        const archived = document.querySelector(
+            '[data-automatic-analysis-view="archive"][aria-pressed="true"]'
+        );
+        return archived ? "archived" : "active";
+    }
+
+    function decorateKeywordTable() {
+        const casesTab = document.querySelector(
+            '[data-automatic-analysis-view="cases"][aria-pressed="true"]'
+        );
+        if (!casesTab) return;
+
+        const table = document.querySelector(
+            "#automaticAnalysisTable table.automaticAnalysisTable"
+        );
+        if (!table || table.dataset.frequencyKeywords === "true") return;
+
+        const caseMap = window.PLI_FREQUENCY_ANALYSIS.casesByScope.get(
+            currentScope()
+        );
+        if (!caseMap?.size) return;
+
+        const cases = [...caseMap.values()];
+        const maximum = Math.max(
+            0,
+            ...cases.map(item => item.keywordFrequency?.length || 0)
+        );
+        if (!maximum) return;
+
+        const byDisplayIdentity = new Map(cases.map(item => [
+            `${participantCode(item)}\u0000${sessionNumber(item)}`,
+            item
+        ]));
+        const headerRow = table.tHead?.rows?.[0];
+        if (!headerRow) return;
+
+        for (let index = 0; index < maximum; index += 1) {
+            const header = document.createElement("th");
+            header.scope = "col";
+            header.textContent = `K${index + 1} · frequency`;
+            headerRow.appendChild(header);
+        }
+
+        [...(table.tBodies?.[0]?.rows || [])].forEach(row => {
+            const key = `${row.cells[0]?.textContent || ""}\u0000${row.cells[1]?.textContent || ""}`;
+            const caseRecord = byDisplayIdentity.get(key);
+            for (let index = 0; index < maximum; index += 1) {
+                const keyword = caseRecord?.keywordFrequency?.[index];
+                const cell = document.createElement("td");
+                if (keyword) {
+                    cell.textContent = `${keyword.text} (${keyword.count})`;
+                    cell.title = `${keyword.count} validated occurrence${keyword.count === 1 ? "" : "s"}`;
+                } else {
+                    cell.textContent = "—";
+                    cell.className = "analysisEmptyCell";
+                }
+                row.appendChild(cell);
+            }
+        });
+
+        table.dataset.frequencyKeywords = "true";
     }
 
     window.fetch = async function rankedAutomaticAnalysisFetch(input, init) {
@@ -178,4 +257,16 @@
             return response;
         }
     };
+
+    const tableHost = document.getElementById("automaticAnalysisTable");
+    if (tableHost) {
+        const observer = new MutationObserver(() => decorateKeywordTable());
+        observer.observe(tableHost, { childList: true, subtree: true });
+    }
+    window.addEventListener("plifrequencyanalysisupdate", () => {
+        queueMicrotask(decorateKeywordTable);
+    });
+    document.querySelectorAll("[data-automatic-analysis-view]").forEach(button => {
+        button.addEventListener("click", () => queueMicrotask(decorateKeywordTable));
+    });
 }());
