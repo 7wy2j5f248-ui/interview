@@ -10,8 +10,8 @@
 
     const button = originalButton.cloneNode(true);
     button.id = originalButton.id;
-    button.textContent = "Download complete Excel (frequency-ranked)";
-    button.title = "Downloads every active case in one Excel workbook. Keywords, codes, and themes are ranked by evidential frequency/support; the 100-case dashboard page size does not limit this export.";
+    button.textContent = "Download complete Excel (Forms 1–3)";
+    button.title = "Downloads every active case in one Excel workbook. Ordinal K/C/T positions use PLI's validated-evidence ranking; the 100-case dashboard page size does not limit this export.";
     originalButton.replaceWith(button);
 
     if (lockButton) {
@@ -29,7 +29,7 @@
 
         button.disabled = true;
         const oldLabel = button.textContent;
-        button.textContent = "Preparing ranked Excel…";
+        button.textContent = "Preparing complete Excel…";
         status.textContent = "Preparing the complete corpus. Keywords are ordered by validated frequency, codes by total validated keyword mentions then distinct keywords, and themes by total validated mentions, supporting codes, then distinct keywords.";
         status.className = "muted";
 
@@ -63,8 +63,8 @@
             URL.revokeObjectURL(url);
 
             status.textContent = caseCount
-                ? `Frequency-ranked Excel downloaded: ${caseCount} active cases across Forms 1–3.`
-                : "Frequency-ranked Excel downloaded with Forms 1–3.";
+                ? `Complete Excel downloaded: ${caseCount} active cases across Forms 1–3.`
+                : "Complete Excel downloaded with Forms 1–3.";
             status.className = "muted";
         } catch (error) {
             status.textContent = error.message;

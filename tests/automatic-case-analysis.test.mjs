@@ -243,7 +243,7 @@ test("formal completion enqueues a strict FIFO atomic case pipeline", async () =
 test("researcher dashboard uses cases, positional codes, and positional themes", async () => {
     const html = await readFile(new URL("../researcher.html", import.meta.url), "utf8");
     const script = await readFile(
-        new URL("../researcher-automatic-analysis.js", import.meta.url),
+        new URL("../researcher-automatic-analysis-legacy.js", import.meta.url),
         "utf8"
     );
     const dashboard = await readFile(
@@ -256,7 +256,7 @@ test("researcher dashboard uses cases, positional codes, and positional themes",
     assert.match(html, /3 · Themes/);
     assert.match(html, /4 · Incomplete transcripts/);
     assert.match(html, /data-automatic-analysis-view="archive"/);
-    assert.match(html, /Download current form/);
+    assert.match(html, /Download complete Excel \(Forms 1–3\)/);
     assert.match(html, /automaticCaseReportDialog/);
     assert.match(html, /automaticCaseArchiveButton/);
     assert.match(script, /Array\.from\(\{ length: maximum \}[^\n]*`\$\{prefix\}\$\{index \+ 1\}`/);
@@ -312,7 +312,7 @@ test("researcher dashboard uses cases, positional codes, and positional themes",
 test("Form 4 keeps incomplete transcripts separate and marks why they need attention", async () => {
     const html = await readFile(new URL("../researcher.html", import.meta.url), "utf8");
     const script = await readFile(
-        new URL("../researcher-automatic-analysis.js", import.meta.url),
+        new URL("../researcher-automatic-analysis-legacy.js", import.meta.url),
         "utf8"
     );
     const dashboard = await readFile(
@@ -586,7 +586,7 @@ test("automatic dashboard exposes every transcript independently of analysis com
         "utf8"
     );
     const script = await readFile(
-        new URL("../researcher-automatic-analysis.js", import.meta.url),
+        new URL("../researcher-automatic-analysis-legacy.js", import.meta.url),
         "utf8"
     );
 
@@ -609,7 +609,7 @@ test("Cases and keywords loads every case and every stored highlight", async () 
         "utf8"
     );
     const script = await readFile(
-        new URL("../researcher-automatic-analysis.js", import.meta.url),
+        new URL("../researcher-automatic-analysis-legacy.js", import.meta.url),
         "utf8"
     );
     const html = await readFile(
@@ -628,10 +628,11 @@ test("Cases and keywords loads every case and every stored highlight", async () 
         /qualitative_case_keyword_highlights[\s\S]*\.order\("report_id"[\s\S]*\.order\("keyword_number"/
     );
     assert.match(script, /async function fetchDashboardPage/);
-    assert.match(script, /const remainingPages = await Promise\.all/);
+    assert.match(script, /const remainingPages = await fetchRemainingDashboardPages/);
+    assert.match(script, /DASHBOARD_PAGE_CONCURRENCY = 4/);
     assert.match(script, /casesWithMarkedKeywords/);
-    assert.match(script, /reports currently have marked keywords/);
-    assert.match(html, /researcher-automatic-analysis\.js\?version=20260827-incomplete-form-v10/);
+    assert.match(script, /reports currently have validated keyword evidence/);
+    assert.match(html, /researcher-automatic-analysis\.js\?version=20260829-server-ranked-v11/);
     assert.match(html, /automaticAnalysisGateStatus/);
     assert.match(script, /cache: "no-store"/);
     assert.match(script, /searchParams\.set\("fresh"/);
