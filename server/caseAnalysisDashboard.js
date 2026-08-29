@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { authorizeResearcher } from "./researcherAuth.js";
 import { loadParticipantCodeMap } from "./participantCodes.js";
+import { rankAnalysisCase } from "./analysisFrequencyRanking.js";
 
 const PAGE_SIZE = 100;
 const DATABASE_PAGE_SIZE = 1000;
@@ -478,10 +479,12 @@ export async function handleCaseAnalysisDashboard(req, res) {
             };
 
             if (!report) {
-                return sharedCase;
+                return rankAnalysisCase(sharedCase, {
+                    includeRankedCollections: false
+                });
             }
 
-            return {
+            return rankAnalysisCase({
                 ...sharedCase,
                 analysisCompletedAt: report.completed_at,
                 caseInterpretation: report.case_interpretation,
@@ -491,7 +494,9 @@ export async function handleCaseAnalysisDashboard(req, res) {
                 themes: themesByReport.get(report.id) || [],
                 highlights: highlightsByReport.get(report.id) || [],
                 themeCodes: mappingsByReport.get(report.id) || []
-            };
+            }, {
+                includeRankedCollections: false
+            });
         });
 
         return res.status(200).json({

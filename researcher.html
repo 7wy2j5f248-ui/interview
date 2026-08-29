@@ -725,8 +725,10 @@
     <p>
         The sequence is evidence first: exact keywords are highlighted in the
         transcript and colour-grouped into participant-specific codes; codes
-        are then grouped into participant-specific themes. C1 and T1 restart
-        for every case and never carry a fixed meaning across participants.
+        are then grouped into participant-specific themes. Within each case,
+        K1, C1, and T1 are deterministic ordinal rankings of validated
+        evidence, not generation order; they never carry a fixed meaning
+        across participants.
     </p>
 
     <div id="automaticAnalysisTokenGate">
@@ -743,7 +745,7 @@
     <div id="automaticAnalysisWorkspace" hidden>
         <div class="actionRow">
             <button id="automaticAnalysisRefreshButton" type="button">Refresh progress</button>
-            <button id="automaticAnalysisDownloadButton" type="button">Download current form</button>
+            <button id="automaticAnalysisDownloadButton" type="button">Download complete Excel (Forms 1–3)</button>
             <button id="automaticAnalysisLockButton" type="button">Lock workspace</button>
         </div>
         <p id="automaticAnalysisStatus" class="muted" role="status"></p>
@@ -1612,7 +1614,7 @@ document.getElementById("periodResetButton").addEventListener("click", () => {
 loadStatistics();
 
 </script>
-<script src="researcher-automatic-analysis.js?version=20260827-incomplete-form-v10"></script>
+<script src="researcher-automatic-analysis.js?version=20260829-server-ranked-v11"></script>
     
 </body>
 </html>

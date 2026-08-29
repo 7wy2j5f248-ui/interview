@@ -2,6 +2,7 @@
     "use strict";
 
     const TOKEN_STORAGE_KEY = "researcherDashboardToken";
+    const DASHBOARD_PAGE_CONCURRENCY = 4;
     const FORM_ONE_DEMOGRAPHIC_COLUMNS = Object.freeze([
         ["current_country", "Country of residence"],
         ["current_region", "Region of residence"],
@@ -209,6 +210,13 @@
     }
 
     function renderCases() {
+        const orderedCases = casesForCaseAndKeywordForm();
+        const maximumKeywords = Math.max(
+            0,
+            ...orderedCases.map(caseRecord =>
+                caseRecord.keywordFrequency?.length || 0
+            )
+        );
         const { scroll, table } = createTable([
             "Participant code",
             "Session number",
@@ -216,11 +224,15 @@
             "Case report",
             "Archive",
             "Language",
-            ...FORM_ONE_DEMOGRAPHIC_COLUMNS.map(([, label]) => label)
+            ...FORM_ONE_DEMOGRAPHIC_COLUMNS.map(([, label]) => label),
+            ...Array.from(
+                { length: maximumKeywords },
+                (_, index) => `K${index + 1} · validated frequency`
+            )
         ]);
         const body = document.createElement("tbody");
 
-        casesForCaseAndKeywordForm().forEach(caseRecord => {
+        orderedCases.forEach(caseRecord => {
             const row = document.createElement("tr");
             createCell(row, participantCode(caseRecord), "analysisIdentifierCell");
             createCell(row, sessionNumber(caseRecord), "analysisIdentifierCell");
@@ -238,6 +250,20 @@
                 row,
                 demographicValue(caseRecord, key)
             ));
+            for (let index = 0; index < maximumKeywords; index += 1) {
+                const keyword = caseRecord.keywordFrequency?.[index];
+                const cell = createCell(
+                    row,
+                    keyword ? `${keyword.text} (${keyword.count})` : "—"
+                );
+                if (keyword) {
+                    cell.title = `${keyword.count} validated occurrence${
+                        keyword.count === 1 ? "" : "s"
+                    }`;
+                } else {
+                    cell.className = "analysisEmptyCell";
+                }
+            }
             body.appendChild(row);
         });
 
@@ -464,11 +490,11 @@
             });
         document.getElementById("automaticAnalysisDescription").textContent =
             activeView === "cases"
-                ? `Form 1: ${completedCases.length} available case reports are shown first in permanent participant-code order, matching Forms 2 and 3. ${casesWithMarkedKeywords} reports currently have marked keywords. Use Archive on a completed row to remove it from active analysis; it can later be restored from the Archive tab. Transcripts awaiting their first report remain available below them in the same stable order.`
+                ? `Form 1: ${completedCases.length} available case reports are shown first in permanent participant-code order, matching Forms 2 and 3. ${casesWithMarkedKeywords} reports currently have validated keyword evidence, ranked by occurrence count with deterministic alphabetical ties. Use Archive on a completed row to remove it from active analysis; it can later be restored from the Archive tab. Transcripts awaiting their first report remain available below them in the same stable order.`
                 : activeView === "codes"
-                    ? "Form 2: each case starts at C1. Headers are positional only; participant-specific code content stays inside cells."
+                    ? "Form 2: each case starts at C1. Codes rank by total validated keyword mentions, then distinct validated keywords, then a deterministic alphabetical tie-breaker. Headers are positional only; participant-specific code content stays inside cells."
                     : activeView === "themes"
-                        ? "Form 3: each case starts at T1. Headers are positional only; participant-specific theme content stays inside cells."
+                        ? "Form 3: each case starts at T1. Themes rank by total validated keyword mentions, then supporting codes, then distinct validated keywords, then a deterministic alphabetical tie-breaker. Headers are positional only; participant-specific theme content stays inside cells."
                         : activeView === "incomplete"
                             ? "Form 4 · Needs attention: unfinished interviews are separate from Forms 1–3. Each row preserves its transcript and separated demographic fields, summarizes only the material actually recorded, and states how incomplete the interview is. No themes, codes, or keywords are assigned before formal completion."
                             : "Archived cases are excluded from every active analysis form and from future automatic reanalysis. Each archived row preserves its transcript, report, language, demographic columns, positional C1–Cn codes, positional T1–Tn themes, and archive history.";
@@ -827,6 +853,37 @@
         return data;
     }
 
+    async function fetchRemainingDashboardPages(requestedScope, pageCount) {
+        const pages = Array.from(
+            { length: Math.max(0, pageCount - 1) },
+            (_, index) => index + 2
+        );
+        const results = new Array(pages.length);
+        let nextIndex = 0;
+
+        async function worker() {
+            while (nextIndex < pages.length) {
+                const index = nextIndex;
+                nextIndex += 1;
+                results[index] = await fetchDashboardPage(
+                    requestedScope,
+                    pages[index]
+                );
+            }
+        }
+
+        await Promise.all(Array.from(
+            {
+                length: Math.min(
+                    DASHBOARD_PAGE_CONCURRENCY,
+                    pages.length
+                )
+            },
+            () => worker()
+        ));
+        return results;
+    }
+
     async function performLoad() {
         setStatus("Loading automatic case reports…");
         const requestedScope = activeView === "archive"
@@ -853,11 +910,9 @@
             setStatus(
                 `Loaded ${cases.length} cases. Loading the remaining cases…`
             );
-            const remainingPages = await Promise.all(
-                Array.from(
-                    { length: pageCount - 1 },
-                    (_, index) => fetchDashboardPage(requestedScope, index + 2)
-                )
+            const remainingPages = await fetchRemainingDashboardPages(
+                requestedScope,
+                pageCount
             );
             remainingPages.forEach(nextPage => {
                 cases.push(...(nextPage.cases || []));

@@ -143,8 +143,44 @@ test("an expired request creates a distinct continuation before any AI call", as
             }
         },
         supabaseClient: {
-            from() {
-                assert.fail("Expired requests must not read or write messages.");
+            from(table) {
+                assert.notEqual(
+                    table,
+                    "interview_messages",
+                    "Expired requests must not read or write messages."
+                );
+                assert.ok(
+                    ["active_design", "research_designs"].includes(table),
+                    `Unexpected table read before expiry: ${table}`
+                );
+                const query = {
+                    select() { return query; },
+                    order() { return query; },
+                    limit() { return query; },
+                    eq() { return query; },
+                    async maybeSingle() {
+                        if (table === "active_design") {
+                            return {
+                                data: { active_design_id: "design-1" },
+                                error: null
+                            };
+                        }
+                        return {
+                            data: {
+                                id: "design-1",
+                                interview_model: "gpt-5.1",
+                                research_goal: "Goal",
+                                ai_role: "Interviewer",
+                                ending_message: "Thank you",
+                                interview_questions: "Question one?",
+                                interview_question_count: 1,
+                                maximum_interviewer_questions: 1
+                            },
+                            error: null
+                        };
+                    }
+                };
+                return query;
             }
         },
         sessionSupabaseClient: sessionClient,

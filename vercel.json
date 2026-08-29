@@ -1,4 +1,11 @@
 {
+    "redirects": [
+        {
+            "source": "/api/automatic-analysis-export",
+            "destination": "/api/automatic-analysis-ranked-export",
+            "permanent": true
+        }
+    ],
     "headers": [
         {
             "source": "/researcher.html",
