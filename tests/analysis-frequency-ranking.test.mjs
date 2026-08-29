@@ -73,6 +73,33 @@ test("equal keyword frequencies share one dense rank group", () => {
     );
 });
 
+test("stored English is primary while original keyword evidence stays traceable", () => {
+    const ranked = rankAnalysisCase({
+        hasReport: true,
+        codes: [{ id: "c1", code_number: 1, code_label: "Sleep" }],
+        themes: [],
+        themeCodes: [],
+        highlights: [{
+            id: "h1",
+            code_id: "c1",
+            message_id: "message-zh-1",
+            exact_text: "晚睡",
+            source_language: "zh",
+            english_translation: "I usually go to bed late."
+        }]
+    });
+
+    assert.equal(
+        ranked.keywordFrequency[0].text,
+        "I usually go to bed late."
+    );
+    assert.equal(ranked.keywordFrequency[0].originalText, "晚睡");
+    assert.deepEqual(
+        ranked.keywordFrequency[0].items[0].sourceMessageIds,
+        ["message-zh-1"]
+    );
+});
+
 test("codes prioritize total validated mentions over distinct keyword count", () => {
     const ranked = rankAnalysisCase({
         hasReport: true,

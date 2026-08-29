@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { authorizeResearcher } from "./researcherAuth.js";
 import { loadParticipantCodeMap } from "./participantCodes.js";
 import { rankAnalysisCase } from "./analysisFrequencyRanking.js";
+import { enrichAnalysisHighlightSources } from "./analysisHighlightSources.js";
 
 const PAGE_SIZE = 100;
 const DATABASE_PAGE_SIZE = 1000;
@@ -434,6 +435,10 @@ export async function handleCaseAnalysisDashboard(req, res) {
                     "Theme-to-code relationships could not be loaded."
                 ) : []
             ]);
+        const enrichedHighlights = await enrichAnalysisHighlightSources(
+            supabase,
+            highlights
+        );
 
         const reportBySession = new Map(reports.map(report => [
             report.session_id,
@@ -449,7 +454,10 @@ export async function handleCaseAnalysisDashboard(req, res) {
         ]));
         const codesByReport = groupedBy(codes, "report_id");
         const themesByReport = groupedBy(themes, "report_id");
-        const highlightsByReport = groupedBy(highlights, "report_id");
+        const highlightsByReport = groupedBy(
+            enrichedHighlights,
+            "report_id"
+        );
         const mappingsByReport = groupedBy(themeCodes, "report_id");
 
         const cases = jobs.map(job => {

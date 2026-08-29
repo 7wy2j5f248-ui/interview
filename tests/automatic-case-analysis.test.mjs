@@ -275,7 +275,7 @@ test("researcher dashboard uses cases, positional codes, and positional themes",
     assert.match(script, /\["social_identity", "Social identity"\]/);
     assert.match(
         script,
-        /"Participant code",\s*"Session number",\s*"Link to transcript",\s*"Case report",\s*"Archive",\s*"Language",\s*\.\.\.FORM_ONE_DEMOGRAPHIC_COLUMNS/
+        /\.\.\.COMPACT_IDENTIFIER_HEADERS,\s*"Link to transcript",\s*"Case report",\s*"Archive",\s*"Language",\s*\.\.\.FORM_ONE_DEMOGRAPHIC_COLUMNS/
     );
     assert.match(script, /transcriptUrl\(item\)/);
     assert.match(script, /URLSearchParams\(window\.location\.search\)\.get\("case"\)/);
@@ -302,7 +302,7 @@ test("researcher dashboard uses cases, positional codes, and positional themes",
     assert.match(script, /leftCompleted \? -1 : 1/);
     assert.match(script, /participantCode\(left\)\.localeCompare/);
     assert.match(script, /function sessionNumber/);
-    assert.match(script, /"Participant code", "Session number"/);
+    assert.match(script, /label: "P#"[\s\S]*label: "S#"/);
     assert.match(script, /permanent participant-code order/);
     assert.match(script, /caseRecord\.hasReport/);
     assert.match(dashboard, /hasReport: Boolean\(report\)/);
@@ -632,13 +632,39 @@ test("Cases and keywords loads every case and every stored highlight", async () 
     assert.match(script, /DASHBOARD_PAGE_CONCURRENCY = 4/);
     assert.match(script, /casesWithMarkedKeywords/);
     assert.match(script, /reports currently have validated keyword evidence/);
-    assert.match(html, /researcher-automatic-analysis\.js\?version=20260829-tied-ranks-v12/);
+    assert.match(html, /researcher-automatic-analysis\.js\?version=20260829-compact-translated-v13/);
     assert.match(html, /automaticAnalysisGateStatus/);
     assert.match(script, /cache: "no-store"/);
     assert.match(script, /searchParams\.set\("fresh"/);
     assert.match(script, /unlockButton\.disabled = true/);
     assert.match(dashboard, /private, no-store, no-cache/);
     assert.match(dashboard, /generatedAt: new Date\(\)\.toISOString\(\)/);
+});
+
+test("automatic dashboard has compact identifiers, wide keywords, translation traceability, and a finite unlock wait", async () => {
+    const html = await readFile(new URL("../researcher.html", import.meta.url), "utf8");
+    const script = await readFile(
+        new URL("../researcher-automatic-analysis-legacy.js", import.meta.url),
+        "utf8"
+    );
+    const dashboard = await readFile(
+        new URL("../server/caseAnalysisDashboard.js", import.meta.url),
+        "utf8"
+    );
+
+    assert.match(script, /label: "P#", className: "analysisIdentifierColumn"/);
+    assert.match(script, /label: "S#", className: "analysisIdentifierColumn"/);
+    assert.match(script, /analysisPrimaryKeywordColumn/);
+    assert.match(script, /keyword\.originalText/);
+    assert.match(script, /sourceMessageIds/);
+    assert.match(html, /analysisIdentifierColumn[\s\S]*min-width: 4\.25rem/);
+    assert.match(html, /analysisKeywordColumn[\s\S]*min-width: 24rem/);
+    assert.match(html, /analysisPrimaryKeywordColumn[\s\S]*min-width: 30rem/);
+    assert.match(dashboard, /enrichAnalysisHighlightSources/);
+    assert.match(script, /DASHBOARD_REQUEST_TIMEOUT_MS = 20000/);
+    assert.match(script, /new AbortController\(\)/);
+    assert.match(script, /signal: controller\.signal/);
+    assert.match(script, /dashboard request timed out\. Please try unlocking again/);
 });
 
 test("researcher analysis assets cannot be held on a stale cached version", async () => {
