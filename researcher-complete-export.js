@@ -30,7 +30,7 @@
         button.disabled = true;
         const oldLabel = button.textContent;
         button.textContent = "Preparing ranked Excel…";
-        status.textContent = "Preparing the complete corpus. Keywords are ordered by frequency, codes by total keyword mentions, and themes by supporting codes and mentions.";
+        status.textContent = "Preparing the complete corpus. Keywords are ordered by validated frequency, codes by total validated keyword mentions then distinct keywords, and themes by total validated mentions, supporting codes, then distinct keywords.";
         status.className = "muted";
 
         try {
