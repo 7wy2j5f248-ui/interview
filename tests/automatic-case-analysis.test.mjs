@@ -911,9 +911,9 @@ test("researcher dashboard uses four separate case, keyword, code, and theme for
     assert.match(html, /Form 3 · Codes/);
     assert.match(html, /Form 4 · Themes/);
     assert.doesNotMatch(html, /data-automatic-analysis-view="categories"/);
-    assert.match(html, /Meaning units are first\s*completed within every individual case/);
-    assert.match(html, /codes compared and harmonized across cases/);
-    assert.match(html, /code layer\s*is then frozen before category abstraction begins/);
+    assert.match(html, /Meaning units are first completed within every\s*individual case/);
+    assert.match(html, /previous preliminary\s*analysis version/);
+    assert.match(html, /stops before themes or any cross-case refinement/);
     assert.match(html, /TH = Theme · CA = Category ·\s*CO = Code · K = Keyword · MU = Meaning Unit/);
     assert.match(html, /data-automatic-analysis-view="incomplete"[^>]*>Needs attention/);
     assert.match(html, /data-automatic-analysis-view="archive"/);
@@ -1300,7 +1300,7 @@ test("separate Cases and Keywords forms load every case and stored unit", async 
     assert.match(script, /function keywordExpressions/);
     assert.match(script, /Open exact evidence/);
     assert.match(script, /Framework \/ report provenance/);
-    assert.match(html, /researcher-automatic-analysis\.js\?version=20260831-four-analysis-forms-v1/);
+    assert.match(html, /researcher-automatic-analysis\.js\?version=20260831-advanced-preliminary-v1/);
     assert.match(html, /automaticAnalysisGateStatus/);
     assert.match(script, /cache: "no-store"/);
     assert.match(script, /searchParams\.set\("fresh"/);

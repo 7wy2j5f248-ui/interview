@@ -945,7 +945,7 @@
 </section>
 
 <section id="analysisSection" class="panel" aria-labelledby="automaticAnalysisHeading">
-    <h2 id="automaticAnalysisHeading">Automatic Individual Case Analysis</h2>
+    <h2 id="automaticAnalysisHeading">Preliminary Case-Based Analysis</h2>
     <p class="automaticPipelineNote">
         Analysis starts automatically when an interview receives its formal
         completion signal. Complete transcripts are processed one case at a
@@ -953,12 +953,13 @@
         not start or control the analysis.
     </p>
     <p>
-        Revised analysis proceeds one layer at a time. Meaning units are first
-        completed within every individual case. Only after that layer is
-        complete are codes compared and harmonized across cases. The code layer
-        is then frozen before category abstraction begins; themes follow only
-        after the category layer is complete. A processing batch may schedule
-        work, but it must never skip or collapse these analytical gates.
+        The existing Forms 1–4 are preserved as the previous preliminary
+        analysis version. They are not being deleted, overwritten, or treated
+        as final cross-case analysis. A new advanced-model preliminary run is
+        shown separately below so its results can be compared with this
+        historical version. Meaning units are first completed within every
+        individual case; the new run then develops case-based preliminary codes
+        and categories and stops before themes or any cross-case refinement.
     </p>
     <p class="automaticPipelineNote">
         <strong>Analytical abbreviations:</strong> TH = Theme · CA = Category ·
@@ -1005,6 +1006,47 @@
         </nav>
         <p id="automaticAnalysisDescription" class="muted"></p>
         <div id="automaticAnalysisTable"></div>
+
+        <section id="advancedPreliminaryAnalysis" class="analysisDiscussion" aria-labelledby="advancedPreliminaryHeading">
+            <h3 id="advancedPreliminaryHeading">New Advanced-Model Preliminary Analysis</h3>
+            <p>
+                This separate version begins again from the original transcript
+                for every completed case. It produces only
+                <strong>Meaning Units → Preliminary Analytical Codes → Preliminary Categories</strong>.
+                It does not read the previous analytical objects, generate
+                themes, harmonize codes across cases, or replace the existing
+                reports.
+            </p>
+            <p class="muted">
+                The 275-case dataset includes 269 project-bound Sleeping habits
+                cases and six historical cases created before project binding.
+                Historical cases remain visible and are explicitly marked.
+            </p>
+            <div class="actionRow">
+                <button id="advancedPreliminaryStartButton" type="button">
+                    Start new advanced preliminary run
+                </button>
+                <button id="advancedPreliminaryRefreshButton" type="button">
+                    Refresh advanced run
+                </button>
+            </div>
+            <p id="advancedPreliminaryStatus" class="automaticReviewScopeSummary" role="status">
+                Load the advanced preliminary run to inspect its model and progress.
+            </p>
+            <div class="analysisOverview" aria-label="Advanced preliminary analysis progress">
+                <div class="analysisMetric"><strong id="advancedPreliminaryPending">0</strong>Waiting</div>
+                <div class="analysisMetric"><strong id="advancedPreliminaryProcessing">0</strong>Processing</div>
+                <div class="analysisMetric"><strong id="advancedPreliminaryCompleted">0</strong>Completed</div>
+                <div class="analysisMetric"><strong id="advancedPreliminaryFailed">0</strong>Needs attention</div>
+            </div>
+            <p id="advancedPreliminaryProvenance" class="muted"></p>
+            <div id="advancedPreliminaryTable"></div>
+            <div class="actionRow">
+                <button id="advancedPreliminaryPreviousPage" type="button" disabled>Previous 50 cases</button>
+                <span id="advancedPreliminaryPageLabel" class="muted">Page 1</span>
+                <button id="advancedPreliminaryNextPage" type="button" disabled>Next 50 cases</button>
+            </div>
+        </section>
 
         <section id="automaticAnalysisReview" class="analysisDiscussion" aria-labelledby="automaticAnalysisReviewHeading">
             <h3 id="automaticAnalysisReviewHeading">Second-layer analysis discussion</h3>
@@ -1189,6 +1231,13 @@
     <p><strong>Demographic data:</strong> <span id="automaticTranscriptDemographics"></span></p>
     <div id="automaticTranscriptLegend" aria-label="Code colour legend"></div>
     <div id="automaticTranscriptMessages"></div>
+</dialog>
+
+<dialog id="advancedPreliminaryDialog">
+    <button id="advancedPreliminaryDialogClose" type="button">Close advanced case report</button>
+    <h2 id="advancedPreliminaryDialogHeading">Advanced preliminary case report</h2>
+    <p id="advancedPreliminaryDialogProvenance" class="transcriptIdentity"></p>
+    <div id="advancedPreliminaryDialogContent"></div>
 </dialog>
 
 <dialog id="automaticCaseReportDialog">
@@ -2028,7 +2077,8 @@ document.getElementById("periodResetButton").addEventListener("click", () => {
 loadStatistics();
 
 </script>
-<script src="researcher-automatic-analysis.js?version=20260831-four-analysis-forms-v1"></script>
+<script src="researcher-automatic-analysis.js?version=20260831-advanced-preliminary-v1"></script>
+<script src="researcher-advanced-preliminary.js?version=20260831-advanced-preliminary-v1"></script>
     
 </body>
 </html>

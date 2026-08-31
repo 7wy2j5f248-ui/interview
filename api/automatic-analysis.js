@@ -13,11 +13,17 @@ import {
 } from "../server/automaticCaseAnalysis.js";
 import { processOldestFrameworkReanalysis } from "../server/frameworkReanalysis.js";
 import {
+    processNextAdvancedPreliminaryAnalysis
+} from "../server/advancedPreliminaryAnalysis.js";
+import {
     continueTranscriptTranslation,
     processTranscriptTranslation,
     transcriptTranslationBaseUrl,
     transcriptTranslationRequestIsAuthorized
 } from "../server/transcriptTranslationQueue.js";
+import {
+    handleAdvancedPreliminaryDashboard
+} from "../server/advancedPreliminaryDashboard.js";
 
 export const config = { maxDuration: 300 };
 
@@ -41,6 +47,13 @@ async function processAndContinue(req) {
 
     if (!result.claimed) {
         result = await processOldestFrameworkReanalysis(
+            supabaseClient,
+            openaiClient
+        );
+    }
+
+    if (!result.claimed) {
+        result = await processNextAdvancedPreliminaryAnalysis(
             supabaseClient,
             openaiClient
         );
@@ -86,6 +99,13 @@ async function processTranslationAndContinue(req) {
 }
 
 export default async function handler(req, res) {
+    if (req.query?.view === "advanced-preliminary"
+        && (req.method === "GET"
+            || (req.method === "POST"
+                && req.body?.action === "start"))) {
+        return handleAdvancedPreliminaryDashboard(req, res);
+    }
+
     if (req.method === "GET") {
         return handleCaseAnalysisDashboard(req, res);
     }
