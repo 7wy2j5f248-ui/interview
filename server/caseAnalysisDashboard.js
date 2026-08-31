@@ -370,7 +370,7 @@ export async function handleCaseAnalysisDashboard(req, res) {
                 requireData(
                     supabase
                         .from("qualitative_case_reports")
-                        .select("id, session_id, case_number, participant_id, participant_code, language, demographics, case_interpretation, analysis_version, model, source_completed_at, completed_at")
+                        .select("id, session_id, case_number, participant_id, participant_code, language, demographics, case_interpretation, analysis_version, model, source_completed_at, completed_at, project_id, analysis_framework_id, source_report_id, reanalysis_request_id")
                         .is("superseded_at", null)
                         .in("session_id", sessionIds),
                     "Individual case reports could not be loaded."
@@ -395,7 +395,12 @@ export async function handleCaseAnalysisDashboard(req, res) {
                 )
             ]);
         const reportIds = reports.map(report => report.id);
-        const [codes, themes, highlights, themeCodes] =
+        const projectIds = [...new Set(reports.map(report => report.project_id)
+            .filter(Boolean))];
+        const frameworkIds = [...new Set(reports.map(
+            report => report.analysis_framework_id
+        ).filter(Boolean))];
+        const [codes, themes, highlights, themeCodes, projects, frameworks] =
             await Promise.all([
                 reportIds.length ? requireAllData(
                     () => supabase
@@ -433,6 +438,20 @@ export async function handleCaseAnalysisDashboard(req, res) {
                         .order("theme_id", { ascending: true })
                         .order("code_id", { ascending: true }),
                     "Theme-to-code relationships could not be loaded."
+                ) : [],
+                projectIds.length ? requireData(
+                    supabase
+                        .from("research_projects")
+                        .select("id, project_code, project_name, research_topic")
+                        .in("id", projectIds),
+                    "Case research-project lineage could not be loaded."
+                ) : [],
+                frameworkIds.length ? requireData(
+                    supabase
+                        .from("analysis_frameworks")
+                        .select("id, project_id, version_number, predecessor_id, created_at")
+                        .in("id", frameworkIds),
+                    "Case analysis-framework lineage could not be loaded."
                 ) : []
             ]);
         const enrichedHighlights = await enrichAnalysisHighlightSources(
@@ -459,6 +478,14 @@ export async function handleCaseAnalysisDashboard(req, res) {
             "report_id"
         );
         const mappingsByReport = groupedBy(themeCodes, "report_id");
+        const projectById = new Map(projects.map(project => [
+            project.id,
+            project
+        ]));
+        const frameworkById = new Map(frameworks.map(framework => [
+            framework.id,
+            framework
+        ]));
 
         const cases = jobs.map(job => {
             const report = reportBySession.get(job.session_id);
@@ -498,6 +525,15 @@ export async function handleCaseAnalysisDashboard(req, res) {
                 caseInterpretation: report.case_interpretation,
                 analysisVersion: report.analysis_version,
                 model: report.model,
+                researchProject: projectById.get(report.project_id) || null,
+                analysisFramework: frameworkById.get(
+                    report.analysis_framework_id
+                ) || null,
+                reportLineage: {
+                    reportId: report.id,
+                    sourceReportId: report.source_report_id || null,
+                    reanalysisRequestId: report.reanalysis_request_id || null
+                },
                 codes: codesByReport.get(report.id) || [],
                 themes: themesByReport.get(report.id) || [],
                 highlights: highlightsByReport.get(report.id) || [],

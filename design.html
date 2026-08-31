@@ -1,12 +1,18 @@
 <div style="max-width:900px;margin:40px auto;padding:20px;font-family:Arial,sans-serif;line-height:1.6;">
 <h1>Research Design</h1>
-<p>Complete the fields below to define how the AI interviewer should conduct your research interview. These settings will be used to generate the interview protocol automatically.</p>
+<p>This page keeps two independently versioned controls separate: the <strong>Interview Protocol</strong> governs only how new interviews are conducted, while the <strong>Analysis Framework</strong> governs how completed transcripts are analysed.</p>
+<h2>Interview Protocol</h2>
+<p>The following AI configuration, interview content, and limits apply only to new interview sessions. Historical sessions retain the protocol version frozen when they began.</p>
 <div style="border:1px solid #ddd;border-radius:8px;padding:20px;margin-bottom:24px;">
 <h2>Research Information</h2>
 
 <label for="researchTitle"><strong>Research Title</strong></label>
 <p>Name of your research project.</p>
 <input type="text" id="researchTitle" placeholder="Enter the research title" style="width:100%;padding:10px;margin-bottom:16px;box-sizing:border-box;">
+
+<label for="protocolProjectSelect"><strong>Research Project / Topic Lineage</strong></label>
+<p>Bind this protocol version to the named project below. A different research topic must start a new project and its own Analysis Framework.</p>
+<select id="protocolProjectSelect" style="width:100%;padding:10px;margin-bottom:16px;box-sizing:border-box;"></select>
 
 <fieldset style="border:1px solid #ddd;border-radius:6px;margin:0 0 16px;padding:16px;">
 <legend><strong>Protocol Version</strong></legend>
@@ -76,6 +82,64 @@
 <br><br>
 <button id="reviewButton" type="button" style="padding:12px 24px;font-size:16px;">Review Research Design</button>
 </div>
+
+<section id="analysisFrameworkSection" style="border:2px solid #2d6a4f;border-radius:8px;padding:20px;margin-bottom:24px;">
+<h2>Analysis Framework</h2>
+<p><strong>Independent from the Interview Protocol.</strong> Editing this framework does not change interview questions, historical transcripts, or prior case reports. Every saved version is bound to one named research project and topic.</p>
+
+<label for="analysisFrameworkPin"><strong>Researcher PIN</strong></label>
+<p>Use the researcher-dashboard PIN to load and save the protected framework history.</p>
+<div style="display:flex;gap:8px;margin-bottom:16px;">
+<input id="analysisFrameworkPin" type="password" autocomplete="current-password" style="flex:1;padding:10px;box-sizing:border-box;">
+<button id="loadAnalysisFrameworkButton" type="button">Load framework</button>
+</div>
+<p id="analysisFrameworkStatus" role="status"></p>
+
+<label for="analysisProjectSelect"><strong>Named Research Project</strong></label>
+<p>Select an existing project/topic lineage, or start a new project. A new topic never inherits or re-analyses another project's transcripts by default.</p>
+<select id="analysisProjectSelect" style="width:100%;padding:10px;margin-bottom:16px;box-sizing:border-box;"></select>
+
+<label for="analysisProjectName"><strong>Project Name</strong></label>
+<input id="analysisProjectName" type="text" placeholder="Sleeping habits" style="width:100%;padding:10px;margin-bottom:16px;box-sizing:border-box;">
+
+<label for="analysisResearchTopic"><strong>Research Topic</strong></label>
+<input id="analysisResearchTopic" type="text" placeholder="Sleeping habits" style="width:100%;padding:10px;margin-bottom:16px;box-sizing:border-box;">
+
+<label for="analysisStudyScope"><strong>Study Topic and Scope</strong></label>
+<textarea id="analysisStudyScope" rows="4" style="width:100%;padding:10px;margin-bottom:16px;box-sizing:border-box;"></textarea>
+
+<label for="analysisThemeRequirements"><strong>What Themes Must Look Like</strong></label>
+<textarea id="analysisThemeRequirements" rows="4" style="width:100%;padding:10px;margin-bottom:16px;box-sizing:border-box;"></textarea>
+
+<label for="analysisCodeDerivation"><strong>How Codes Are Derived from Related Exact Keywords</strong></label>
+<textarea id="analysisCodeDerivation" rows="4" style="width:100%;padding:10px;margin-bottom:16px;box-sizing:border-box;"></textarea>
+
+<label for="analysisThemeCodeFit"><strong>Theme-to-Code Fit</strong></label>
+<textarea id="analysisThemeCodeFit" rows="4" style="width:100%;padding:10px;margin-bottom:16px;box-sizing:border-box;"></textarea>
+
+<label for="analysisInclusionRules"><strong>Inclusion Rules</strong></label>
+<textarea id="analysisInclusionRules" rows="4" style="width:100%;padding:10px;margin-bottom:16px;box-sizing:border-box;"></textarea>
+
+<label for="analysisExclusionRules"><strong>Exclusion Rules</strong></label>
+<textarea id="analysisExclusionRules" rows="4" style="width:100%;padding:10px;margin-bottom:16px;box-sizing:border-box;"></textarea>
+
+<label for="analysisProvenance"><strong>Researcher-Visible Provenance Expectations</strong></label>
+<textarea id="analysisProvenance" rows="4" style="width:100%;padding:10px;margin-bottom:16px;box-sizing:border-box;"></textarea>
+
+<label for="analysisVersionNotes"><strong>Framework Version Notes</strong></label>
+<textarea id="analysisVersionNotes" rows="3" placeholder="What changed in this analysis framework version?" style="width:100%;padding:10px;margin-bottom:16px;box-sizing:border-box;"></textarea>
+
+<fieldset style="border:1px solid #bbb;border-radius:6px;margin-bottom:16px;padding:16px;">
+<legend><strong>Which transcripts does this newly saved version apply to?</strong></legend>
+<label style="display:block;margin-bottom:12px;"><input type="radio" name="analysisApplicationScope" value="future_only" checked> <strong>Future analysis only</strong><br><span style="margin-left:24px;">Existing reports remain exactly as they are. New analyses in this same project/topic use the new version.</span></label>
+<label style="display:block;"><input type="radio" name="analysisApplicationScope" value="include_completed"> <strong>Include previously completed interviews from this same project/topic lineage</strong><br><span style="margin-left:24px;">Preserved transcripts are re-analysed into versioned proposals. No current report changes until a researcher compares and explicitly approves its proposal. Archived cases and other projects/topics are excluded.</span></label>
+</fieldset>
+
+<button id="reviewAnalysisFrameworkButton" type="button" style="padding:12px 24px;font-size:16px;">Review Analysis Framework</button>
+
+<h3>Version History and Lineage</h3>
+<div id="analysisFrameworkHistory"><p>Unlock the framework to view its project-bound version history.</p></div>
+</section>
 </div>
 
 <dialog id="reviewDialog" style="border:1px solid #999;border-radius:8px;max-height:85vh;max-width:760px;overflow:auto;width:calc(100% - 32px);">
@@ -93,6 +157,18 @@
 <div style="display:flex;gap:12px;justify-content:flex-end;">
 <button id="backToEditButton" type="button">Back to editing</button>
 <button id="confirmSaveButton" type="button" style="padding:10px 18px;">Save Research Design</button>
+</div>
+</dialog>
+
+<dialog id="analysisFrameworkReviewDialog" style="border:1px solid #999;border-radius:8px;max-height:85vh;max-width:760px;overflow:auto;width:calc(100% - 32px);">
+<form method="dialog"><button type="submit" style="float:right;">Close</button></form>
+<h2>Review Analysis Framework</h2>
+<p>This saves a new immutable framework version. It does not edit the Interview Protocol, source transcripts, or prior reports.</p>
+<div id="analysisFrameworkReviewSummary"></div>
+<p id="analysisFrameworkSaveStatus" role="status"></p>
+<div style="display:flex;gap:12px;justify-content:flex-end;">
+<button id="analysisFrameworkBackButton" type="button">Back to editing</button>
+<button id="confirmAnalysisFrameworkButton" type="button" style="padding:10px 18px;">Save New Framework Version</button>
 </div>
 </dialog>
 <script src="design.js"></script>

@@ -145,11 +145,15 @@ test("visible automatic-analysis workspace restores discussion and upload contro
 });
 
 test("researcher-controlled re-analysis preserves versions until explicit approval", async () => {
-    const [html, client, api, migration] = await Promise.all([
+    const [html, client, api, processor, migration] = await Promise.all([
         readFile(htmlUrl, "utf8"),
         readFile(clientUrl, "utf8"),
         readFile(
             new URL("../api/automatic-analysis-review.js", import.meta.url),
+            "utf8"
+        ),
+        readFile(
+            new URL("../server/frameworkReanalysis.js", import.meta.url),
             "utf8"
         ),
         readFile(reanalysisMigrationUrl, "utf8")
@@ -161,8 +165,9 @@ test("researcher-controlled re-analysis preserves versions until explicit approv
     assert.match(client, /action: "request_case_reanalysis"/);
     assert.match(client, /action: "review_case_reanalysis"/);
     assert.match(client, /Historical interview-protocol issue/);
-    assert.match(api, /generateAutomaticCaseReanalysis/);
-    assert.match(api, /detectCompoundQuestionTurns/);
+    assert.match(api, /processCaseReanalysisRequest/);
+    assert.match(processor, /generateAutomaticCaseReanalysis/);
+    assert.match(processor, /detectCompoundQuestionTurns/);
     assert.match(migration, /automatic_case_reanalysis_requests/);
     assert.match(migration, /automatic_case_reanalysis_proposals/);
     assert.match(migration, /automatic_case_reanalysis_reviews/);

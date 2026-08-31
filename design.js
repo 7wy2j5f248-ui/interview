@@ -6,6 +6,28 @@
     const savePin = document.getElementById("savePin");
     const saveStatus = document.getElementById("saveStatus");
     const confirmSaveButton = document.getElementById("confirmSaveButton");
+    const TOKEN_STORAGE_KEY = "researcherDashboardToken";
+    const analysisProjectSelect = document.getElementById(
+        "analysisProjectSelect"
+    );
+    const protocolProjectSelect = document.getElementById(
+        "protocolProjectSelect"
+    );
+    const analysisReviewDialog = document.getElementById(
+        "analysisFrameworkReviewDialog"
+    );
+    const analysisReviewSummary = document.getElementById(
+        "analysisFrameworkReviewSummary"
+    );
+    const analysisSaveStatus = document.getElementById(
+        "analysisFrameworkSaveStatus"
+    );
+    const analysisStatus = document.getElementById("analysisFrameworkStatus");
+    const analysisPin = document.getElementById("analysisFrameworkPin");
+    let frameworkWorkspace = {
+        projects: [], frameworks: [], activeFrameworks: []
+    };
+    let reviewedFramework = null;
     const versionInputs = [
         document.getElementById("topicNumber"),
         document.getElementById("versionNumber"),
@@ -44,6 +66,7 @@
 
     function collectDesign() {
         return {
+            projectId: protocolProjectSelect.value,
             researchTitle: document.getElementById("researchTitle").value,
             protocolVersion: protocolVersion(),
             versionNotes: document.getElementById("versionNotes").value,
@@ -92,6 +115,193 @@
     function setSaveStatus(message, isError = false) {
         saveStatus.textContent = message;
         saveStatus.style.color = isError ? "#9b1c1c" : "#333";
+    }
+
+    function setAnalysisStatus(message, isError = false) {
+        analysisStatus.textContent = message;
+        analysisStatus.style.color = isError ? "#9b1c1c" : "#333";
+    }
+
+    function setAnalysisSaveStatus(message, isError = false) {
+        analysisSaveStatus.textContent = message;
+        analysisSaveStatus.style.color = isError ? "#9b1c1c" : "#333";
+    }
+
+    function researcherToken() {
+        return analysisPin.value
+            || sessionStorage.getItem(TOKEN_STORAGE_KEY)
+            || "";
+    }
+
+    function field(id) {
+        return document.getElementById(id);
+    }
+
+    function selectedScope() {
+        return document.querySelector(
+            'input[name="analysisApplicationScope"]:checked'
+        )?.value || "";
+    }
+
+    function collectAnalysisFramework() {
+        return {
+            action: "save_analysis_framework",
+            projectId: analysisProjectSelect.value || null,
+            projectName: field("analysisProjectName").value.trim(),
+            researchTopic: field("analysisResearchTopic").value.trim(),
+            studyScope: field("analysisStudyScope").value.trim(),
+            themeRequirements: field("analysisThemeRequirements").value.trim(),
+            codeDerivationRules: field("analysisCodeDerivation").value.trim(),
+            themeCodeFitRules: field("analysisThemeCodeFit").value.trim(),
+            inclusionRules: field("analysisInclusionRules").value.trim(),
+            exclusionRules: field("analysisExclusionRules").value.trim(),
+            provenanceExpectations: field("analysisProvenance").value.trim(),
+            analysisVersionNotes: field("analysisVersionNotes").value.trim(),
+            applicationScope: selectedScope()
+        };
+    }
+
+    function requireFrameworkFields(framework) {
+        const labels = {
+            projectName: "Project name",
+            researchTopic: "Research topic",
+            studyScope: "Study topic and scope",
+            themeRequirements: "Theme requirements",
+            codeDerivationRules: "Code derivation rules",
+            themeCodeFitRules: "Theme-to-code fit",
+            inclusionRules: "Inclusion rules",
+            exclusionRules: "Exclusion rules",
+            provenanceExpectations: "Provenance expectations",
+            applicationScope: "Application scope"
+        };
+        const missing = Object.entries(labels).find(([key]) => !framework[key]);
+        if (missing) throw new Error(`${missing[1]} is required.`);
+    }
+
+    function fillFramework(framework, project) {
+        field("analysisProjectName").value = project?.project_name
+            || framework?.projectName || "";
+        field("analysisResearchTopic").value = project?.research_topic
+            || framework?.researchTopic || "";
+        field("analysisStudyScope").value = framework?.studyScope || "";
+        field("analysisThemeRequirements").value =
+            framework?.themeRequirements || "";
+        field("analysisCodeDerivation").value =
+            framework?.codeDerivationRules || "";
+        field("analysisThemeCodeFit").value =
+            framework?.themeCodeFitRules || "";
+        field("analysisInclusionRules").value =
+            framework?.inclusionRules || "";
+        field("analysisExclusionRules").value =
+            framework?.exclusionRules || "";
+        field("analysisProvenance").value =
+            framework?.provenanceExpectations || "";
+        field("analysisVersionNotes").value = "";
+        const existingProject = Boolean(project);
+        field("analysisProjectName").readOnly = existingProject;
+        field("analysisResearchTopic").readOnly = existingProject;
+    }
+
+    function activeFramework(projectId) {
+        const activeId = frameworkWorkspace.activeFrameworks.find(
+            item => item.project_id === projectId
+        )?.framework_id;
+        return frameworkWorkspace.frameworks.find(item => item.id === activeId)
+            || null;
+    }
+
+    function renderProjectOptions() {
+        const createOption = document.createElement("option");
+        createOption.value = "";
+        createOption.textContent = "Start a new research project/topic";
+        analysisProjectSelect.replaceChildren(createOption);
+        protocolProjectSelect.replaceChildren();
+        frameworkWorkspace.projects.forEach(project => {
+            const label = `${project.project_name} — ${project.research_topic}`;
+            const analysisOption = document.createElement("option");
+            analysisOption.value = project.id;
+            analysisOption.textContent = label;
+            analysisProjectSelect.appendChild(analysisOption);
+            const protocolOption = document.createElement("option");
+            protocolOption.value = project.id;
+            protocolOption.textContent = label;
+            protocolProjectSelect.appendChild(protocolOption);
+        });
+        const initial = frameworkWorkspace.projects.find(project =>
+            activeFramework(project.id)
+        ) || frameworkWorkspace.projects[0];
+        if (initial) {
+            analysisProjectSelect.value = initial.id;
+            protocolProjectSelect.value = initial.id;
+            fillFramework(activeFramework(initial.id), initial);
+        } else {
+            fillFramework(null, null);
+        }
+    }
+
+    function renderFrameworkHistory() {
+        const host = field("analysisFrameworkHistory");
+        const projectId = analysisProjectSelect.value;
+        const frameworks = frameworkWorkspace.frameworks
+            .filter(item => item.projectId === projectId)
+            .sort((a, b) => b.versionNumber - a.versionNumber);
+        if (!frameworks.length) {
+            host.textContent = "No framework version exists for this project yet.";
+            return;
+        }
+        const list = document.createElement("ol");
+        frameworks.forEach(framework => {
+            const item = document.createElement("li");
+            const active = activeFramework(projectId)?.id === framework.id;
+            item.textContent = `v${framework.versionNumber}${active ? " · active" : ""} · ${framework.applicationScope.replaceAll("_", " ")} · ${framework.createdAt ? new Date(framework.createdAt).toLocaleString() : "timestamp unavailable"}${framework.predecessorId ? ` · predecessor ${framework.predecessorId}` : " · first version"}${framework.versionNotes ? ` — ${framework.versionNotes}` : ""}`;
+            list.appendChild(item);
+        });
+        host.replaceChildren(list);
+    }
+
+    async function loadFrameworkWorkspace() {
+        const token = researcherToken();
+        if (!token) {
+            throw new Error("Enter the researcher PIN to load the framework.");
+        }
+        setAnalysisStatus("Loading project-bound framework history…");
+        const response = await fetch("/api/saveDesign?action=analysis_framework", {
+            cache: "no-store",
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || "Unable to load framework.");
+        sessionStorage.setItem(TOKEN_STORAGE_KEY, token);
+        frameworkWorkspace = data;
+        renderProjectOptions();
+        renderFrameworkHistory();
+        setAnalysisStatus(
+            "Framework history loaded. Saving always creates a new immutable version."
+        );
+    }
+
+    function renderAnalysisReview(framework) {
+        const project = framework.projectId
+            ? frameworkWorkspace.projects.find(item => item.id === framework.projectId)
+            : null;
+        const scope = framework.applicationScope === "include_completed"
+            ? "Include completed interviews from this same project/topic only. Queue versioned proposals; preserve current reports until explicit approval."
+            : "Future analysis only. Leave all existing reports unchanged.";
+        analysisReviewSummary.replaceChildren(
+            reviewField("Research project", project?.project_name
+                || `${framework.projectName} (new project)`),
+            reviewField("Research topic", project?.research_topic
+                || framework.researchTopic),
+            reviewField("Study scope", framework.studyScope),
+            reviewField("Theme requirements", framework.themeRequirements),
+            reviewField("Code derivation", framework.codeDerivationRules),
+            reviewField("Theme-to-code fit", framework.themeCodeFitRules),
+            reviewField("Inclusion rules", framework.inclusionRules),
+            reviewField("Exclusion rules", framework.exclusionRules),
+            reviewField("Provenance", framework.provenanceExpectations),
+            reviewField("Version notes", framework.analysisVersionNotes),
+            reviewField("Application scope", scope)
+        );
     }
 
     versionInputs.forEach(input => input.addEventListener("input", updateVersionPreview));
@@ -147,6 +357,7 @@
             }
 
             setSaveStatus(result.message || "Research design saved.");
+            sessionStorage.setItem(TOKEN_STORAGE_KEY, pin);
             savePin.value = "";
             reviewedDesign = null;
         } catch (error) {
@@ -155,4 +366,116 @@
             confirmSaveButton.disabled = false;
         }
     });
+
+    document.getElementById("loadAnalysisFrameworkButton")
+        .addEventListener("click", () => {
+            loadFrameworkWorkspace().catch(error =>
+                setAnalysisStatus(error.message, true)
+            );
+        });
+
+    analysisProjectSelect.addEventListener("change", () => {
+        const project = frameworkWorkspace.projects.find(
+            item => item.id === analysisProjectSelect.value
+        ) || null;
+        fillFramework(
+            project ? activeFramework(project.id) : null,
+            project
+        );
+        if (project) protocolProjectSelect.value = project.id;
+        renderFrameworkHistory();
+    });
+
+    document.getElementById("reviewAnalysisFrameworkButton")
+        .addEventListener("click", () => {
+            try {
+                reviewedFramework = collectAnalysisFramework();
+                requireFrameworkFields(reviewedFramework);
+                renderAnalysisReview(reviewedFramework);
+                setAnalysisSaveStatus("");
+                analysisReviewDialog.showModal();
+            } catch (error) {
+                setAnalysisStatus(error.message, true);
+            }
+        });
+
+    document.getElementById("analysisFrameworkBackButton")
+        .addEventListener("click", () => {
+            reviewedFramework = null;
+            analysisReviewDialog.close();
+        });
+
+    document.getElementById("confirmAnalysisFrameworkButton")
+        .addEventListener("click", async event => {
+            const button = event.currentTarget;
+            if (!reviewedFramework) {
+                setAnalysisSaveStatus(
+                    "Review the Analysis Framework again before saving.",
+                    true
+                );
+                return;
+            }
+            const token = researcherToken();
+            if (!token) {
+                setAnalysisSaveStatus("Enter the researcher PIN first.", true);
+                return;
+            }
+            button.disabled = true;
+            setAnalysisSaveStatus(
+                "Saving an immutable framework version and its lineage…"
+            );
+            try {
+                const response = await fetch("/api/saveDesign", {
+                    method: "POST",
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify(reviewedFramework)
+                });
+                const result = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    throw new Error(
+                        result.error || "The Analysis Framework could not be saved."
+                    );
+                }
+                sessionStorage.setItem(TOKEN_STORAGE_KEY, token);
+                setAnalysisSaveStatus(
+                    `${result.message} ${result.scopeExplanation}`
+                );
+                setAnalysisStatus(
+                    `${result.message} Project and topic lineage preserved.`
+                );
+                reviewedFramework = null;
+                await loadFrameworkWorkspace();
+                analysisProjectSelect.value = result.projectId;
+                protocolProjectSelect.value = result.projectId;
+                const savedProject = frameworkWorkspace.projects.find(
+                    item => item.id === result.projectId
+                );
+                fillFramework(
+                    activeFramework(result.projectId),
+                    savedProject
+                );
+                renderFrameworkHistory();
+            } catch (error) {
+                setAnalysisSaveStatus(error.message, true);
+            } finally {
+                button.disabled = false;
+            }
+        });
+
+    const storedToken = sessionStorage.getItem(TOKEN_STORAGE_KEY);
+    if (storedToken) {
+        analysisPin.value = storedToken;
+        loadFrameworkWorkspace().catch(error =>
+            setAnalysisStatus(error.message, true)
+        );
+    } else {
+        protocolProjectSelect.replaceChildren();
+        const option = document.createElement("option");
+        option.value = "";
+        option.textContent = "Unlock Analysis Framework to select a project";
+        protocolProjectSelect.appendChild(option);
+    }
 }());

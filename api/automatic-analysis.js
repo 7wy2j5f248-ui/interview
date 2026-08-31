@@ -11,6 +11,7 @@ import {
     processOldestAutomaticCase,
     workerRequestIsAuthorized
 } from "../server/automaticCaseAnalysis.js";
+import { processOldestFrameworkReanalysis } from "../server/frameworkReanalysis.js";
 import {
     continueTranscriptTranslation,
     processTranscriptTranslation,
@@ -33,10 +34,17 @@ async function processAndContinue(req) {
         auth: { persistSession: false, autoRefreshToken: false }
     });
     const openaiClient = new OpenAI({ apiKey: openaiKey });
-    const result = await processOldestAutomaticCase(
+    let result = await processOldestAutomaticCase(
         supabaseClient,
         openaiClient
     );
+
+    if (!result.claimed) {
+        result = await processOldestFrameworkReanalysis(
+            supabaseClient,
+            openaiClient
+        );
+    }
 
     if (result.claimed) {
         if (!result.completed) {

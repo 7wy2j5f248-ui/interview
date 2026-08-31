@@ -7,6 +7,7 @@ import {
 import { normalizeOpenAIModel } from "./modelConfiguration.js";
 import { loadParticipantCodeMap } from "./participantCodes.js";
 import { ensureEnglishTranslations } from "./messageTranslation.js";
+import { loadFrameworkForAutomaticJob } from "./analysisFramework.js";
 
 const WORKER_PATH = "/api/automatic-analysis";
 
@@ -160,10 +161,19 @@ export async function processOldestAutomaticCase(
             process.env.AUTOMATIC_ANALYSIS_MODEL
                 || process.env.QUALITATIVE_ANALYSIS_MODEL
         );
+        const analysisFramework = await loadFrameworkForAutomaticJob(
+            supabaseClient,
+            job.session_id
+        );
+        if (!analysisFramework) {
+            throw new Error(
+                "No project-bound Analysis Framework was frozen for this case. Create a framework for this research project before analysis continues."
+            );
+        }
         const analysis = await generateAutomaticCaseAnalysis(
             openaiClient,
             source.messages,
-            { model }
+            { model, analysisFramework }
         );
         const { error: demographicError } = await supabaseClient.rpc(
             "save_automatic_case_demographics",
@@ -200,7 +210,12 @@ export async function processOldestAutomaticCase(
             descriptorSources: analysis.descriptorSources,
             caseInterpretation: analysis.caseInterpretation,
             codes: analysis.codes,
-            themes: analysis.themes
+            themes: analysis.themes,
+            analysisFrameworkId: analysisFramework.id,
+            analysisFrameworkVersion: analysisFramework.versionNumber,
+            researchProjectId: analysisFramework.projectId,
+            researchProjectName: analysisFramework.projectName,
+            researchTopic: analysisFramework.researchTopic
         };
         const { data: reportId, error: completionError } =
             await supabaseClient.rpc(

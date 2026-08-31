@@ -12,6 +12,8 @@
         messages: [],
         reanalysis: {
             requests: [], proposals: [], reviews: [], events: [],
+            projects: [], frameworks: [], activeFrameworks: [], batches: [],
+            projectWideCaseStatuses: [], projectWideSourceCases: [],
             sourceReports: [], sourceCodes: [], sourceThemes: [],
             sourceHighlights: [], sourceThemeCodes: []
         }
@@ -45,6 +47,28 @@
     const reanalysisHistory = document.getElementById(
         "automaticReanalysisHistory"
     );
+    const projectWideProject = document.getElementById(
+        "projectWideReanalysisProject"
+    );
+    const projectWideFramework = document.getElementById(
+        "projectWideReanalysisFramework"
+    );
+    const projectWidePreviewButton = document.getElementById(
+        "projectWideReanalysisPreviewButton"
+    );
+    const projectWideRequestButton = document.getElementById(
+        "projectWideReanalysisRequestButton"
+    );
+    const projectWidePreviewText = document.getElementById(
+        "projectWideReanalysisPreview"
+    );
+    const projectWideStatus = document.getElementById(
+        "projectWideReanalysisStatus"
+    );
+    const projectWideHistory = document.getElementById(
+        "projectWideReanalysisHistory"
+    );
+    let projectWidePreview = null;
 
     function token() {
         return sessionStorage.getItem(TOKEN_STORAGE_KEY) || "";
@@ -200,6 +224,7 @@
         return ({
             keywords_unrelated_to_theme: "Keywords unrelated to theme",
             evidence_theme_mismatch: "Evidence-to-theme mismatch",
+            analysis_framework_changed: "Project-wide Analysis Framework self-check",
             other: "Other analytical concern"
         })[value] || value;
     }
@@ -268,6 +293,18 @@
                 request.researcher_notes
             } · Requested ${new Date(request.requested_at).toLocaleString()}`;
             record.append(heading, requestInfo);
+            const project = (layer.projects || []).find(
+                item => item.id === request.project_id
+            );
+            const framework = (layer.frameworks || []).find(
+                item => item.id === request.analysis_framework_id
+            );
+            const lineage = document.createElement("p");
+            lineage.className = "muted";
+            lineage.textContent = project && framework
+                ? `Global project rule: ${project.project_name} · Topic: ${project.research_topic} · Analysis Framework v${framework.version_number}. This case has its own proposal and audit; no report changes without explicit approval.`
+                : "Legacy lineage: refresh after the project-bound framework migration is available.";
+            record.appendChild(lineage);
             if (request.last_error) {
                 const error = document.createElement("p");
                 error.className = "automaticReanalysisWarning";
@@ -300,9 +337,9 @@
 
                 const audit = document.createElement("p");
                 const checks = proposal.relevance_audit?.checks || [];
-                audit.textContent = `Relevance audit: ${checks.filter(
+                audit.textContent = `Project-framework relevance audit: ${checks.filter(
                     item => item.accepted
-                ).length}/${checks.length} exact evidence items passed transcript grounding, code support, theme support, and sleep-research scope checks. ${
+                ).length}/${checks.length} exact evidence items passed transcript grounding, code support, theme support, and the named project's research-scope checks. ${
                     proposal.relevance_audit?.overallSummary || ""
                 }`;
                 record.appendChild(audit);
@@ -403,6 +440,210 @@
         }
     }
 
+    function invalidateProjectWidePreview() {
+        projectWidePreview = null;
+        projectWideRequestButton.disabled = true;
+        projectWidePreviewText.textContent =
+            "Preview the project, topic, framework version, and eligible case count before requesting.";
+    }
+
+    function populateProjectWideFrameworks() {
+        const projectId = projectWideProject.value;
+        const priorValue = projectWideFramework.value;
+        const frameworks = (workspace.reanalysis.frameworks || []).filter(
+            item => item.project_id === projectId
+        );
+        const activeId = (workspace.reanalysis.activeFrameworks || []).find(
+            item => item.project_id === projectId
+        )?.framework_id;
+        projectWideFramework.replaceChildren();
+        frameworks.forEach(framework => {
+            const option = document.createElement("option");
+            option.value = framework.id;
+            option.textContent = `Analysis Framework v${framework.version_number}${
+                framework.id === activeId ? " · active" : " · historical"
+            }`;
+            option.selected = framework.id === priorValue
+                || (!priorValue && framework.id === activeId);
+            projectWideFramework.appendChild(option);
+        });
+        projectWideFramework.disabled = !frameworks.length;
+    }
+
+    function renderProjectWideHistory() {
+        projectWideHistory.replaceChildren();
+        const layer = workspace.reanalysis || {};
+        const batches = layer.batches || [];
+        if (!batches.length) {
+            const empty = document.createElement("p");
+            empty.className = "muted";
+            empty.textContent = "No project-wide re-analysis has been requested.";
+            projectWideHistory.appendChild(empty);
+            return;
+        }
+        batches.forEach((batch, batchIndex) => {
+            const record = document.createElement("article");
+            record.className = "automaticReanalysisRecord";
+            const project = (layer.projects || []).find(
+                item => item.id === batch.project_id
+            );
+            const framework = (layer.frameworks || []).find(
+                item => item.id === batch.analysis_framework_id
+            );
+            const heading = document.createElement("h5");
+            heading.textContent = `${project?.project_name || "Research project"} · Analysis Framework v${
+                framework?.version_number || "?"
+            } · ${String(batch.status).replaceAll("_", " ")}`;
+            const lineage = document.createElement("p");
+            lineage.textContent = `Topic: ${
+                project?.research_topic || batch.scope_snapshot?.researchTopic || "—"
+            } · Requested ${new Date(batch.requested_at).toLocaleString()} · ${
+                batch.researcher_notes
+            }`;
+            const counts = document.createElement("p");
+            counts.className = "muted";
+            counts.textContent = `Eligible ${batch.eligible_case_count}; queued ${
+                batch.queued_case_count
+            }; processing ${batch.processing_case_count}; awaiting review ${
+                batch.proposal_ready_case_count
+            }; approved ${batch.approved_case_count}; rejected ${
+                batch.rejected_case_count
+            }; failed ${batch.failed_case_count}. Every current report is preserved until its own explicit approval.`;
+            record.append(heading, lineage, counts);
+
+            if (batchIndex === 0) {
+                const statuses = (layer.projectWideCaseStatuses || []).filter(
+                    item => item.project_reanalysis_batch_id === batch.id
+                );
+                if (statuses.length) {
+                    const details = document.createElement("details");
+                    const summary = document.createElement("summary");
+                    summary.textContent = `Show all ${statuses.length} individual case statuses`;
+                    const list = document.createElement("ul");
+                    statuses.forEach(status => {
+                        const source = (layer.projectWideSourceCases || []).find(
+                            item => item.id === status.source_report_id
+                        );
+                        const item = document.createElement("li");
+                        item.textContent = `${source?.case_number || status.session_id} · ${
+                            source?.participant_code || ""
+                        } · ${String(status.status).replaceAll("_", " ")}${
+                            status.last_error ? ` — ${status.last_error}` : ""
+                        }`;
+                        list.appendChild(item);
+                    });
+                    details.append(summary, list);
+                    record.appendChild(details);
+                }
+            }
+            projectWideHistory.appendChild(record);
+        });
+    }
+
+    function renderProjectWideControls() {
+        const priorProject = projectWideProject.value;
+        projectWideProject.replaceChildren();
+        (workspace.reanalysis.projects || []).forEach(project => {
+            const option = document.createElement("option");
+            option.value = project.id;
+            option.textContent = `${project.project_name} · ${project.research_topic}`;
+            option.selected = project.id === priorProject;
+            projectWideProject.appendChild(option);
+        });
+        projectWideProject.disabled = !projectWideProject.options.length;
+        populateProjectWideFrameworks();
+        projectWidePreviewButton.disabled = projectWideProject.disabled
+            || projectWideFramework.disabled;
+        renderProjectWideHistory();
+    }
+
+    async function previewProjectWideScope() {
+        projectWidePreviewButton.disabled = true;
+        projectWideRequestButton.disabled = true;
+        projectWideStatus.textContent = "Counting eligible completed cases in the selected project/topic…";
+        try {
+            const response = await fetch("/api/automatic-analysis-review", {
+                method: "POST",
+                headers: {
+                    Authorization: `Bearer ${token()}`,
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    action: "preview_project_wide_reanalysis",
+                    projectId: projectWideProject.value,
+                    analysisFrameworkId: projectWideFramework.value
+                })
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(data.error || "The project-wide scope could not be previewed.");
+            }
+            projectWidePreview = Object.freeze(data.preview);
+            projectWidePreviewText.textContent = `${data.preview.projectName} · Topic: ${
+                data.preview.researchTopic
+            } · Analysis Framework v${data.preview.analysisFrameworkVersion} · ${
+                data.preview.eligibleCaseCount
+            } eligible completed cases. Excluded: ${
+                data.preview.archivedCaseExcludedCount
+            } archived and ${data.preview.openRequestExcludedCount} with an open proposal/request. The run creates one proposal per case; no current report is overwritten or approved automatically.`;
+            projectWideRequestButton.disabled = data.preview.eligibleCaseCount < 1;
+            projectWideStatus.textContent = data.preview.eligibleCaseCount
+                ? "Scope preview ready. Add a reason note, then confirm the project-wide request."
+                : "No eligible completed cases are available for this scope.";
+        } finally {
+            projectWidePreviewButton.disabled = false;
+        }
+    }
+
+    async function requestProjectWideReanalysis() {
+        const notes = document.getElementById("projectWideReanalysisNotes")
+            .value.trim();
+        if (!notes) {
+            throw new Error("Explain the project-wide analytical problem to check.");
+        }
+        if (!projectWidePreview
+            || projectWidePreview.projectId !== projectWideProject.value
+            || projectWidePreview.analysisFrameworkId
+                !== projectWideFramework.value) {
+            throw new Error("Preview this exact project and framework scope before confirming.");
+        }
+        const confirmation = `Request project-wide re-analysis for ${
+            projectWidePreview.projectName
+        } (${projectWidePreview.researchTopic}) using Analysis Framework v${
+            projectWidePreview.analysisFrameworkVersion
+        } across ${projectWidePreview.eligibleCaseCount} eligible completed cases? Each result remains a proposal until individually approved.`;
+        if (!window.confirm(confirmation)) return;
+
+        projectWideRequestButton.disabled = true;
+        projectWideStatus.textContent =
+            "Creating the batch and one preserved, versioned request for every eligible case…";
+        const response = await fetch("/api/automatic-analysis-review", {
+            method: "POST",
+            headers: {
+                Authorization: `Bearer ${token()}`,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                action: "request_project_wide_reanalysis",
+                projectId: projectWidePreview.projectId,
+                analysisFrameworkId: projectWidePreview.analysisFrameworkId,
+                reasonCode: document.getElementById(
+                    "projectWideReanalysisReason"
+                ).value,
+                researcherNotes: notes
+            })
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            throw new Error(data.error || "The project-wide run could not be created.");
+        }
+        projectWidePreview = null;
+        document.getElementById("projectWideReanalysisNotes").value = "";
+        await loadWorkspace(activeThreadId);
+        projectWideRequestButton.disabled = true;
+        projectWideStatus.textContent = `${data.queuedCaseCount} individual case requests were queued. Processing is case by case; each proposal and audit requires explicit researcher approval before it can become current.`;
+    }
+
     function appendMessage(message) {
         const article = document.createElement("article");
         article.className = "analysisChatMessage";
@@ -496,6 +737,7 @@
         });
         renderConversation();
         renderSelection();
+        renderProjectWideControls();
     }
 
     function restoreSelection(sources) {
@@ -718,6 +960,26 @@
     reanalysisButton.addEventListener("click", () => {
         requestReanalysis().catch(error => {
             reanalysisStatus.textContent = error.message;
+            bridge.setStatus(error.message, true);
+        });
+    });
+    projectWideProject.addEventListener("change", () => {
+        populateProjectWideFrameworks();
+        invalidateProjectWidePreview();
+    });
+    projectWideFramework.addEventListener(
+        "change",
+        invalidateProjectWidePreview
+    );
+    projectWidePreviewButton.addEventListener("click", () => {
+        previewProjectWideScope().catch(error => {
+            projectWideStatus.textContent = error.message;
+            bridge.setStatus(error.message, true);
+        });
+    });
+    projectWideRequestButton.addEventListener("click", () => {
+        requestProjectWideReanalysis().catch(error => {
+            projectWideStatus.textContent = error.message;
             bridge.setStatus(error.message, true);
         });
     });

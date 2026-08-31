@@ -738,11 +738,24 @@
             `Participant code: ${identity.participantCode} · Session ID: ${identity.sessionId}`;
         const content = document.getElementById("automaticCaseReportContent");
         content.replaceChildren();
+        const lineageHeading = document.createElement("h3");
+        lineageHeading.textContent = "Project and analysis lineage";
+        const lineage = document.createElement("p");
+        const project = caseRecord.researchProject;
+        const framework = caseRecord.analysisFramework;
+        lineage.textContent = project
+            ? `Project: ${project.project_name} · Topic: ${project.research_topic} · Analysis Framework: ${framework ? `v${framework.version_number}` : "legacy pre-framework report"} · Report: ${caseRecord.reportLineage?.reportId || "—"}${caseRecord.reportLineage?.sourceReportId ? ` · Source report: ${caseRecord.reportLineage.sourceReportId}` : ""}`
+            : `Project/topic lineage unavailable · Analysis version: ${caseRecord.analysisVersion || "—"}`;
         const interpretationHeading = document.createElement("h3");
         interpretationHeading.textContent = "Case interpretation";
         const interpretation = document.createElement("p");
         interpretation.textContent = caseRecord.caseInterpretation;
-        content.append(interpretationHeading, interpretation);
+        content.append(
+            lineageHeading,
+            lineage,
+            interpretationHeading,
+            interpretation
+        );
 
         const themeHeading = document.createElement("h3");
         themeHeading.textContent = "Themes and codes";
