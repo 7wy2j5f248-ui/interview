@@ -2096,9 +2096,15 @@ export async function generateAutomaticCaseReanalysis(
     totalInputTokens += analysis.inputTokenCount || 0;
 
     if (!analysis.complete) {
-        throw new Error(
-            "The proposed re-analysis did not produce a complete evidence hierarchy."
-        );
+        const rejectedLabels = analysis.labelQualityAudit?.rejectedLabels || [];
+        throw new Error([
+            "The proposed re-analysis did not produce a complete evidence hierarchy.",
+            `Validated ${analysis.codes?.length || 0} codes, ${analysis.categories?.length || 0} categories, and ${analysis.themes?.length || 0} themes.`,
+            `${analysis.droppedCodes || 0} codes were dropped; ${analysis.invalidEvidence || 0} evidence or hierarchy records were invalid.`,
+            rejectedLabels.length
+                ? `Label audit rejected ${rejectedLabels.length}: ${rejectedLabels.slice(0, 8).map(item => `${item.kind} ${item.number} “${item.label}” — ${item.explanation}`).join(" | ")}`
+                : "The label audit did not reject a label."
+        ].join(" "));
     }
 
     let audited = await auditAutomaticCaseRelevance(
@@ -2136,9 +2142,15 @@ export async function generateAutomaticCaseReanalysis(
         );
         totalInputTokens += analysis.inputTokenCount || 0;
         if (!analysis.complete) {
-            throw new Error(
-                "The corrected re-analysis did not produce a complete evidence hierarchy."
-            );
+            const rejectedLabels = analysis.labelQualityAudit?.rejectedLabels || [];
+            throw new Error([
+                "The corrected re-analysis did not produce a complete evidence hierarchy.",
+                `Validated ${analysis.codes?.length || 0} codes, ${analysis.categories?.length || 0} categories, and ${analysis.themes?.length || 0} themes.`,
+                `${analysis.droppedCodes || 0} codes were dropped; ${analysis.invalidEvidence || 0} evidence or hierarchy records were invalid.`,
+                rejectedLabels.length
+                    ? `Label audit rejected ${rejectedLabels.length}: ${rejectedLabels.slice(0, 8).map(item => `${item.kind} ${item.number} “${item.label}” — ${item.explanation}`).join(" | ")}`
+                    : "The label audit did not reject a label."
+            ].join(" "));
         }
         audited = await auditAutomaticCaseRelevance(
             openaiClient,
