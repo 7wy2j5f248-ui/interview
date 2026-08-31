@@ -213,6 +213,8 @@ test("global framework queue creates one auditable proposal per case", async () 
     assert.match(processor, /loadBatchProposalVocabulary/);
     assert.match(processor, /project_reanalysis_batch_id/);
     assert.match(processor, /priorAttemptFailure/);
+    assert.match(processor, /priorAttemptFailures/);
+    assert.match(processor, /\.eq\("event_type", "failed"\)/);
     assert.match(processor, /\.eq\("status", "proposal_ready"\)/);
     assert.doesNotMatch(processor, /rpc\("complete_automatic_case_reanalysis"/);
     assert.match(migration, /'researcherApprovalRequired', false/);

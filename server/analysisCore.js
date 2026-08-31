@@ -2247,6 +2247,12 @@ export async function generateAutomaticCaseReanalysis(
             (analysis.invalidLabels || []).length
                 ? `Structurally invalid labels: ${analysis.invalidLabels.slice(0, 12).map(item => `${item.kind} “${item.label}”`).join(" | ")}`
                 : "No structurally invalid labels were recorded.",
+            (analysis.rejectedCategoryAssignments || []).length
+                ? `Rejected category assignments: ${analysis.rejectedCategoryAssignments.slice(0, 8).map(item => `“${item.label}” [codes ${(item.codeNumbers || []).join(",")}] — ${item.reason}`).join(" | ")}`
+                : "No category assignment was structurally rejected.",
+            (analysis.rejectedThemeAssignments || []).length
+                ? `Rejected theme assignments: ${analysis.rejectedThemeAssignments.slice(0, 8).map(item => `“${item.label}” [categories ${(item.categoryNumbers || []).join(",")}] — ${item.reason}`).join(" | ")}`
+                : "No theme assignment was structurally rejected.",
             analysis.fullHierarchyExpected
                 ? `This ${analysis.substantiveMessageCount}-turn substantive transcript required at least 4 codes, 2 categories, and 1 theme; hierarchy coverage complete: ${Boolean(analysis.hierarchyCoverageComplete)}.`
                 : "A full multi-level hierarchy was not structurally required for this short transcript.",

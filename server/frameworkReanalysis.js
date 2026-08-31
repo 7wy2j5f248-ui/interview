@@ -135,7 +135,11 @@ export async function processCaseReanalysisRequest(
                 "The request framework does not match its research project/topic lineage."
             );
         }
-        const [{ data: sourceReport, error: sourceError }, messageResult] =
+        const [
+            { data: sourceReport, error: sourceError },
+            messageResult,
+            priorFailureResult
+        ] =
             await Promise.all([
                 supabase
                     .from("qualitative_case_reports")
@@ -147,7 +151,14 @@ export async function processCaseReanalysisRequest(
                     .select("id, Participant, Session, Language, Speaker, Message, EnglishTranslation, Timestamp")
                     .eq("Session", request.session_id)
                     .order("Timestamp", { ascending: true })
-                    .order("id", { ascending: true })
+                    .order("id", { ascending: true }),
+                supabase
+                    .from(EVENTS)
+                    .select("created_at, details")
+                    .eq("request_id", requestId)
+                    .eq("event_type", "failed")
+                    .order("created_at", { ascending: false })
+                    .limit(4)
             ]);
         if (sourceError || !sourceReport) {
             throw new Error("The preserved source report could not be loaded.");
@@ -196,6 +207,9 @@ export async function processCaseReanalysisRequest(
                 sourceReportId: sourceReport.id,
                 sourceAnalysisVersion: sourceReport.analysis_version,
                 priorAttemptFailure: request.last_error || null,
+                priorAttemptFailures: (priorFailureResult.data || [])
+                    .map(event => event?.details?.error)
+                    .filter(Boolean),
                 researchProjectId: analysisFramework.projectId,
                 researchProjectName: analysisFramework.projectName,
                 researchTopic: analysisFramework.researchTopic,
