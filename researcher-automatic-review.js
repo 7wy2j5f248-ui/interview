@@ -19,6 +19,7 @@
     let activeThreadId = null;
     let activeWorkbookId = null;
     let loadingPromise = null;
+    let discussionInFlight = false;
     const selection = new Map();
 
     const selectionList = document.getElementById("automaticReviewSelectionList");
@@ -28,6 +29,12 @@
     const input = document.getElementById("automaticReviewDiscussionInput");
     const sendButton = document.getElementById(
         "automaticReviewDiscussionSendButton"
+    );
+    const selectionSummary = document.getElementById(
+        "automaticReviewSelectionSummary"
+    );
+    const discussionStatus = document.getElementById(
+        "automaticReviewDiscussionStatus"
     );
     const reanalysisButton = document.getElementById(
         "automaticReanalysisRequestButton"
@@ -48,9 +55,26 @@
     }
 
     function sourceLabel(source) {
-        return `${source.caseNumber} ${source.position}${
+        const position = source.position || "CASE";
+        return `${source.caseNumber} ${position}${
             source.label ? ` · ${source.label}` : ""
         }`;
+    }
+
+    function sourceContextText(sources) {
+        return (sources || []).map(sourceLabel).join("; ");
+    }
+
+    function immutableSelectionSnapshot() {
+        return [...selection.values()].map(source => Object.freeze({
+            kind: source.kind,
+            sessionId: source.sessionId,
+            caseNumber: source.caseNumber,
+            participantCode: source.participantCode,
+            position: source.position,
+            recordId: source.recordId || null,
+            label: source.label || null
+        }));
     }
 
     function currentCase(source) {
@@ -83,7 +107,9 @@
                 const remove = document.createElement("button");
                 remove.type = "button";
                 remove.textContent = "Remove";
+                remove.disabled = discussionInFlight;
                 remove.addEventListener("click", () => {
+                    if (discussionInFlight) return;
                     selection.delete(sourceKey(source));
                     renderSelection();
                 });
@@ -98,8 +124,20 @@
         document.getElementById("automaticReviewOpenReportButton").disabled =
             !firstCase?.hasReport;
         document.getElementById("automaticReviewClearSelectionButton").disabled =
-            !sources.length;
-        sendButton.disabled = !sources.length;
+            !sources.length || discussionInFlight;
+        sendButton.disabled = !sources.length || discussionInFlight;
+        selectionSummary.textContent = sources.length
+            ? `Exact analytical scope ready to send (${sources.length}): ${
+                sourceContextText(sources)
+            }`
+            : "No analytical scope selected.";
+        if (!discussionInFlight) {
+            discussionStatus.textContent = sources.length
+                ? `Ready to discuss exact analytical scope: ${
+                    sourceContextText(sources)
+                }`
+                : "Select source records before discussing them with AI.";
+        }
         const reanalysisSessionId = selectedSessionId();
         reanalysisButton.disabled = !reanalysisSessionId;
         document.getElementById("automaticReanalysisSelectedCase").textContent =
@@ -219,7 +257,10 @@
             const record = document.createElement("article");
             record.className = "automaticReanalysisRecord";
             const heading = document.createElement("h5");
-            heading.textContent = `Request ${request.request_number} · ${String(
+            const requestCase = currentCase({ sessionId: request.session_id });
+            heading.textContent = `Re-analysis request ${request.request_number} · ${
+                requestCase?.caseNumber || request.session_id
+            } · ${String(
                 request.status
             ).replaceAll("_", " ")}`;
             const requestInfo = document.createElement("p");
@@ -378,7 +419,8 @@
         if (sources.length) {
             const line = document.createElement("p");
             line.className = "automaticReviewMessageSources";
-            line.textContent = `Source context: ${sources.map(sourceLabel).join("; ")}`;
+            line.textContent = `Exact analytical scope: ${sourceContextText(sources)}`;
+            line.dataset.sourceContext = sourceContextText(sources);
             article.appendChild(line);
         }
 
@@ -548,8 +590,16 @@
     async function sendMessage(message) {
         const text = message.trim();
         if (!text || !selection.size) return;
-        sendButton.disabled = true;
-        bridge.setStatus("AI is checking the selected reports, evidence, and workbook rows…");
+        const submittedSelection = immutableSelectionSnapshot();
+        const submittedContext = sourceContextText(submittedSelection);
+        let outcomeStatus = null;
+        discussionInFlight = true;
+        renderSelection();
+        discussionStatus.textContent =
+            `Processing exact analytical scope: ${submittedContext}`;
+        bridge.setStatus(
+            `AI is checking: ${submittedContext}. The exact selection is locked until this response finishes.`
+        );
         try {
             const response = await fetch("/api/automatic-analysis-review", {
                 method: "POST",
@@ -561,7 +611,7 @@
                     action: "discuss",
                     threadId: activeThreadId,
                     workbookImportId: activeWorkbookId,
-                    selection: [...selection.values()],
+                    selection: submittedSelection,
                     message: text
                 })
             });
@@ -572,11 +622,19 @@
             activeThreadId = data.thread.id;
             input.value = "";
             await loadWorkspace(activeThreadId);
+            outcomeStatus =
+                `AI response ready for exact analytical scope: ${submittedContext}`;
             bridge.setStatus(
-                "AI review ready. The discussion and its exact case/Tn/Cn provenance were saved."
+                `AI review ready for: ${submittedContext}. The discussion and its exact case/Tn/Cn provenance were saved.`
             );
+        } catch (error) {
+            outcomeStatus =
+                `Discussion failed for exact analytical scope: ${submittedContext}`;
+            throw error;
         } finally {
-            sendButton.disabled = !selection.size;
+            discussionInFlight = false;
+            renderSelection();
+            if (outcomeStatus) discussionStatus.textContent = outcomeStatus;
         }
     }
 
@@ -587,6 +645,12 @@
     }
 
     window.addEventListener("automatic-analysis-review-source", event => {
+        if (discussionInFlight) {
+            bridge.setStatus(
+                "The current AI request has a locked analytical scope. Wait for its response before changing the selection."
+            );
+            return;
+        }
         const source = event.detail;
         if (!source?.sessionId || !source?.caseNumber) return;
         const key = sourceKey(source);
@@ -622,6 +686,7 @@
         });
     document.getElementById("automaticReviewClearSelectionButton")
         .addEventListener("click", () => {
+            if (discussionInFlight) return;
             selection.clear();
             renderSelection();
         });

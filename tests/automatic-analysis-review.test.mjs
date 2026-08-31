@@ -114,6 +114,8 @@ test("visible automatic-analysis workspace restores discussion and upload contro
     assert.ok(legacyIndex > panelIndex);
     assert.match(html, /id="automaticReviewUploadButton"/);
     assert.match(html, /id="automaticReviewDiscussionForm"/);
+    assert.match(html, /id="automaticReviewSelectionSummary"/);
+    assert.match(html, /id="automaticReviewDiscussionStatus"/);
     assert.doesNotMatch(
         html.slice(panelIndex, html.indexOf(">", panelIndex)),
         /\shidden(?:\s|>)/
@@ -122,6 +124,21 @@ test("visible automatic-analysis workspace restores discussion and upload contro
     assert.match(legacyClient, /automatic-analysis-review-source/);
     assert.match(client, /action: "upload_workbook"/);
     assert.match(client, /action: "discuss"/);
+    assert.match(client, /function immutableSelectionSnapshot/);
+    assert.match(
+        client,
+        /const submittedSelection = immutableSelectionSnapshot\(\);[\s\S]*selection: submittedSelection/
+    );
+    assert.match(
+        client,
+        /Processing exact analytical scope: \$\{submittedContext\}/
+    );
+    assert.match(
+        client,
+        /Exact analytical scope: \$\{sourceContextText\(sources\)\}/
+    );
+    assert.match(client, /line\.dataset\.sourceContext = sourceContextText\(sources\)/);
+    assert.match(client, /Re-analysis request \$\{request\.request_number\}/);
     assert.match(migration, /enable row level security/g);
     assert.match(migration, /selected_sources jsonb not null/);
     assert.match(migration, /file_sha256 text not null/);

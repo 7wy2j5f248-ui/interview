@@ -581,6 +581,14 @@
             margin-block-start: 0.5rem;
         }
 
+        .automaticReviewScopeSummary {
+            background: #eef5ff;
+            border-inline-start: 4px solid #376ea6;
+            color: #173968;
+            margin-block: 0.65rem;
+            padding: 0.65rem 0.75rem;
+        }
+
         .automaticReanalysisPanel {
             background: #ffffff;
             border: 1px solid #9db3d1;
@@ -907,6 +915,9 @@
             <div id="automaticReviewSelectionList" class="automaticReviewSelectionList">
                 <span class="muted">Select a case, Tn theme, or Cn code above.</span>
             </div>
+            <p id="automaticReviewSelectionSummary" class="automaticReviewScopeSummary">
+                No analytical scope selected.
+            </p>
             <div class="actionRow">
                 <button id="automaticReviewOpenTranscriptButton" type="button" disabled>
                     Open selected transcript
@@ -967,6 +978,9 @@
             </div>
 
             <div id="automaticReviewConversation" class="analysisConversation" aria-live="polite"></div>
+            <p id="automaticReviewDiscussionStatus" class="automaticReviewScopeSummary" role="status">
+                Select source records before discussing them with AI.
+            </p>
             <form id="automaticReviewDiscussionForm" class="analysisDiscussionForm">
                 <label>
                     Your question or analytical instruction
