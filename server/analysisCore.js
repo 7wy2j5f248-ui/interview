@@ -20,6 +20,13 @@ function normalizedText(value) {
         : null;
 }
 
+function normalizedModelAnalyticLabel(value) {
+    const label = normalizedText(value);
+    return label
+        ? label.replace(/_+/gu, " ").replace(/\s+/gu, " ").trim()
+        : null;
+}
+
 export function isNaturalAnalyticLabelShape(value) {
     const label = normalizedText(value)?.replace(/\s+/gu, " ");
 
@@ -636,7 +643,7 @@ function validateAutomaticHierarchy(rawCategories, rawThemes, codes) {
     let invalidThemes = 0;
 
     (Array.isArray(rawCategories) ? rawCategories : []).forEach(rawCategory => {
-        const label = normalizedText(rawCategory?.label);
+        const label = normalizedModelAnalyticLabel(rawCategory?.label);
         const rationale = normalizedText(rawCategory?.rationale);
         const codeNumbers = [...new Set(
             (Array.isArray(rawCategory?.code_numbers)
@@ -672,7 +679,7 @@ function validateAutomaticHierarchy(rawCategories, rawThemes, codes) {
     });
 
     (Array.isArray(rawThemes) ? rawThemes : []).forEach(rawTheme => {
-        const label = normalizedText(rawTheme?.label);
+        const label = normalizedModelAnalyticLabel(rawTheme?.label);
         const rationale = normalizedText(rawTheme?.rationale);
         const categoryNumbers = [...new Set(
             (Array.isArray(rawTheme?.category_numbers)
@@ -842,7 +849,7 @@ export function validateAutomaticCaseAnalysis(value, availableMessages) {
     let droppedCodes = 0;
 
     (Array.isArray(value?.codes) ? value.codes : []).forEach(rawCode => {
-        const label = normalizedText(rawCode?.label);
+        const label = normalizedModelAnalyticLabel(rawCode?.label);
         const rationale = normalizedText(rawCode?.rationale);
         const meaningUnits = [];
 

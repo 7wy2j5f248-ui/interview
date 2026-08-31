@@ -185,6 +185,41 @@ test("a substantive interview cannot pass as a one-code thin proposal", () => {
     assert.equal(result.complete, false);
 });
 
+test("model underscore formatting is normalized before hierarchy validation", () => {
+    const text = "Night shifts delay sleep, naps reduce sleepiness, television fills silence, and the phone stays muted.";
+    const result = validateAutomaticCaseAnalysis({
+        codes: ["night_shift", "short_naps", "background_tv", "phone_restraint"].map(label => ({
+            label,
+            rationale: "Transcript-supported sleep behavior.",
+            meaning_unit_evidence: [{
+                message_id: "message-1",
+                exact_text: text,
+                anchor_expressions: []
+            }]
+        })),
+        categories: [{
+            label: "schedule_disruption",
+            rationale: "Work and naps shape sleep timing.",
+            code_numbers: [1, 2]
+        }, {
+            label: "evening_media",
+            rationale: "Media choices shape the bedtime setting.",
+            code_numbers: [3, 4]
+        }],
+        themes: [{
+            label: "active_management_of_sleep_disruption",
+            rationale: "The participant manages work and media pressures around sleep.",
+            category_numbers: [1, 2]
+        }],
+        case_interpretation: "The participant actively manages several sleep pressures."
+    }, [{ id: "message-1", originalText: text }]);
+
+    assert.equal(result.complete, true);
+    assert.equal(result.codes[0].label, "night shift");
+    assert.equal(result.categories[0].label, "schedule disruption");
+    assert.equal(result.themes[0].label, "active management of sleep disruption");
+});
+
 test("case re-analysis requires transcript, code, theme, and research-scope relevance", () => {
     const analysis = {
         codes: [{
