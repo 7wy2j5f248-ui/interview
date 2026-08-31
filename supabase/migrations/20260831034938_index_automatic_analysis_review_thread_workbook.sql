@@ -1,0 +1,3 @@
+create index automatic_analysis_review_threads_workbook_idx
+on public.automatic_analysis_review_threads (workbook_import_id)
+where workbook_import_id is not null;

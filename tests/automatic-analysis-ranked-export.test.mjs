@@ -325,7 +325,8 @@ test("Vercel function entries remain within the Hobby deployment limit", async (
         .sort();
 
     assert.ok(apiFiles.length <= 12);
-    assert.equal(apiFiles.length, 11);
+    assert.equal(apiFiles.length, 12);
+    assert.ok(apiFiles.includes("automatic-analysis-review.js"));
     assert.ok(!apiFiles.includes("participants.js"));
     assert.ok(!apiFiles.includes("sessions.js"));
     assert.ok(!apiFiles.includes("automatic-analysis-export.js"));

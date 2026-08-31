@@ -275,7 +275,7 @@ test("researcher dashboard uses cases, positional codes, and positional themes",
     assert.match(script, /\["social_identity", "Social identity"\]/);
     assert.match(
         script,
-        /\.\.\.COMPACT_IDENTIFIER_HEADERS,\s*"Link to transcript",\s*"Case report",\s*"Archive",\s*"Language",\s*\.\.\.FORM_ONE_DEMOGRAPHIC_COLUMNS/
+        /\.\.\.COMPACT_IDENTIFIER_HEADERS,\s*"Link to transcript",\s*"Case report",\s*"Archive",\s*"AI discussion",\s*"Language",\s*\.\.\.FORM_ONE_DEMOGRAPHIC_COLUMNS/
     );
     assert.match(script, /transcriptUrl\(item\)/);
     assert.match(script, /URLSearchParams\(window\.location\.search\)\.get\("case"\)/);
@@ -632,7 +632,7 @@ test("Cases and keywords loads every case and every stored highlight", async () 
     assert.match(script, /DASHBOARD_PAGE_CONCURRENCY = 4/);
     assert.match(script, /casesWithMarkedKeywords/);
     assert.match(script, /reports currently have validated keyword evidence/);
-    assert.match(html, /researcher-automatic-analysis\.js\?version=20260829-compact-translated-v13/);
+    assert.match(html, /researcher-automatic-analysis\.js\?version=20260831-second-layer-review-v14/);
     assert.match(html, /automaticAnalysisGateStatus/);
     assert.match(script, /cache: "no-store"/);
     assert.match(script, /searchParams\.set\("fresh"/);

@@ -194,6 +194,46 @@
         return button;
     }
 
+    function reviewSource(caseRecord, kind = "case", record = null) {
+        const isTheme = kind === "theme";
+        const isCode = kind === "code";
+        const number = isTheme
+            ? record?.theme_number
+            : isCode
+                ? record?.code_number
+                : null;
+        return {
+            kind,
+            sessionId: caseRecord.transcriptIdentity?.sessionId,
+            caseNumber: caseRecord.caseNumber,
+            participantCode: participantCode(caseRecord),
+            position: number ? `${isTheme ? "T" : "C"}${number}` : "CASE",
+            recordId: record?.id || null,
+            label: isTheme
+                ? record?.theme_label
+                : isCode
+                    ? record?.code_label
+                    : "Individual case report"
+        };
+    }
+
+    function sendSourceToReview(caseRecord, kind = "case", record = null) {
+        window.dispatchEvent(new CustomEvent(
+            "automatic-analysis-review-source",
+            { detail: reviewSource(caseRecord, kind, record) }
+        ));
+    }
+
+    function reviewSelectButton(caseRecord) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "worksheetTranscriptButton automaticReviewSelectButton";
+        button.textContent = "Discuss";
+        button.title = `Add ${caseRecord.caseNumber} to the second-layer AI discussion`;
+        button.addEventListener("click", () => sendSourceToReview(caseRecord));
+        return button;
+    }
+
     function archiveCaseButton(caseRecord) {
         const button = document.createElement("button");
         button.type = "button";
@@ -244,6 +284,7 @@
             "Link to transcript",
             "Case report",
             "Archive",
+            "AI discussion",
             "Language",
             ...FORM_ONE_DEMOGRAPHIC_COLUMNS.map(([, label]) => label),
             ...Array.from(
@@ -270,6 +311,9 @@
             const archiveCell = document.createElement("td");
             archiveCell.appendChild(archiveCaseButton(caseRecord));
             row.appendChild(archiveCell);
+            const reviewCell = document.createElement("td");
+            reviewCell.appendChild(reviewSelectButton(caseRecord));
+            row.appendChild(reviewCell);
             createCell(row, caseRecord.language || "—");
             FORM_ONE_DEMOGRAPHIC_COLUMNS.forEach(([key]) => createCell(
                 row,
@@ -392,10 +436,13 @@
                         button.type = "button";
                         button.className = "worksheetExpressionButton";
                         button.textContent = record[labelKey];
-                        button.title = record.rationale;
-                        button.addEventListener(
-                            "click",
-                            () => openTranscript(caseRecord)
+                        button.title = `${record.rationale}\n\nClick to add this participant-local ${prefix}${number} source to the second-layer AI discussion.`;
+                        button.addEventListener("click", () =>
+                            sendSourceToReview(
+                                caseRecord,
+                                kind === "themes" ? "theme" : "code",
+                                record
+                            )
                         );
                         line.appendChild(button);
                         cell.appendChild(line);
@@ -564,6 +611,7 @@
                         : activeView === "incomplete"
                             ? "Form 4 · Needs attention: unfinished interviews are separate from Forms 1–3. Each row preserves its transcript and separated demographic fields, summarizes only the material actually recorded, and states how incomplete the interview is. No themes, codes, or keywords are assigned before formal completion."
                             : "Archived cases are excluded from every active analysis form and from future automatic reanalysis. Each archived row preserves its transcript, report, language, demographic columns, mention-ranked C1–Cn code groups, mention-ranked T1–Tn theme groups, and archive history.";
+        window.dispatchEvent(new CustomEvent("automatic-analysis-review-ready"));
     }
 
     function highlightedText(message, caseRecord) {
@@ -1093,6 +1141,23 @@
         if (!activeCaseRecord) return;
         setArchiveState(activeCaseRecord, !activeCaseRecord.archivedAt)
             .catch(error => setStatus(error.message, true));
+    });
+
+    window.automaticAnalysisReviewBridge = Object.freeze({
+        cases: () => payload.cases,
+        openTranscriptForSession(sessionId) {
+            const caseRecord = payload.cases.find(item =>
+                item.transcriptIdentity?.sessionId === sessionId
+            );
+            if (caseRecord) openTranscript(caseRecord);
+        },
+        openReportForSession(sessionId) {
+            const caseRecord = payload.cases.find(item =>
+                item.transcriptIdentity?.sessionId === sessionId
+            );
+            if (caseRecord?.hasReport) openCaseReport(caseRecord);
+        },
+        setStatus
     });
 
     if (token()) {

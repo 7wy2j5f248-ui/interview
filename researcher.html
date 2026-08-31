@@ -538,6 +538,49 @@
             width: 100%;
         }
 
+        .automaticReviewSelectionList {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-block: 0.75rem;
+        }
+
+        .automaticReviewSource {
+            align-items: center;
+            background: #fff8e8;
+            border: 1px solid #d9b66f;
+            border-radius: 999px;
+            color: #5d3b00;
+            display: inline-flex;
+            gap: 0.35rem;
+            padding: 0.35rem 0.65rem;
+        }
+
+        .automaticReviewSource button {
+            background: none;
+            border: 0;
+            color: inherit;
+            font: inherit;
+            margin: 0;
+            padding: 0;
+            text-decoration: underline;
+        }
+
+        .worksheetExpressionButton[aria-pressed="true"],
+        .automaticReviewSelectButton[aria-pressed="true"] {
+            background: #fff1bf;
+            border-radius: 0.25rem;
+            color: #6b4300;
+            outline: 2px solid #d49a2a;
+            outline-offset: 2px;
+        }
+
+        .automaticReviewMessageSources {
+            color: #52657f;
+            font-size: 0.86rem;
+            margin-block-start: 0.5rem;
+        }
+
         .analysisProposal {
             background: #fff8e8;
             border: 1px solid #d9b66f;
@@ -781,6 +824,79 @@
         </nav>
         <p id="automaticAnalysisDescription" class="muted"></p>
         <div id="automaticAnalysisTable"></div>
+
+        <section id="automaticAnalysisReview" class="analysisDiscussion" aria-labelledby="automaticAnalysisReviewHeading">
+            <h3 id="automaticAnalysisReviewHeading">Second-layer analysis discussion</h3>
+            <p class="muted">
+                Select one or more case, theme, or code cells above. The AI
+                discussion receives those exact case numbers and source
+                positions, their stored reports and evidence, and the latest
+                uploaded researcher workbook. Original automatic case reports
+                are never overwritten.
+            </p>
+
+            <div class="analysisWorkbookControls">
+                <button id="automaticReviewUploadButton" type="button">
+                    Upload researcher workbook
+                </button>
+                <input
+                    id="automaticReviewWorkbookInput"
+                    type="file"
+                    accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    hidden
+                >
+                <span id="automaticReviewWorkbookStatus" class="analysisWorkbookStatus">
+                    No researcher workbook uploaded yet.
+                </span>
+            </div>
+
+            <p><strong>Selected source records</strong></p>
+            <div id="automaticReviewSelectionList" class="automaticReviewSelectionList">
+                <span class="muted">Select a case, Tn theme, or Cn code above.</span>
+            </div>
+            <div class="actionRow">
+                <button id="automaticReviewOpenTranscriptButton" type="button" disabled>
+                    Open selected transcript
+                </button>
+                <button id="automaticReviewOpenReportButton" type="button" disabled>
+                    Open selected case report
+                </button>
+                <button id="automaticReviewClearSelectionButton" type="button" disabled>
+                    Clear selection
+                </button>
+            </div>
+
+            <div class="actionRow">
+                <label>
+                    Saved discussion
+                    <select id="automaticReviewThreadSelect">
+                        <option value="">New discussion</option>
+                    </select>
+                </label>
+                <button id="automaticReviewNewThreadButton" type="button">
+                    Start new discussion
+                </button>
+            </div>
+
+            <div id="automaticReviewConversation" class="analysisConversation" aria-live="polite"></div>
+            <form id="automaticReviewDiscussionForm" class="analysisDiscussionForm">
+                <label>
+                    Your question or analytical instruction
+                    <textarea
+                        id="automaticReviewDiscussionInput"
+                        placeholder="For example: P0107 T1 has only one supporting mention. Check whether Work Schedule is a valid rare theme, should be regrouped, or needs transcript review."
+                    ></textarea>
+                </label>
+                <button id="automaticReviewDiscussionSendButton" type="submit" disabled>
+                    Discuss selected records with AI
+                </button>
+            </form>
+            <p class="muted">
+                Every message stores the selected case/Tn/Cn references,
+                workbook layer, model, timestamp, and evidence provenance so
+                the discussion can be reopened later.
+            </p>
+        </section>
     </div>
 </section>
 
@@ -1630,7 +1746,7 @@ document.getElementById("periodResetButton").addEventListener("click", () => {
 loadStatistics();
 
 </script>
-<script src="researcher-automatic-analysis.js?version=20260829-compact-translated-v13"></script>
+<script src="researcher-automatic-analysis.js?version=20260831-second-layer-review-v14"></script>
     
 </body>
 </html>
