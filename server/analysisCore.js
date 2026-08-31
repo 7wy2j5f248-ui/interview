@@ -7,7 +7,7 @@ export const QUALITATIVE_ANALYSIS_VERSION = "task-014-v7-complete-cases-before-s
 export const AUTOMATIC_CASE_ANALYSIS_VERSION =
     "case-analysis-v5-meaning-units-categories-completed";
 export const AUTOMATIC_CASE_REANALYSIS_VERSION =
-    "case-reanalysis-v4-feedback-completed";
+    "case-reanalysis-v5-meaning-units-categories-proposed";
 export const DEFAULT_ANALYSIS_BATCH_SIZE = 40;
 export const MAX_ANALYTIC_LABEL_WORDS = 8;
 export const MAX_ANALYTIC_LABEL_LENGTH = 100;
@@ -29,8 +29,15 @@ export function isNaturalAnalyticLabelShape(value) {
 
     const words = label.split(" ").filter(Boolean);
     return words.length <= MAX_ANALYTIC_LABEL_WORDS
-        && !/[.!?;:/|&]/u.test(label)
+        && !/[.!?;:/|&_]/u.test(label)
         && !/\b(?:and|or|but|because|although)\b/iu.test(label);
+}
+
+export function isConciseCodeLabelShape(value) {
+    const label = normalizedText(value)?.replace(/\s+/gu, " ");
+
+    if (!label || !isNaturalAnalyticLabelShape(label)) return false;
+    return label.split(" ").filter(Boolean).length <= 3;
 }
 
 export function isThemePatternLabelShape(value) {
@@ -873,12 +880,12 @@ export function validateAutomaticCaseAnalysis(value, availableMessages) {
             });
         });
 
-        if (!isNaturalAnalyticLabelShape(label)
+        if (!isConciseCodeLabelShape(label)
             || !rationale
             || !meaningUnits.length) {
             invalidEvidence += 1;
             droppedCodes += 1;
-            if (!isNaturalAnalyticLabelShape(label)) {
+            if (!isConciseCodeLabelShape(label)) {
                 invalidLabels.push({ kind: "code", label: label || "" });
             }
             return;
@@ -1010,7 +1017,9 @@ export function validateAutomaticLabelQualityAudit(analysis, value) {
         const exactLabel = audit?.label === item.label;
         const structurallyValid = item.kind === "theme"
             ? isThemePatternLabelShape(item.label)
-            : isNaturalAnalyticLabelShape(item.label);
+            : item.kind === "code"
+                ? isConciseCodeLabelShape(item.label)
+                : isNaturalAnalyticLabelShape(item.label);
         const uniqueAtLevel = labelCounts.get(
             `${item.kind}:${
                 normalizedText(item.label)?.toLocaleLowerCase() || ""
@@ -1689,7 +1698,7 @@ export async function generateAutomaticCaseAnalysis(
         "Work strictly upward from evidence: meaning units → codes → categories → themes.",
         "A meaning unit is an exact passage containing one reasonably coherent idea. It may be part of a sentence, one sentence, or several sentences; its boundary follows meaning rather than punctuation. Select enough context to keep the idea understandable. Return optional anchor_expressions as exact words or phrases inside the meaning unit.",
         "Never select greetings, thanks, farewells, interviewer courtesies, or other phatic language as meaning units or codes.",
-        "A code names the specific phenomenon expressed by one or more meaning units. Every code must be supportable by its text. Do not add an unsupported cause, motive, diagnosis, social structure, evaluation, consequence, or theoretical explanation.",
+        "A code names the specific phenomenon expressed by one or more meaning units. Prefer one ordinary English word; use two or three words only when they form one familiar natural phrase. Never use underscores, a clause, a sentence, or a bag of descriptors. Every code must be supportable by its text. Do not add an unsupported cause, motive, diagnosis, social structure, evaluation, consequence, or theoretical explanation.",
         "A category answers: What is being described? Group at least two related codes into one broader descriptive phenomenon. Categories must be firm, coherent, and evidence-grounded.",
         "A theme answers: What patterned meaning links these observations? Interpret at least two categories together and state the resulting patterned meaning. A theme is interpretive, but it is still part of the completed analytical result; do not pause or ask for researcher confirmation.",
         "If a firm code or category lacks enough related material for a defensible higher level, retain it as unsynthesized. Do not manufacture a category or theme, and do not label the result as waiting for researcher review.",

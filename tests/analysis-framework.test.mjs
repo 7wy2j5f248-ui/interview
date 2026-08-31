@@ -27,6 +27,10 @@ const globalRulesMigrationUrl = new URL(
     "../supabase/migrations/20260831201500_add_configurable_global_analysis_rules.sql",
     import.meta.url
 );
+const proposalOnlyMigrationUrl = new URL(
+    "../supabase/migrations/20260831192536_create_proposal_only_category_revision.sql",
+    import.meta.url
+);
 
 const sample = {
     id: "11111111-1111-4111-8111-111111111111",
@@ -182,7 +186,7 @@ test("database preserves project, framework, proposal, and approval lineage", as
     );
 });
 
-test("global framework queue creates one auditable completed version per case", async () => {
+test("global framework queue creates one auditable proposal per case", async () => {
     const [worker, processor, migration, reviewUi, dashboard] = await Promise.all([
         readFile(new URL("../api/automatic-analysis.js", import.meta.url), "utf8"),
         readFile(new URL("../server/frameworkReanalysis.js", import.meta.url), "utf8"),
@@ -194,21 +198,22 @@ test("global framework queue creates one auditable completed version per case", 
     assert.match(processor, /generateAutomaticCaseReanalysis/);
     assert.match(processor, /relevance_audit: analysis\.relevanceAudit/);
     assert.match(processor, /source_quality_flags: sourceQualityFlags/);
-    assert.match(processor, /complete_automatic_case_reanalysis/);
+    assert.match(processor, /status: "proposal_ready"/);
+    assert.doesNotMatch(processor, /rpc\("complete_automatic_case_reanalysis"/);
     assert.match(migration, /'researcherApprovalRequired', false/);
     assert.match(reviewUi, /Global project rule/);
-    assert.match(reviewUi, /own completed version and audit/);
+    assert.match(reviewUi, /own proposed revision and audit/);
     assert.match(dashboard, /researchProject/);
     assert.match(dashboard, /analysisFramework/);
     assert.match(dashboard, /reportLineage/);
 });
 
-test("project-wide re-analysis is previewed, batched, and completed without approval", async () => {
+test("project-wide re-analysis is previewed, batched, and inspectable without approval", async () => {
     const [html, client, endpoint, migration] = await Promise.all([
         readFile(new URL("../researcher.html", import.meta.url), "utf8"),
         readFile(new URL("../researcher-automatic-review.js", import.meta.url), "utf8"),
         readFile(new URL("../api/automatic-analysis-review.js", import.meta.url), "utf8"),
-        readFile(autonomousFeedbackMigrationUrl, "utf8")
+        readFile(proposalOnlyMigrationUrl, "utf8")
     ]);
     assert.match(html, /Request project-wide re-analysis/);
     assert.match(html, /Preview project-wide scope/);
@@ -220,8 +225,10 @@ test("project-wide re-analysis is previewed, batched, and completed without appr
     assert.match(endpoint, /preview_project_wide_reanalysis/);
     assert.match(endpoint, /create_project_wide_reanalysis_batch/);
     assert.match(endpoint, /scheduleAutomaticCaseAnalysis/);
-    assert.match(migration, /complete_automatic_case_reanalysis/);
-    assert.match(migration, /set status = 'completed'/);
-    assert.match(migration, /researcherApprovalRequired', false/);
-    assert.match(migration, /feedbackStartsNewVersion', true/);
+    assert.match(migration, /case-reanalysis-v5-meaning-units-categories-proposed/);
+    assert.match(migration, /resultsAreProposals/);
+    assert.match(migration, /automaticPromotion', false/);
+    assert.match(migration, /researcherApprovalRequiredPerCaseToInspect', false/);
+    assert.match(migration, /research_project_case_memberships/);
+    assert.match(migration, /S1783783759083/);
 });

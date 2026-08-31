@@ -1055,7 +1055,9 @@ async function previewProjectWideReanalysis(req, res, supabase) {
             openRequestExcludedCount: preview.open_request_excluded_count,
             archivedCaseExcludedCount: preview.archived_case_excluded_count,
             priorReportVersionsPreserved: true,
-            completedVersionsPublishedAutomatically: true,
+            completedVersionsPublishedAutomatically: false,
+            proposalsGeneratedWithoutApproval: true,
+            automaticPromotion: false,
             researcherApprovalRequiredBeforeInspection: false,
             consolidatedBatchDownloadWhenComplete: true
         }

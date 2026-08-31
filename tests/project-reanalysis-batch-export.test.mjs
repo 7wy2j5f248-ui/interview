@@ -19,7 +19,7 @@ function sampleData() {
             analysis_framework_id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
             reason_code: "analysis_framework_changed",
             researcher_notes: "Apply direct sleep relevance.",
-            status: "completed",
+            status: "proposal_ready",
             eligible_case_count: 1,
             queued_case_count: 0,
             processing_case_count: 0,
@@ -67,7 +67,7 @@ function sampleData() {
         proposals: [{
             id: "11111111-1111-4111-8111-111111111111",
             request_id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
-            proposal_version: "case-reanalysis-v2-framework-governed",
+            proposal_version: "case-reanalysis-v5-meaning-units-categories-proposed",
             proposed_report: {
                 caseInterpretation: "The participant has irregular sleep.",
                 themes: [{
@@ -123,7 +123,7 @@ function sampleData() {
             participant_code: "P0001",
             case_interpretation: "The participant discusses work and sleep.",
             analysis_version: "automatic-case-analysis-v4",
-            superseded_at: "2026-08-31T07:59:00.000Z"
+            superseded_at: null
         }],
         sourceCodes: [{
             id: "code-source",
@@ -171,7 +171,7 @@ async function workbookBuffer(data) {
     return Buffer.concat(chunks);
 }
 
-test("complete batch export separates prior and completed analysis with provenance", async () => {
+test("complete batch export separates current and proposed analysis with provenance", async () => {
     const buffer = await workbookBuffer(sampleData());
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(buffer);
@@ -180,30 +180,44 @@ test("complete batch export separates prior and completed analysis with provenan
         "1 Batch summary",
         "2 Case comparison",
         "3 Current source evidence",
-        "4 Completed revised evidence",
-        "5 Relevance & quality audit"
+        "4 Proposed revised evidence",
+        "5 Proposed Form 1 Cases",
+        "6 Proposed Form 2 MUs",
+        "7 Proposed Form 3 Codes",
+        "8 Proposed Form 4 Categories",
+        "9 Proposed Form 5 Themes",
+        "10 Relevance & quality audit"
     ]);
     const summary = workbook.getWorksheet("1 Batch summary");
     assert.equal(summary.getCell("B2").value,
-        "Completed project-wide revised analysis");
-    assert.match(String(summary.getCell("B21").value), /already published/);
+        "Proposal-only project-wide revised analysis");
+    assert.match(String(summary.getCell("B21").value), /no current report is promoted/);
 
     const comparison = workbook.getWorksheet("2 Case comparison");
     assert.equal(comparison.getCell("A2").value, "P0001-S01");
-    assert.match(String(comparison.getCell("G2").value), /^Superseded/);
+    assert.equal(comparison.getCell("G2").value, "Current report preserved");
     assert.match(String(comparison.getCell("N2").value), /irregular sleep/);
     assert.match(String(comparison.getCell("R2").value), /1\/1 accepted/);
     assert.match(String(comparison.getCell("S2").value), /Not audited/);
     assert.equal(comparison.getCell("AA2").value,
-        "Completed automatically; researcher review follows");
+        "Proposal only; current report unchanged");
 
-    const completed = workbook.getWorksheet("4 Completed revised evidence");
+    const completed = workbook.getWorksheet("4 Proposed revised evidence");
     assert.equal(completed.getCell("D2").value, "Sleep routine");
     assert.equal(completed.getCell("G2").value, "Delayed sleep timing");
     assert.equal(completed.getCell("J2").value, "Late bedtime");
-    assert.equal(completed.getCell("S2").value, "Completed and current");
+    assert.equal(completed.getCell("S2").value,
+        "Proposal only — current unchanged");
 
-    const audit = workbook.getWorksheet("5 Relevance & quality audit");
+    const categories = workbook.getWorksheet("8 Proposed Form 4 Categories");
+    assert.equal(categories.getCell("D2").value, "Delayed sleep timing");
+    assert.equal(categories.getCell("F2").value, "CO1");
+
+    const themes = workbook.getWorksheet("9 Proposed Form 5 Themes");
+    assert.equal(themes.getCell("D2").value, "Sleep routine");
+    assert.equal(themes.getCell("F2").value, "CA1");
+
+    const audit = workbook.getWorksheet("10 Relevance & quality audit");
     assert.equal(audit.getCell("M2").value, true);
     assert.equal(audit.getCell("N2").value, true);
     assert.match(String(audit.getCell("O2").value), /Direct sleep/);

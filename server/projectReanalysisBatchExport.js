@@ -222,7 +222,7 @@ function summaryRows(data, createdAt) {
     ).length;
     const preserved = sourceReports.filter(report => !report.superseded_at).length;
     return [
-        ["Export type", "Completed project-wide revised analysis"],
+        ["Export type", "Proposal-only project-wide revised analysis"],
         ["Research project", project.project_name],
         ["Research topic", project.research_topic],
         ["Project code", project.project_code],
@@ -236,12 +236,12 @@ function summaryRows(data, createdAt) {
         ["Exported at", createdAt.toISOString()],
         ["Eligible cases", batch.eligible_case_count],
         ["Stored case requests", requests.length],
-        ["Completed cases", statusCount("completed")],
+        ["Proposal-ready cases", statusCount("proposal_ready")],
         ["Failed cases", statusCount("failed")],
         ["Cancelled cases", statusCount("cancelled")],
-        ["Stored completed result payloads", proposals.length],
+        ["Stored proposed result payloads", proposals.length],
         ["Prior source reports still current", `${preserved}/${sourceReports.length}`],
-        ["Effect of download", "None — downloading is read-only; PLI already published each completed version automatically"],
+        ["Effect of download", "None — downloading is read-only; every proposal remains separate and no current report is promoted or overwritten"],
         ["Batch reason", batch.reason_code],
         ["Researcher notes", batch.researcher_notes],
         ["Study scope", framework.study_scope],
@@ -322,12 +322,12 @@ function addComparisonSheet(workbook, data, maps) {
         { header: "Source case interpretation", key: "sourceInterpretation", width: 55 },
         { header: "Source themes", key: "sourceThemes", width: 55 },
         { header: "Source codes", key: "sourceCodes", width: 55 },
-        { header: "Completed result ID", key: "proposalId", width: 38 },
-        { header: "Completed analysis version", key: "proposalVersion", width: 28 },
-        { header: "Completed case interpretation", key: "proposedInterpretation", width: 55 },
-        { header: "Completed themes", key: "proposedThemes", width: 55 },
-        { header: "Completed categories", key: "proposedCategories", width: 55 },
-        { header: "Completed codes", key: "proposedCodes", width: 55 },
+        { header: "Proposed result ID", key: "proposalId", width: 38 },
+        { header: "Proposed analysis version", key: "proposalVersion", width: 28 },
+        { header: "Proposed case interpretation", key: "proposedInterpretation", width: 55 },
+        { header: "Proposed themes", key: "proposedThemes", width: 55 },
+        { header: "Proposed categories", key: "proposedCategories", width: 55 },
+        { header: "Proposed codes", key: "proposedCodes", width: 55 },
         { header: "Relevance audit", key: "audit", width: 42 },
         { header: "Theme hierarchy audit", key: "hierarchyAudit", width: 55 },
         { header: "Source-quality flags", key: "flags", width: 20 },
@@ -386,7 +386,7 @@ function addComparisonSheet(workbook, data, maps) {
             frameworkVersion: data.framework.version_number,
             projectTopic: `${data.project.project_name} / ${data.project.research_topic}`,
             proposalCreated: proposal?.created_at || "",
-            decision: review?.decision || "Completed automatically; researcher review follows"
+            decision: review?.decision || "Proposal only; current report unchanged"
         }, proposal ? "FFFFF2CC" : request.status === "failed" ? "FFFCE4D6" : null);
     });
     finishSheet(sheet);
@@ -493,12 +493,12 @@ function addSourceEvidenceSheet(workbook, data, maps) {
 }
 
 function addProposedEvidenceSheet(workbook, data, maps) {
-    const sheet = workbook.addWorksheet("4 Completed revised evidence", {
+    const sheet = workbook.addWorksheet("4 Proposed revised evidence", {
         views: [{ state: "frozen", ySplit: 1 }]
     });
     configureSheet(sheet, [
         { header: "Case", key: "case", width: 16 },
-        { header: "Completed result ID", key: "proposalId", width: 38 },
+        { header: "Proposed result ID", key: "proposalId", width: 38 },
         { header: "TH", key: "themePosition", width: 7 },
         { header: "Theme", key: "theme", width: 28 },
         { header: "Theme rationale", key: "themeRationale", width: 55 },
@@ -515,7 +515,7 @@ function addProposedEvidenceSheet(workbook, data, maps) {
         { header: "Stored source message", key: "message", width: 55 },
         { header: "Stored English translation", key: "english", width: 55 },
         { header: "Framework version", key: "frameworkVersion", width: 18 },
-        { header: "Completion status", key: "status", width: 22 }
+        { header: "Proposal status", key: "status", width: 28 }
     ]);
     orderedRequests(data, maps).forEach(request => {
         const source = maps.reportById.get(request.source_report_id) || {};
@@ -535,7 +535,7 @@ function addProposedEvidenceSheet(workbook, data, maps) {
                     theme: theme.label,
                     themeRationale: cellText(theme.rationale),
                     frameworkVersion: data.framework.version_number,
-                    status: "Completed"
+                    status: "Proposal only — current unchanged"
                 }, "FFFFF2CC");
             }
             codeNumbers.forEach(codeNumber => {
@@ -568,7 +568,7 @@ function addProposedEvidenceSheet(workbook, data, maps) {
                         exact: cellText(highlight?.exactText),
                         ...evidenceTranslation(maps, highlight?.messageId),
                         frameworkVersion: data.framework.version_number,
-                        status: "Completed and current"
+                        status: "Proposal only — current unchanged"
                     }, "FFFFF2CC");
                 });
             });
@@ -589,7 +589,7 @@ function addProposedEvidenceSheet(workbook, data, maps) {
                     exact: cellText(highlight?.exactText),
                     ...evidenceTranslation(maps, highlight?.messageId),
                     frameworkVersion: data.framework.version_number,
-                    status: "Completed and current"
+                    status: "Proposal only — current unchanged"
                 }, "FFFFF2CC");
             });
         });
@@ -597,8 +597,246 @@ function addProposedEvidenceSheet(workbook, data, maps) {
     finishSheet(sheet);
 }
 
+function proposalContext(request, data, maps) {
+    const source = maps.reportById.get(request.source_report_id) || {};
+    const proposal = maps.proposalByRequest.get(request.id);
+    if (!proposal) return null;
+    return {
+        request,
+        source,
+        proposal,
+        report: proposal.proposed_report || {},
+        shared: {
+            case: source.case_number || request.session_id,
+            participant: source.participant_code || "",
+            session: request.session_id,
+            sourceReportId: request.source_report_id,
+            proposalId: proposal.id,
+            proposalVersion: proposal.proposal_version,
+            frameworkVersion: data.framework.version_number,
+            status: "Proposal only — current report unchanged"
+        }
+    };
+}
+
+function addProposedCaseForm(workbook, data, maps) {
+    const sheet = workbook.addWorksheet("5 Proposed Form 1 Cases", {
+        views: [{ state: "frozen", xSplit: 2, ySplit: 1 }]
+    });
+    configureSheet(sheet, [
+        { header: "Case", key: "case", width: 16 },
+        { header: "Participant", key: "participant", width: 12 },
+        { header: "Session ID", key: "session", width: 22 },
+        { header: "Source report ID", key: "sourceReportId", width: 38 },
+        { header: "Proposal ID", key: "proposalId", width: 38 },
+        { header: "Proposal version", key: "proposalVersion", width: 30 },
+        { header: "Language", key: "language", width: 14 },
+        { header: "Country of residence", key: "currentCountry", width: 22 },
+        { header: "Region", key: "currentRegion", width: 20 },
+        { header: "Country of origin", key: "countryOfOrigin", width: 22 },
+        { header: "Gender", key: "gender", width: 14 },
+        { header: "Age", key: "age", width: 10 },
+        { header: "Birth year", key: "birthYear", width: 12 },
+        { header: "Birth cohort", key: "birthCohort", width: 16 },
+        { header: "Occupation", key: "occupation", width: 28 },
+        { header: "Education", key: "education", width: 24 },
+        { header: "Case interpretation", key: "interpretation", width: 65 },
+        { header: "Framework version", key: "frameworkVersion", width: 18 },
+        { header: "Status", key: "status", width: 34 }
+    ]);
+    orderedRequests(data, maps).forEach(request => {
+        const context = proposalContext(request, data, maps);
+        if (!context) return;
+        const demographics = context.report.demographics
+            || context.source.demographics || {};
+        appendRow(sheet, {
+            ...context.shared,
+            language: context.report.language || context.source.language || "",
+            currentCountry: demographics.current_country || "",
+            currentRegion: demographics.current_region || "",
+            countryOfOrigin: demographics.country_of_origin || "",
+            gender: demographics.gender || "",
+            age: demographics.age ?? "",
+            birthYear: demographics.birth_year ?? "",
+            birthCohort: demographics.birth_cohort || "",
+            occupation: demographics.occupation
+                || demographics.additional_descriptors?.occupation || "",
+            education: demographics.education_level || "",
+            interpretation: cellText(context.report.caseInterpretation)
+        }, "FFFFF2CC");
+    });
+    finishSheet(sheet);
+}
+
+function addProposedMeaningUnitForm(workbook, data, maps) {
+    const sheet = workbook.addWorksheet("6 Proposed Form 2 MUs", {
+        views: [{ state: "frozen", xSplit: 2, ySplit: 1 }]
+    });
+    configureSheet(sheet, [
+        { header: "Case", key: "case", width: 16 },
+        { header: "Participant", key: "participant", width: 12 },
+        { header: "MU", key: "meaningUnit", width: 8 },
+        { header: "CO", key: "code", width: 8 },
+        { header: "CA links", key: "categories", width: 16 },
+        { header: "TH links", key: "themes", width: 16 },
+        { header: "Exact meaning unit", key: "exact", width: 55 },
+        { header: "Anchor expressions", key: "anchors", width: 34 },
+        { header: "Message ID", key: "messageId", width: 28 },
+        { header: "Stored English translation", key: "english", width: 55 },
+        { header: "Proposal ID", key: "proposalId", width: 38 },
+        { header: "Status", key: "status", width: 34 }
+    ]);
+    orderedRequests(data, maps).forEach(request => {
+        const context = proposalContext(request, data, maps);
+        if (!context) return;
+        let meaningUnitNumber = 0;
+        (context.report.codes || []).forEach((code, codeIndex) => {
+            const categoryNumbers = (context.report.categories || [])
+                .map((category, index) => (category.codeNumbers || [])
+                    .includes(codeIndex + 1) ? index + 1 : null)
+                .filter(Boolean);
+            const themeNumbers = (context.report.themes || [])
+                .map((theme, index) => (theme.categoryNumbers || [])
+                    .some(number => categoryNumbers.includes(number))
+                    ? index + 1 : null)
+                .filter(Boolean);
+            (code.meaningUnits || code.highlights || []).forEach(unit => {
+                meaningUnitNumber += 1;
+                appendRow(sheet, {
+                    ...context.shared,
+                    meaningUnit: `MU${meaningUnitNumber}`,
+                    code: `CO${codeIndex + 1}`,
+                    categories: categoryNumbers.map(number => `CA${number}`).join(", "),
+                    themes: themeNumbers.map(number => `TH${number}`).join(", "),
+                    exact: cellText(unit.exactText),
+                    anchors: cellText(unit.anchors || []),
+                    messageId: unit.messageId,
+                    english: evidenceTranslation(maps, unit.messageId).english
+                }, "FFFFF2CC");
+            });
+        });
+    });
+    finishSheet(sheet);
+}
+
+function addProposedCodeForm(workbook, data, maps) {
+    const sheet = workbook.addWorksheet("7 Proposed Form 3 Codes", {
+        views: [{ state: "frozen", xSplit: 2, ySplit: 1 }]
+    });
+    configureSheet(sheet, [
+        { header: "Case", key: "case", width: 16 },
+        { header: "Participant", key: "participant", width: 12 },
+        { header: "CO", key: "position", width: 8 },
+        { header: "Code", key: "label", width: 28 },
+        { header: "Code rationale", key: "rationale", width: 58 },
+        { header: "Meaning-unit count", key: "unitCount", width: 18 },
+        { header: "CA links", key: "categories", width: 18 },
+        { header: "TH links", key: "themes", width: 18 },
+        { header: "Proposal ID", key: "proposalId", width: 38 },
+        { header: "Status", key: "status", width: 34 }
+    ]);
+    orderedRequests(data, maps).forEach(request => {
+        const context = proposalContext(request, data, maps);
+        if (!context) return;
+        (context.report.codes || []).forEach((code, codeIndex) => {
+            const categoryNumbers = (context.report.categories || [])
+                .map((category, index) => (category.codeNumbers || [])
+                    .includes(codeIndex + 1) ? index + 1 : null)
+                .filter(Boolean);
+            const themeNumbers = (context.report.themes || [])
+                .map((theme, index) => (theme.categoryNumbers || [])
+                    .some(number => categoryNumbers.includes(number))
+                    ? index + 1 : null)
+                .filter(Boolean);
+            appendRow(sheet, {
+                ...context.shared,
+                position: `CO${codeIndex + 1}`,
+                label: code.label,
+                rationale: cellText(code.rationale),
+                unitCount: (code.meaningUnits || code.highlights || []).length,
+                categories: categoryNumbers.map(number => `CA${number}`).join(", "),
+                themes: themeNumbers.map(number => `TH${number}`).join(", ")
+            }, "FFFFF2CC");
+        });
+    });
+    finishSheet(sheet);
+}
+
+function addProposedCategoryForm(workbook, data, maps) {
+    const sheet = workbook.addWorksheet("8 Proposed Form 4 Categories", {
+        views: [{ state: "frozen", xSplit: 2, ySplit: 1 }]
+    });
+    configureSheet(sheet, [
+        { header: "Case", key: "case", width: 16 },
+        { header: "Participant", key: "participant", width: 12 },
+        { header: "CA", key: "position", width: 8 },
+        { header: "Category", key: "label", width: 34 },
+        { header: "Category rationale", key: "rationale", width: 62 },
+        { header: "CO links", key: "codes", width: 24 },
+        { header: "TH links", key: "themes", width: 18 },
+        { header: "Proposal ID", key: "proposalId", width: 38 },
+        { header: "Status", key: "status", width: 34 }
+    ]);
+    orderedRequests(data, maps).forEach(request => {
+        const context = proposalContext(request, data, maps);
+        if (!context) return;
+        (context.report.categories || []).forEach((category, categoryIndex) => {
+            const themeNumbers = (context.report.themes || [])
+                .map((theme, index) => (theme.categoryNumbers || [])
+                    .includes(categoryIndex + 1) ? index + 1 : null)
+                .filter(Boolean);
+            appendRow(sheet, {
+                ...context.shared,
+                position: `CA${categoryIndex + 1}`,
+                label: category.label,
+                rationale: cellText(category.rationale),
+                codes: (category.codeNumbers || [])
+                    .map(number => `CO${number}`).join(", "),
+                themes: themeNumbers.map(number => `TH${number}`).join(", ")
+            }, "FFFFF2CC");
+        });
+    });
+    finishSheet(sheet);
+}
+
+function addProposedThemeForm(workbook, data, maps) {
+    const sheet = workbook.addWorksheet("9 Proposed Form 5 Themes", {
+        views: [{ state: "frozen", xSplit: 2, ySplit: 1 }]
+    });
+    configureSheet(sheet, [
+        { header: "Case", key: "case", width: 16 },
+        { header: "Participant", key: "participant", width: 12 },
+        { header: "TH", key: "position", width: 8 },
+        { header: "Theme", key: "label", width: 42 },
+        { header: "Theme rationale / participant story", key: "rationale", width: 70 },
+        { header: "CA links", key: "categories", width: 24 },
+        { header: "CO links", key: "codes", width: 30 },
+        { header: "Proposal ID", key: "proposalId", width: 38 },
+        { header: "Status", key: "status", width: 34 }
+    ]);
+    orderedRequests(data, maps).forEach(request => {
+        const context = proposalContext(request, data, maps);
+        if (!context) return;
+        (context.report.themes || []).forEach((theme, themeIndex) => {
+            const codeNumbers = [...new Set((theme.categoryNumbers || [])
+                .flatMap(number => context.report.categories?.[number - 1]
+                    ?.codeNumbers || []))];
+            appendRow(sheet, {
+                ...context.shared,
+                position: `TH${themeIndex + 1}`,
+                label: theme.label,
+                rationale: cellText(theme.rationale),
+                categories: (theme.categoryNumbers || [])
+                    .map(number => `CA${number}`).join(", "),
+                codes: codeNumbers.map(number => `CO${number}`).join(", ")
+            }, "FFFFF2CC");
+        });
+    });
+    finishSheet(sheet);
+}
+
 function addAuditSheet(workbook, data, maps) {
-    const sheet = workbook.addWorksheet("5 Relevance & quality audit", {
+    const sheet = workbook.addWorksheet("10 Relevance & quality audit", {
         views: [{ state: "frozen", ySplit: 1 }]
     });
     configureSheet(sheet, [
@@ -704,6 +942,11 @@ export async function writeProjectReanalysisBatchWorkbook(
     addComparisonSheet(workbook, data, maps);
     addSourceEvidenceSheet(workbook, data, maps);
     addProposedEvidenceSheet(workbook, data, maps);
+    addProposedCaseForm(workbook, data, maps);
+    addProposedMeaningUnitForm(workbook, data, maps);
+    addProposedCodeForm(workbook, data, maps);
+    addProposedCategoryForm(workbook, data, maps);
+    addProposedThemeForm(workbook, data, maps);
     addAuditSheet(workbook, data, maps);
     await workbook.commit();
 }

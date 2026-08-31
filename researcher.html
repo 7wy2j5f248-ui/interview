@@ -1020,9 +1020,10 @@
                 <h4 id="automaticReanalysisHeading">Request re-analysis for this case</h4>
                 <p class="muted">
                     Select exactly one case above. PLI uses the preserved
-                    transcript to complete a new evidence-grounded version,
+                    transcript to generate a new evidence-grounded proposal,
                     including MU → CO → CA → TH lineage. Earlier versions remain
-                    available for audit; no approval step interrupts automation.
+                    current and available for audit. The proposal can be inspected
+                    without approval and is never promoted automatically.
                 </p>
                 <p class="muted">
                     A manual note here is case-specific. Global and project rules
@@ -1051,7 +1052,7 @@
                 </label>
                 <div class="actionRow">
                     <button id="automaticReanalysisRequestButton" type="button" disabled>
-                        Send feedback and generate completed version
+                        Send feedback and generate proposed revision
                     </button>
                 </div>
                 <p id="automaticReanalysisStatus" class="muted" role="status"></p>
@@ -1064,11 +1065,12 @@
                     Apply one selected project/topic-bound Analysis Framework
                     version to every eligible completed case in that same project.
                     Preview and confirm the exact scope first. Each case receives
-                    its own completed version, relevance audit, rationale,
+                    its own proposed revision, relevance audit, rationale,
                     evidence checks, and source-quality flags. The full batch
                     completes without case-by-case approval and can then be
-                    downloaded as one revised analysis. Earlier versions remain
-                    available for audit.
+                    downloaded as one revised analysis for review. Earlier reports
+                    remain current and available for audit; the batch never
+                    promotes or overwrites them.
                 </p>
                 <div class="actionRow">
                     <label>

@@ -157,7 +157,7 @@ test("visible automatic-analysis workspace restores discussion and upload contro
     assert.match(migration, /file_sha256 text not null/);
 });
 
-test("researcher feedback creates a completed version without an approval gate", async () => {
+test("researcher feedback creates a proposal without changing the current report", async () => {
     const [html, client, api, processor, migration] = await Promise.all([
         readFile(htmlUrl, "utf8"),
         readFile(clientUrl, "utf8"),
@@ -180,10 +180,10 @@ test("researcher feedback creates a completed version without an approval gate",
     assert.match(api, /processCaseReanalysisRequest/);
     assert.match(processor, /generateAutomaticCaseReanalysis/);
     assert.match(processor, /detectCompoundQuestionTurns/);
-    assert.match(processor, /complete_automatic_case_reanalysis/);
-    assert.match(migration, /status = 'completed'/);
-    assert.match(migration, /analysis_completed_at/);
-    assert.match(migration, /feedbackStartsNewVersion/);
+    assert.match(processor, /status: "proposal_ready"/);
+    assert.match(processor, /currentReportPreserved: true/);
+    assert.match(processor, /automaticPromotion: false/);
+    assert.doesNotMatch(processor, /rpc\("complete_automatic_case_reanalysis"/);
     assert.doesNotMatch(api, /review_case_reanalysis/);
     assert.match(migration, /enable row level security/g);
     assert.match(migration, /substring\([\s\S]*message\."Message"/);

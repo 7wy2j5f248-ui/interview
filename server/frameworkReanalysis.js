@@ -115,9 +115,19 @@ export async function processCaseReanalysisRequest(
             throw new Error("The preserved source report could not be loaded.");
         }
         if (sourceReport.project_id !== request.project_id) {
-            throw new Error(
-                "The preserved report belongs to a different research project/topic lineage."
-            );
+            const { data: explicitMembership, error: membershipError } =
+                await supabase
+                    .from("research_project_case_memberships")
+                    .select("id, project_id, session_id, source_report_id, reason")
+                    .eq("project_id", request.project_id)
+                    .eq("session_id", request.session_id)
+                    .eq("source_report_id", sourceReport.id)
+                    .maybeSingle();
+            if (membershipError || !explicitMembership) {
+                throw new Error(
+                    "The preserved report belongs to a different research project/topic lineage."
+                );
+            }
         }
         if (messageResult.error) {
             throw new Error("The preserved transcript could not be loaded.");
@@ -222,20 +232,53 @@ export async function processCaseReanalysisRequest(
         if (proposalError || !proposal) {
             throw new Error("The proposed report version could not be stored.");
         }
-        const { data: completedReportId, error: completionError } =
-            await supabase.rpc("complete_automatic_case_reanalysis", {
-                p_request_id: requestId
-            });
-        if (completionError || !completedReportId) {
-            throw new Error("The completed feedback analysis could not be promoted.", {
-                cause: completionError || undefined
-            });
+        const proposalReadyAt = new Date().toISOString();
+        const { error: readyError } = await supabase
+            .from(REQUESTS)
+            .update({
+                status: "proposal_ready",
+                proposal_ready_at: proposalReadyAt,
+                last_error: null
+            })
+            .eq("id", requestId)
+            .eq("status", "processing");
+        if (readyError) {
+            throw new Error("The proposal-ready status could not be stored.");
         }
+        await storeEvent(supabase, requestId, "proposal_ready", {
+            proposalId: proposal.id,
+            sourceReportId: sourceReport.id,
+            sourceQualityFlagCount: sourceQualityFlags.length,
+            relevanceCheckCount: analysis.relevanceAudit.checks.length,
+            labelQualityCheckCount:
+                analysis.relevanceAudit.labelQualityAudit?.checks?.length || 0,
+            rejectedLabelCount:
+                analysis.relevanceAudit.labelQualityAudit?.rejectedLabels?.length || 0,
+            ungroupedCodeCount:
+                analysis.relevanceAudit.labelQualityAudit?.themeHierarchy
+                    ?.ungroupedCodes?.length || 0,
+            ungroupedCategoryCount:
+                analysis.relevanceAudit.labelQualityAudit?.themeHierarchy
+                    ?.ungroupedCategories?.length || 0,
+            projectId: analysisFramework.projectId,
+            projectName: analysisFramework.projectName,
+            researchTopic: analysisFramework.researchTopic,
+            analysisFrameworkId: analysisFramework.id,
+            analysisFrameworkVersion: analysisFramework.versionNumber,
+            globalAnalysisRuleId: analysisFramework.globalAnalysisRules?.id,
+            globalAnalysisRuleVersion:
+                analysisFramework.globalAnalysisRules?.versionNumber,
+            currentReportPreserved: true,
+            researcherApprovalRequired:
+                !request.project_reanalysis_batch_id,
+            proposalAccessibleWithoutApproval: true,
+            automaticPromotion: false,
+            projectWideBatchId: request.project_reanalysis_batch_id || null
+        });
         return {
             requestId,
             proposalId: proposal.id,
-            reportId: completedReportId,
-            status: "completed",
+            status: "proposal_ready",
             caseNumber: sourceReport.case_number,
             sourceQualityFlagCount: sourceQualityFlags.length,
             analysisFramework

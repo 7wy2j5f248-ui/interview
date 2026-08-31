@@ -347,7 +347,7 @@
             const lineage = document.createElement("p");
             lineage.className = "muted";
             lineage.textContent = project && framework
-                ? `Global project rule: ${project.project_name} · Topic: ${project.research_topic} · Analysis Framework v${framework.version_number}. This case has its own completed version and audit; researcher feedback begins another version.`
+                ? `Global project rule: ${project.project_name} · Topic: ${project.research_topic} · Analysis Framework v${framework.version_number}. This case has its own proposed revision and audit; its current report remains preserved.`
                 : "Legacy lineage: refresh after the project-bound framework migration is available.";
             record.appendChild(lineage);
             if (request.last_error) {
@@ -374,7 +374,7 @@
                 const proposed = document.createElement("section");
                 proposed.className = "automaticReanalysisVersion";
                 const proposedHeading = document.createElement("h5");
-                proposedHeading.textContent = `Completed AI version · ${proposal.proposal_version}`;
+                proposedHeading.textContent = `Proposed revised analysis · ${proposal.proposal_version}`;
                 proposed.appendChild(proposedHeading);
                 appendHierarchy(proposed, proposal.proposed_report, false);
                 comparison.append(source, proposed);
@@ -483,7 +483,7 @@
         }
         reanalysisButton.disabled = true;
         reanalysisStatus.textContent =
-            "Generating a completed version from the preserved transcript and checking every MU → CO → CA → TH link…";
+            "Generating a separate proposed revision from the preserved transcript and checking every MU → CO → CA → TH link…";
         try {
             const response = await fetch("/api/automatic-analysis-review", {
                 method: "POST",
@@ -508,7 +508,7 @@
             await loadWorkspace(activeThreadId);
             if (bridge.refresh) await bridge.refresh();
             reanalysisStatus.textContent =
-                "Completed. The new version is current and the earlier version remains available for audit.";
+                "Proposal ready. It is available for review; the current and earlier reports remain unchanged.";
         } finally {
             reanalysisButton.disabled = !selectedSessionId();
         }
@@ -550,10 +550,10 @@
             throw new Error("Explain why this project-wide run should stop.");
         }
         if (!window.confirm(
-            "Stop this project-wide re-analysis? Queued and in-flight cases will be cancelled. Versions already completed remain current and fully auditable."
+            "Stop this project-wide re-analysis? Queued and in-flight cases will be cancelled. Proposals already generated remain reviewable; current reports stay unchanged."
         )) return;
         projectWideStatus.textContent =
-            "Stopping unfinished work and preserving completed versions and cancellation lineage…";
+            "Stopping unfinished work and preserving generated proposals, current reports, and cancellation lineage…";
         const response = await fetch("/api/automatic-analysis-review", {
             method: "POST",
             headers: {
@@ -571,7 +571,7 @@
             throw new Error(data.error || "The project-wide run could not be stopped.");
         }
         await loadWorkspace(activeThreadId);
-        projectWideStatus.textContent = `${data.cancelledCaseCount} unfinished case requests were stopped. Already completed versions remain current; the cancellation reason remains available for audit.`;
+        projectWideStatus.textContent = `${data.cancelledCaseCount} unfinished case requests were stopped. Existing proposals remain reviewable, current reports remain unchanged, and the cancellation reason remains available for audit.`;
     }
 
     function downloadFilename(response, fallback) {
@@ -582,7 +582,7 @@
 
     async function downloadProjectWideBatch(batch) {
         projectWideStatus.textContent =
-            "Preparing the completed revised analysis with prior-versus-current evidence and provenance…";
+            "Preparing the proposed revised analysis with preserved-current comparison and provenance…";
         const response = await fetch(
             `/api/automatic-analysis-review?action=download_project_reanalysis_batch&batchId=${encodeURIComponent(batch.id)}`,
             { headers: { Authorization: `Bearer ${token()}` } }
@@ -641,11 +641,11 @@
             counts.className = "muted";
             counts.textContent = `Eligible ${batch.eligible_case_count}; queued ${
                 batch.queued_case_count
-            }; processing ${batch.processing_case_count}; completed versions ${
+            }; processing ${batch.processing_case_count}; proposed revisions ${
                 batch.proposal_ready_case_count
             }; failed ${batch.failed_case_count}; cancelled ${
                 batch.cancelled_case_count || 0
-            }. PLI completes each version without an approval gate. Earlier versions remain preserved; the consolidated download is read-only.`;
+            }. PLI generates every proposal without an approval gate. Current reports remain preserved; the consolidated download is read-only and never promotes a proposal.`;
             record.append(heading, lineage, counts);
 
             if (new Set(["completed", "completed_with_failures"]).has(
@@ -780,7 +780,7 @@
                 data.preview.eligibleCaseCount
             } eligible completed cases. Excluded: ${
                 data.preview.archivedCaseExcludedCount
-            } archived and ${data.preview.openRequestExcludedCount} with an open run. The system completes one new version per case and preserves the earlier versions for audit.`;
+            } archived and ${data.preview.openRequestExcludedCount} with an open run. The system generates one separate proposal per case. Current and earlier reports remain unchanged.`;
             projectWideRequestButton.disabled = data.preview.eligibleCaseCount < 1;
             projectWideStatus.textContent = data.preview.eligibleCaseCount
                 ? "Scope preview ready. Add a reason note, then confirm the project-wide request."
@@ -806,7 +806,7 @@
             projectWidePreview.projectName
         } (${projectWidePreview.researchTopic}) using Analysis Framework v${
             projectWidePreview.analysisFrameworkVersion
-        } across ${projectWidePreview.eligibleCaseCount} eligible completed cases? The system will complete and publish one new version per case without case-by-case approval, preserve earlier versions, and make one consolidated review download available.`;
+        } across ${projectWidePreview.eligibleCaseCount} eligible completed cases? The system will generate one separate proposal per case without case-by-case approval, preserve every current and earlier report, and make one consolidated review download available. Nothing is promoted automatically.`;
         if (!window.confirm(confirmation)) return;
 
         projectWideRequestButton.disabled = true;
@@ -836,7 +836,7 @@
         document.getElementById("projectWideReanalysisNotes").value = "";
         await loadWorkspace(activeThreadId);
         projectWideRequestButton.disabled = true;
-        projectWideStatus.textContent = `${data.queuedCaseCount} individual cases were queued. Each new version will become current automatically when complete; earlier versions remain available for audit.`;
+        projectWideStatus.textContent = `${data.queuedCaseCount} individual cases were queued. Each result will remain a separate proposal for consolidated review; current and earlier reports remain unchanged.`;
     }
 
     function appendMessage(message) {
