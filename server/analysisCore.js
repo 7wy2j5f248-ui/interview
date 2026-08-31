@@ -1054,16 +1054,19 @@ export function validateAutomaticLabelQualityAudit(analysis, value) {
             && audit?.higherLevelAbstraction
             && (item.kind !== "theme" || audit?.patternedMeaning)
         );
+        const comparisonAccepted = item.kind === "code" || Boolean(
+            audit?.conceptuallyDistinct
+            && audit?.comparisonUseful
+        );
         const accepted = Boolean(
             exactLabel
             && structurallyValid
             && uniqueAtLevel
             && audit?.naturalLanguage
             && audit?.coherentConcept
-            && audit?.conceptuallyDistinct
             && audit?.evidenceSupported
             && audit?.topicRelevant
-            && audit?.comparisonUseful
+            && comparisonAccepted
             && hierarchyAccepted
         );
         return {

@@ -330,6 +330,50 @@ test("global label audit rejects short but incoherent labels", () => {
     assert.match(audit.rejectedLabels[0].explanation, /concatenated/);
 });
 
+test("code comparison utility is advisory while evidence and coherence stay mandatory", () => {
+    const analysis = {
+        codes: [{
+            label: "evening activity",
+            rationale: "A coherent immediate pre-sleep activity.",
+            highlights: [{ messageId: "message-1", exactText: "club call" }]
+        }],
+        categories: [],
+        themes: [],
+        unassignedCodeNumbers: [1],
+        unassignedCategoryNumbers: []
+    };
+    const audit = validateAutomaticLabelQualityAudit(analysis, {
+        checks: [{
+            kind: "code",
+            number: 1,
+            label: "evening activity",
+            natural_language: true,
+            coherent_concept: true,
+            conceptually_distinct: false,
+            evidence_supported: true,
+            topic_relevant: true,
+            comparison_useful: false,
+            has_multiple_children: true,
+            semantic_coverage: true,
+            higher_level_abstraction: true,
+            patterned_meaning: true,
+            explanation: "Valid in this case, but a broad comparison label."
+        }],
+        unsynthesized_checks: [{
+            kind: "code",
+            number: 1,
+            label: "evening activity",
+            reason: "No defensible category is available."
+        }],
+        overall_summary: "The code is valid with advisory comparison flags."
+    });
+
+    assert.equal(audit.complete, true);
+    assert.equal(audit.checks[0].evidenceSupported, true);
+    assert.equal(audit.checks[0].conceptuallyDistinct, false);
+    assert.equal(audit.checks[0].comparisonUseful, false);
+});
+
 test("one-code categories are rejected while the code remains a completed finding", () => {
     const analysis = validateAutomaticCaseAnalysis({
         codes: [{
