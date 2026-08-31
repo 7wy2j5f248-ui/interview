@@ -14,8 +14,10 @@
             requests: [], proposals: [], reviews: [], events: [],
             projects: [], frameworks: [], activeFrameworks: [], batches: [],
             projectWideCaseStatuses: [], projectWideSourceCases: [],
-            sourceReports: [], sourceCodes: [], sourceThemes: [],
-            sourceHighlights: [], sourceThemeCodes: []
+            sourceReports: [], sourceCodes: [], sourceCategories: [],
+            sourceThemes: [], sourceMeaningUnits: [],
+            sourceCodeMeaningUnits: [], sourceCategoryCodes: [],
+            sourceThemeCategories: [], sourceHighlights: [], sourceThemeCodes: []
         }
     };
     let activeThreadId = null;
@@ -120,7 +122,7 @@
         if (!sources.length) {
             const empty = document.createElement("span");
             empty.className = "muted";
-            empty.textContent = "Select a case, Tn theme, or Cn code above.";
+            empty.textContent = "Select a case, THn theme, CAn category, or COn code above.";
             selectionList.appendChild(empty);
         } else {
             sources.forEach(source => {
@@ -167,7 +169,7 @@
         document.getElementById("automaticReanalysisSelectedCase").textContent =
             reanalysisSessionId
                 ? `Selected case: ${sources[0].caseNumber}. Only this case will be re-analysed.`
-                : "Select one case, theme, or code from a single case.";
+                : "Select one case, theme, category, or code from a single case.";
         renderReanalysisHistory();
     }
 
@@ -178,6 +180,13 @@
             ).map(item => ({
                 label: item.theme_label,
                 rationale: item.rationale,
+                categoryNumbers: workspace.reanalysis.sourceThemeCategories
+                    .filter(link => link.theme_id === item.id)
+                    .map(link => workspace.reanalysis.sourceCategories.find(
+                        category => category.id === link.category_id
+                            && category.report_id === report.id
+                    )?.category_number)
+                    .filter(number => number > 0),
                 codeNumbers: workspace.reanalysis.sourceThemeCodes
                     .filter(link => link.theme_id === item.id)
                     .map(link => workspace.reanalysis.sourceCodes.find(
@@ -193,38 +202,83 @@
             ).map(item => ({
                 label: item.code_label,
                 rationale: item.rationale,
+                meaningUnits: workspace.reanalysis.sourceCodeMeaningUnits
+                    .filter(link => link.code_id === item.id)
+                    .map(link => workspace.reanalysis.sourceMeaningUnits.find(
+                        unit => unit.id === link.meaning_unit_id
+                    )).filter(Boolean)
+                    .map(unit => ({ exactText: unit.exact_text })),
                 highlights: workspace.reanalysis.sourceHighlights.filter(
                     highlight => highlight.code_id === item.id
                 ).map(highlight => ({ exactText: highlight.exact_text }))
             }))
             : report?.codes || [];
+        const categories = source
+            ? workspace.reanalysis.sourceCategories.filter(
+                item => item.report_id === report.id
+            ).map(item => ({
+                label: item.category_label,
+                rationale: item.rationale,
+                codeNumbers: workspace.reanalysis.sourceCategoryCodes
+                    .filter(link => link.category_id === item.id)
+                    .map(link => workspace.reanalysis.sourceCodes.find(
+                        code => code.id === link.code_id
+                            && code.report_id === report.id
+                    )?.code_number)
+                    .filter(number => number > 0)
+            }))
+            : report?.categories || [];
         const themeHeading = document.createElement("strong");
         themeHeading.textContent = "Themes";
         const themeList = document.createElement("ul");
         themes.forEach((theme, index) => {
             const item = document.createElement("li");
-            const supportingCodes = (theme.codeNumbers || [])
-                .map(number => `C${number}`)
+            const supportingCategories = (theme.categoryNumbers || [])
+                .map(number => `CA${number}`)
                 .join(", ");
-            item.textContent = `T${index + 1} ${theme.label} ← ${
-                supportingCodes || "no valid multi-code group"
+            const legacyCodes = (theme.codeNumbers || [])
+                .map(number => `CO${number}`)
+                .join(", ");
+            item.textContent = `TH${index + 1} ${theme.label} ← ${
+                supportingCategories || legacyCodes || "no defensible higher-level group"
             } — ${theme.rationale}`;
             themeList.appendChild(item);
         });
+        const categoryHeading = document.createElement("strong");
+        categoryHeading.textContent = "Categories";
+        const categoryList = document.createElement("ul");
+        categories.forEach((category, index) => {
+            const item = document.createElement("li");
+            const supportingCodes = (category.codeNumbers || [])
+                .map(number => `CO${number}`)
+                .join(", ");
+            item.textContent = `CA${index + 1} ${category.label} ← ${supportingCodes} — ${category.rationale}`;
+            categoryList.appendChild(item);
+        });
         const codeHeading = document.createElement("strong");
-        codeHeading.textContent = "Codes and exact keyword evidence";
+        codeHeading.textContent = "Codes and meaning units";
         const codeList = document.createElement("ul");
         codes.forEach((code, index) => {
             const item = document.createElement("li");
-            const evidence = (code.highlights || []).map(
+            const evidenceItems = (code.meaningUnits || []).length
+                ? code.meaningUnits
+                : code.highlights || [];
+            const evidence = evidenceItems.map(
                 highlight => `“${highlight.exactText}”`
             ).join("; ");
-            item.textContent = `C${index + 1} ${code.label} — ${evidence}`;
+            item.textContent = `CO${index + 1} ${code.label} — ${evidence}`;
             codeList.appendChild(item);
         });
-        container.append(themeHeading, themeList, codeHeading, codeList);
-        const assignedCodeNumbers = new Set(themes.flatMap(
-            theme => theme.codeNumbers || []
+        container.append(
+            themeHeading,
+            themeList,
+            categoryHeading,
+            categoryList,
+            codeHeading,
+            codeList
+        );
+        const assignedCodeNumbers = new Set(categories.flatMap(
+            category => category.codeNumbers || []
         ));
         const ungrouped = codes.map((code, index) => ({
             number: index + 1,
@@ -233,11 +287,11 @@
         if (ungrouped.length) {
             const ungroupedHeading = document.createElement("strong");
             ungroupedHeading.textContent =
-                "Ungrouped codes — insufficient multi-code theme support";
+                "Codes retained without a defensible category";
             const ungroupedList = document.createElement("ul");
             ungrouped.forEach(code => {
                 const item = document.createElement("li");
-                item.textContent = `C${code.number} ${code.label} · Researcher review needed; no theme was invented.`;
+                item.textContent = `CO${code.number} ${code.label} · The completed analysis did not force an unsupported category.`;
                 ungroupedList.appendChild(item);
             });
             container.append(ungroupedHeading, ungroupedList);
@@ -246,44 +300,11 @@
 
     function reasonLabel(value) {
         return ({
-            keywords_unrelated_to_theme: "Keywords unrelated to theme",
+            keywords_unrelated_to_theme: "Meaning units unrelated to the analytical hierarchy",
             evidence_theme_mismatch: "Evidence-to-theme mismatch",
             analysis_framework_changed: "Project-wide Analysis Framework self-check",
             other: "Other analytical concern"
         })[value] || value;
-    }
-
-    async function reviewReanalysis(requestId, decision, reviewerNotes) {
-        if (decision === "approved" && !window.confirm(
-            "Approve this proposed report as current? The prior report will remain preserved in version history."
-        )) return;
-        reanalysisStatus.textContent = decision === "approved"
-            ? "Approving the proposed version and preserving the prior report…"
-            : "Rejecting the proposal and keeping the current report…";
-        const response = await fetch("/api/automatic-analysis-review", {
-            method: "POST",
-            headers: {
-                Authorization: `Bearer ${token()}`,
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-                action: "review_case_reanalysis",
-                requestId,
-                decision,
-                reviewerNotes
-            })
-        });
-        const data = await response.json().catch(() => ({}));
-        if (!response.ok) {
-            throw new Error(data.error || "The proposal decision could not be saved.");
-        }
-        await loadWorkspace(activeThreadId);
-        if (data.currentReportChanged && bridge.refresh) {
-            await bridge.refresh();
-        }
-        reanalysisStatus.textContent = decision === "approved"
-            ? "Approved. The proposed version is now current; the earlier report, request, proposal, decision, timestamps, and lineage remain preserved."
-            : "Rejected. The current report is unchanged and the rejected proposal remains in the audit history.";
     }
 
     function renderReanalysisHistory() {
@@ -326,7 +347,7 @@
             const lineage = document.createElement("p");
             lineage.className = "muted";
             lineage.textContent = project && framework
-                ? `Global project rule: ${project.project_name} · Topic: ${project.research_topic} · Analysis Framework v${framework.version_number}. This case has its own proposal and audit. Project-wide proposals are inspectable without approval and remain separate from current reports.`
+                ? `Global project rule: ${project.project_name} · Topic: ${project.research_topic} · Analysis Framework v${framework.version_number}. This case has its own completed version and audit; researcher feedback begins another version.`
                 : "Legacy lineage: refresh after the project-bound framework migration is available.";
             record.appendChild(lineage);
             if (request.last_error) {
@@ -353,7 +374,7 @@
                 const proposed = document.createElement("section");
                 proposed.className = "automaticReanalysisVersion";
                 const proposedHeading = document.createElement("h5");
-                proposedHeading.textContent = `AI proposal · ${proposal.proposal_version}`;
+                proposedHeading.textContent = `Completed AI version · ${proposal.proposal_version}`;
                 proposed.appendChild(proposedHeading);
                 appendHierarchy(proposed, proposal.proposed_report, false);
                 comparison.append(source, proposed);
@@ -381,7 +402,7 @@
                     const summary = document.createElement("p");
                     summary.textContent = `${acceptedLabels}/${
                         (labelAudit.checks || []).length
-                    } code/theme labels passed natural-language coherence, one-concept meaning, evidence support, project-topic fit, conceptual distinctness, and cross-case comparison usefulness. Themes additionally require at least two semantically related codes, shared narrative coverage, higher-level abstraction, anti-paraphrase, and one coherent participant story. ${
+                    } CO/CA/TH labels passed natural-language coherence, evidence support, project-topic fit, conceptual distinctness, and cross-case comparison usefulness. Categories require related codes; themes require patterned meaning across related categories. ${
                         labelAudit.overallSummary || ""
                     }`;
                     labelAuditSummary.append(heading, summary);
@@ -403,18 +424,18 @@
                             ? "automaticReanalysisAudit"
                             : "automaticReanalysisWarning";
                         const title = document.createElement("strong");
-                        title.textContent = "Theme hierarchy provenance";
+                        title.textContent = "MU → CO → CA → TH hierarchy provenance";
                         const detail = document.createElement("p");
                         detail.textContent = `${(hierarchy.checks || []).filter(
                             item => item.accepted
-                        ).length}/${(hierarchy.checks || []).length} themes passed multi-code support, semantic coverage, higher-level abstraction, anti-paraphrase, coherent-story, and project-topic checks. ${(hierarchy.ungroupedCodes || []).length} codes remain visibly ungrouped for researcher review; no theme was invented.`;
+                        ).length}/${(hierarchy.checks || []).length} themes passed patterned-meaning and category-support checks. ${(hierarchy.unsynthesized || []).length} firm lower-level findings remain visibly unsynthesized; no category or theme was forced.`;
                         hierarchySummary.append(title, detail);
                         const ungrouped = hierarchy.ungroupedCodes || [];
                         if (ungrouped.length) {
                             const list = document.createElement("ul");
                             ungrouped.forEach(flag => {
                                 const item = document.createElement("li");
-                                item.textContent = `C${flag.codeNumber} “${flag.label}”: ${flag.reason}`;
+                                item.textContent = `CO${flag.number || flag.codeNumber} “${flag.label}”: ${flag.reason}`;
                                 list.appendChild(item);
                             });
                             hierarchySummary.appendChild(list);
@@ -436,34 +457,6 @@
                     });
                     warning.append(title, list);
                     record.appendChild(warning);
-                }
-                if (request.status === "proposal_ready"
-                    && !request.project_reanalysis_batch_id) {
-                    const reviewNotes = document.createElement("textarea");
-                    reviewNotes.placeholder = "Optional approval or rejection note";
-                    reviewNotes.setAttribute("aria-label", "Researcher review note");
-                    const actions = document.createElement("div");
-                    actions.className = "actionRow";
-                    const approve = document.createElement("button");
-                    approve.type = "button";
-                    approve.textContent = "Approve proposed report";
-                    approve.addEventListener("click", () => {
-                        reviewReanalysis(request.id, "approved", reviewNotes.value)
-                            .catch(error => {
-                                reanalysisStatus.textContent = error.message;
-                            });
-                    });
-                    const reject = document.createElement("button");
-                    reject.type = "button";
-                    reject.textContent = "Reject and keep current report";
-                    reject.addEventListener("click", () => {
-                        reviewReanalysis(request.id, "rejected", reviewNotes.value)
-                            .catch(error => {
-                                reanalysisStatus.textContent = error.message;
-                            });
-                    });
-                    actions.append(approve, reject);
-                    record.append(reviewNotes, actions);
                 }
                 const review = (layer.reviews || []).find(
                     item => item.request_id === request.id
@@ -490,7 +483,7 @@
         }
         reanalysisButton.disabled = true;
         reanalysisStatus.textContent =
-            "Re-analysing this preserved transcript and independently checking every exact keyword against its code, theme, and sleep-research scope…";
+            "Generating a completed version from the preserved transcript and checking every MU → CO → CA → TH link…";
         try {
             const response = await fetch("/api/automatic-analysis-review", {
                 method: "POST",
@@ -513,8 +506,9 @@
             }
             document.getElementById("automaticReanalysisNotes").value = "";
             await loadWorkspace(activeThreadId);
+            if (bridge.refresh) await bridge.refresh();
             reanalysisStatus.textContent =
-                "A proposed report is ready below. The current report has not changed; compare both versions and explicitly approve or reject the proposal.";
+                "Completed. The new version is current and the earlier version remains available for audit.";
         } finally {
             reanalysisButton.disabled = !selectedSessionId();
         }
@@ -556,10 +550,10 @@
             throw new Error("Explain why this project-wide run should stop.");
         }
         if (!window.confirm(
-            "Stop this project-wide re-analysis? Queued and in-flight work will be cancelled, unreviewed proposals will remain only for audit, and no current report will be changed."
+            "Stop this project-wide re-analysis? Queued and in-flight cases will be cancelled. Versions already completed remain current and fully auditable."
         )) return;
         projectWideStatus.textContent =
-            "Stopping the run and preserving its requests, proposals, and cancellation lineage…";
+            "Stopping unfinished work and preserving completed versions and cancellation lineage…";
         const response = await fetch("/api/automatic-analysis-review", {
             method: "POST",
             headers: {
@@ -577,7 +571,7 @@
             throw new Error(data.error || "The project-wide run could not be stopped.");
         }
         await loadWorkspace(activeThreadId);
-        projectWideStatus.textContent = `${data.cancelledCaseCount} case requests were stopped. Existing reports are unchanged; generated proposals and the cancellation reason remain available for audit.`;
+        projectWideStatus.textContent = `${data.cancelledCaseCount} unfinished case requests were stopped. Already completed versions remain current; the cancellation reason remains available for audit.`;
     }
 
     function downloadFilename(response, fallback) {
@@ -588,7 +582,7 @@
 
     async function downloadProjectWideBatch(batch) {
         projectWideStatus.textContent =
-            "Preparing the complete proposed analysis with current-versus-revised evidence and provenance…";
+            "Preparing the completed revised analysis with prior-versus-current evidence and provenance…";
         const response = await fetch(
             `/api/automatic-analysis-review?action=download_project_reanalysis_batch&batchId=${encodeURIComponent(batch.id)}`,
             { headers: { Authorization: `Bearer ${token()}` } }
@@ -610,7 +604,7 @@
         anchor.remove();
         URL.revokeObjectURL(url);
         projectWideStatus.textContent =
-            "Complete batch review downloaded. It contains proposed revised analysis only; no report was approved, promoted, or overwritten.";
+            "Completed batch analysis downloaded with version lineage and evidence provenance.";
     }
 
     function renderProjectWideHistory() {
@@ -647,13 +641,11 @@
             counts.className = "muted";
             counts.textContent = `Eligible ${batch.eligible_case_count}; queued ${
                 batch.queued_case_count
-            }; processing ${batch.processing_case_count}; revised proposals ready ${
+            }; processing ${batch.processing_case_count}; completed versions ${
                 batch.proposal_ready_case_count
-            }; approved ${batch.approved_case_count}; rejected ${
-                batch.rejected_case_count
             }; failed ${batch.failed_case_count}; cancelled ${
                 batch.cancelled_case_count || 0
-            }. Proposal generation finishes independently of approval. Current reports remain preserved; the consolidated download is read-only.`;
+            }. PLI completes each version without an approval gate. Earlier versions remain preserved; the consolidated download is read-only.`;
             record.append(heading, lineage, counts);
 
             if (new Set(["completed", "completed_with_failures"]).has(
@@ -788,7 +780,7 @@
                 data.preview.eligibleCaseCount
             } eligible completed cases. Excluded: ${
                 data.preview.archivedCaseExcludedCount
-            } archived and ${data.preview.openRequestExcludedCount} with an open proposal/request. The run creates one proposal per case; no current report is overwritten or approved automatically.`;
+            } archived and ${data.preview.openRequestExcludedCount} with an open run. The system completes one new version per case and preserves the earlier versions for audit.`;
             projectWideRequestButton.disabled = data.preview.eligibleCaseCount < 1;
             projectWideStatus.textContent = data.preview.eligibleCaseCount
                 ? "Scope preview ready. Add a reason note, then confirm the project-wide request."
@@ -814,7 +806,7 @@
             projectWidePreview.projectName
         } (${projectWidePreview.researchTopic}) using Analysis Framework v${
             projectWidePreview.analysisFrameworkVersion
-        } across ${projectWidePreview.eligibleCaseCount} eligible completed cases? The system will finish the full proposed revision without case-by-case approval and make one consolidated review download available. Current reports will remain unchanged.`;
+        } across ${projectWidePreview.eligibleCaseCount} eligible completed cases? The system will complete and publish one new version per case without case-by-case approval, preserve earlier versions, and make one consolidated review download available.`;
         if (!window.confirm(confirmation)) return;
 
         projectWideRequestButton.disabled = true;
@@ -844,7 +836,7 @@
         document.getElementById("projectWideReanalysisNotes").value = "";
         await loadWorkspace(activeThreadId);
         projectWideRequestButton.disabled = true;
-        projectWideStatus.textContent = `${data.queuedCaseCount} individual case requests were queued. The full proposed revision will finish automatically. When complete, download one consolidated review; no case approval is required to inspect it and current reports remain unchanged.`;
+        projectWideStatus.textContent = `${data.queuedCaseCount} individual cases were queued. Each new version will become current automatically when complete; earlier versions remain available for audit.`;
     }
 
     function appendMessage(message) {
@@ -904,7 +896,7 @@
             const speaker = document.createElement("strong");
             speaker.textContent = "AI analytical collaborator";
             const content = document.createElement("p");
-            content.textContent = "Select a case or a Tn/Cn cell above. We can then check whether a rare theme is correct, should be regrouped or re-abstracted, or needs transcript review.";
+            content.textContent = "Select a case or a THn/CAn/COn cell above. We can then inspect its meaning-unit evidence and analytical fit.";
             article.append(speaker, content);
             conversation.appendChild(article);
         } else {
@@ -1070,7 +1062,7 @@
             outcomeStatus =
                 `AI response ready for exact analytical scope: ${submittedContext}`;
             bridge.setStatus(
-                `AI review ready for: ${submittedContext}. The discussion and its exact case/Tn/Cn provenance were saved.`
+                `AI review ready for: ${submittedContext}. The discussion and its exact case/THn/CAn/COn provenance were saved.`
             );
         } catch (error) {
             outcomeStatus =

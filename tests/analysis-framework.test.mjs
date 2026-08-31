@@ -19,6 +19,10 @@ const cancellationMigrationUrl = new URL(
     "../supabase/migrations/20260831064607_stop_project_wide_reanalysis.sql",
     import.meta.url
 );
+const autonomousFeedbackMigrationUrl = new URL(
+    "../supabase/migrations/20260831173903_add_meaning_units_categories_autonomous_feedback.sql",
+    import.meta.url
+);
 
 const sample = {
     id: "11111111-1111-4111-8111-111111111111",
@@ -53,17 +57,17 @@ test("analysis framework instructions are project-bound and complete", () => {
     assert.match(GLOBAL_ANALYSIS_LABEL_STANDARD, /every project/);
     assert.match(instruction, /cannot be weakened or bypassed/);
     assert.match(instruction, /Project-specific Analysis Framework/);
-    assert.match(instruction, /at least two semantically related codes/);
-    assert.match(instruction, /coherent human story/);
-    assert.match(instruction, /ungrouped, insufficiently supported code/);
+    assert.match(instruction, /at least two related codes/);
+    assert.match(instruction, /patterned meaning/);
+    assert.match(instruction, /retain it as unsynthesized/);
 });
 
 test("global semantic label standards are audited and repaired before completion", async () => {
-    const [core, automaticProcessor, reanalysisProcessor, design, dashboard, review] =
+    const [core, automaticProcessor, migration, design, dashboard, review] =
         await Promise.all([
             readFile(new URL("../server/analysisCore.js", import.meta.url), "utf8"),
             readFile(new URL("../server/automaticCaseAnalysis.js", import.meta.url), "utf8"),
-            readFile(new URL("../server/frameworkReanalysis.js", import.meta.url), "utf8"),
+            readFile(autonomousFeedbackMigrationUrl, "utf8"),
             readFile(new URL("../design.html", import.meta.url), "utf8"),
             readFile(new URL("../researcher.html", import.meta.url), "utf8"),
             readFile(new URL("../researcher-automatic-review.js", import.meta.url), "utf8")
@@ -73,23 +77,22 @@ test("global semantic label standards are audited and repaired before completion
     assert.match(core, /natural_language/);
     assert.match(core, /coherent_concept/);
     assert.match(core, /comparison_useful/);
-    assert.match(core, /theme_has_multiple_codes/);
-    assert.match(core, /theme_semantic_coverage/);
-    assert.match(core, /theme_higher_level_abstraction/);
-    assert.match(core, /theme_not_one_to_one_paraphrase/);
-    assert.match(core, /theme_coherent_story/);
-    assert.match(core, /ungrouped_code_checks/);
+    assert.match(core, /has_multiple_children/);
+    assert.match(core, /semantic_coverage/);
+    assert.match(core, /higher_level_abstraction/);
+    assert.match(core, /patterned_meaning/);
+    assert.match(core, /unsynthesized_checks/);
     assert.match(core, /Rejected label audit/);
     assert.match(core, /Label-corrected automatic individual case analysis/);
     assert.match(automaticProcessor, /labelQualityAudit/);
-    assert.match(reanalysisProcessor, /labelQualityCheckCount/);
+    assert.match(migration, /labelQualityCheckCount/);
     assert.match(design, /Global platform standards apply automatically to every project/);
     assert.match(design, /cannot weaken these global standards/);
-    assert.match(dashboard, /Global label standard for every project/);
+    assert.match(dashboard, /Analytical abbreviations:/);
     assert.match(review, /Platform-wide semantic label audit/);
     assert.match(review, /cross-case comparison usefulness/);
-    assert.match(review, /Theme hierarchy provenance/);
-    assert.match(review, /no theme was invented/);
+    assert.match(review, /MU → CO → CA → TH hierarchy provenance/);
+    assert.match(review, /no category or theme was forced/);
 });
 
 test("researchers can durably stop an older global instruction", async () => {
@@ -129,7 +132,7 @@ test("Research Design visibly separates protocol and framework scope", async () 
     assert.match(html, /Analysis Framework/);
     assert.match(html, /Future analysis only/);
     assert.match(html, /same project\/topic lineage/);
-    assert.match(html, /explicitly approves its proposal/);
+    assert.match(html, /Each result becomes current automatically/);
     assert.match(html, /Draft protection/);
     assert.match(script, /FRAMEWORK_DRAFT_KEY/);
     assert.match(script, /saveFrameworkDraft/);
@@ -164,10 +167,11 @@ test("database preserves project, framework, proposal, and approval lineage", as
     );
 });
 
-test("global framework queue creates one auditable proposal per case", async () => {
-    const [worker, processor, reviewUi, dashboard] = await Promise.all([
+test("global framework queue creates one auditable completed version per case", async () => {
+    const [worker, processor, migration, reviewUi, dashboard] = await Promise.all([
         readFile(new URL("../api/automatic-analysis.js", import.meta.url), "utf8"),
         readFile(new URL("../server/frameworkReanalysis.js", import.meta.url), "utf8"),
+        readFile(autonomousFeedbackMigrationUrl, "utf8"),
         readFile(new URL("../researcher-automatic-review.js", import.meta.url), "utf8"),
         readFile(new URL("../server/caseAnalysisDashboard.js", import.meta.url), "utf8")
     ]);
@@ -175,21 +179,21 @@ test("global framework queue creates one auditable proposal per case", async () 
     assert.match(processor, /generateAutomaticCaseReanalysis/);
     assert.match(processor, /relevance_audit: analysis\.relevanceAudit/);
     assert.match(processor, /source_quality_flags: sourceQualityFlags/);
-    assert.match(processor, /currentReportPreserved: true/);
-    assert.match(processor, /proposalAccessibleWithoutApproval: true/);
+    assert.match(processor, /complete_automatic_case_reanalysis/);
+    assert.match(migration, /'researcherApprovalRequired', false/);
     assert.match(reviewUi, /Global project rule/);
-    assert.match(reviewUi, /own proposal and audit/);
+    assert.match(reviewUi, /own completed version and audit/);
     assert.match(dashboard, /researchProject/);
     assert.match(dashboard, /analysisFramework/);
     assert.match(dashboard, /reportLineage/);
 });
 
-test("project-wide re-analysis is previewed, batched, and never auto-approved", async () => {
+test("project-wide re-analysis is previewed, batched, and completed without approval", async () => {
     const [html, client, endpoint, migration] = await Promise.all([
         readFile(new URL("../researcher.html", import.meta.url), "utf8"),
         readFile(new URL("../researcher-automatic-review.js", import.meta.url), "utf8"),
         readFile(new URL("../api/automatic-analysis-review.js", import.meta.url), "utf8"),
-        readFile(batchMigrationUrl, "utf8")
+        readFile(autonomousFeedbackMigrationUrl, "utf8")
     ]);
     assert.match(html, /Request project-wide re-analysis/);
     assert.match(html, /Preview project-wide scope/);
@@ -201,14 +205,8 @@ test("project-wide re-analysis is previewed, batched, and never auto-approved", 
     assert.match(endpoint, /preview_project_wide_reanalysis/);
     assert.match(endpoint, /create_project_wide_reanalysis_batch/);
     assert.match(endpoint, /scheduleAutomaticCaseAnalysis/);
-    assert.match(migration, /analysis_framework_reanalysis_batches/);
-    assert.match(migration, /project_reanalysis_batch_id uuid/);
-    assert.match(migration, /researcherApprovalRequiredPerCase/);
-    assert.match(migration, /currentReportsPreserved/);
-    assert.match(migration, /'project_wide_reanalysis'/);
-    assert.match(migration, /requested_by in \(/);
-    assert.doesNotMatch(
-        migration,
-        /update public\.automatic_case_reanalysis_requests[\s\S]{0,240}set status\s*=\s*'approved'/
-    );
+    assert.match(migration, /complete_automatic_case_reanalysis/);
+    assert.match(migration, /set status = 'completed'/);
+    assert.match(migration, /researcherApprovalRequired', false/);
+    assert.match(migration, /feedbackStartsNewVersion', true/);
 });

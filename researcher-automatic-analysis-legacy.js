@@ -33,9 +33,10 @@
 
     const ANALYSIS_VIEW_LABELS = Object.freeze({
         cases: "Form 1 · Cases",
-        keywords: "Form 2 · Keywords",
+        meaningUnits: "Form 2 · Meaning Units",
         codes: "Form 3 · Codes",
-        themes: "Form 4 · Themes",
+        categories: "Form 4 · Categories",
+        themes: "Form 5 · Themes",
         incomplete: "Needs attention",
         archive: "Archive"
     });
@@ -222,8 +223,11 @@
     function reviewSource(caseRecord, kind = "case", record = null) {
         const isTheme = kind === "theme";
         const isCode = kind === "code";
+        const isCategory = kind === "category";
         const number = isTheme
             ? record?.theme_number
+            : isCategory
+                ? record?.category_number
             : isCode
                 ? record?.code_number
                 : null;
@@ -232,10 +236,14 @@
             sessionId: caseRecord.transcriptIdentity?.sessionId,
             caseNumber: caseRecord.caseNumber,
             participantCode: participantCode(caseRecord),
-            position: number ? `${isTheme ? "T" : "C"}${number}` : "CASE",
+            position: number
+                ? `${isTheme ? "TH" : isCategory ? "CA" : "CO"}${number}`
+                : "CASE",
             recordId: record?.id || null,
             label: isTheme
                 ? record?.theme_label
+                : isCategory
+                    ? record?.category_label
                 : isCode
                     ? record?.code_label
                     : "Individual case report"
@@ -339,9 +347,13 @@
     }
 
     function recordLabel(record, kind) {
-        return kind === "code"
-            ? record?.original_code_label || record?.code_label || "—"
-            : record?.original_theme_label || record?.theme_label || "—";
+        if (kind === "code") {
+            return record?.original_code_label || record?.code_label || "—";
+        }
+        if (kind === "category") {
+            return record?.category_label || "—";
+        }
+        return record?.original_theme_label || record?.theme_label || "—";
     }
 
     function keywordEvidenceButton(
@@ -356,12 +368,14 @@
         button.title = highlight.message_id
             ? `Open source message ${highlight.message_id} in the preserved transcript`
             : "Open the preserved transcript";
-        const keywordPosition = Number.isFinite(Number(highlight.keyword_number))
-            ? `K${highlight.keyword_number}`
-            : "keyword evidence";
+        const keywordPosition = Number.isFinite(Number(
+            highlight.unit_number ?? highlight.keyword_number
+        ))
+            ? `MU${highlight.unit_number ?? highlight.keyword_number}`
+            : "meaning unit";
         button.dataset.transcriptOrigin = transcriptOriginKey(
             caseRecord,
-            "keyword",
+            "meaning-unit",
             highlight.id || keywordPosition
         );
         button.addEventListener("click", event => openTranscript(
@@ -369,7 +383,7 @@
             highlight.message_id,
             {
                 trigger: event.currentTarget,
-                label: `Form 2 · Keywords · ${caseRecord.caseNumber} · ${keywordPosition}`
+                label: `Form 2 · Meaning Units · ${caseRecord.caseNumber} · ${keywordPosition}`
             }
         ));
         return button;
@@ -377,14 +391,29 @@
 
     function firstEvidenceMessageId(caseRecord, kind, record) {
         if (kind === "code") {
-            return (caseRecord.highlights || []).find(
+            const unitIds = new Set((caseRecord.codeMeaningUnits || [])
+                .filter(mapping => mapping.code_id === record.id)
+                .map(mapping => mapping.meaning_unit_id));
+            return (caseRecord.meaningUnits || []).find(unit =>
+                unitIds.has(unit.id)
+            )?.message_id || (caseRecord.highlights || []).find(
                 highlight => highlight.code_id === record.id
             )?.message_id || null;
         }
-        const codeIds = new Set((caseRecord.themeCodes || [])
-            .filter(mapping => mapping.theme_id === record.id)
+        const categoryIds = kind === "theme"
+            ? new Set((caseRecord.themeCategories || [])
+                .filter(mapping => mapping.theme_id === record.id)
+                .map(mapping => mapping.category_id))
+            : new Set([record.id]);
+        const codeIds = new Set((caseRecord.categoryCodes || [])
+            .filter(mapping => categoryIds.has(mapping.category_id))
             .map(mapping => mapping.code_id));
-        return (caseRecord.highlights || []).find(
+        const unitIds = new Set((caseRecord.codeMeaningUnits || [])
+            .filter(mapping => codeIds.has(mapping.code_id))
+            .map(mapping => mapping.meaning_unit_id));
+        return (caseRecord.meaningUnits || []).find(unit =>
+            unitIds.has(unit.id)
+        )?.message_id || (caseRecord.highlights || []).find(
             highlight => codeIds.has(highlight.code_id)
         )?.message_id || null;
     }
@@ -393,11 +422,11 @@
         const button = document.createElement("button");
         button.type = "button";
         button.className = "worksheetExpressionButton";
-        const prefix = kind === "code" ? "C" : "T";
-        const number = kind === "code"
-            ? record.code_number
-            : record.theme_number;
-        button.textContent = `${prefix}${number}: ${recordLabel(record, kind)}`;
+        const prefix = kind === "code" ? "CO" : kind === "category" ? "CA" : "TH";
+        const number = kind === "code" ? record.code_number
+            : kind === "category" ? record.category_number
+                : record.theme_number;
+        button.textContent = recordLabel(record, kind);
         button.title = `Open the annotated transcript evidence for this ${kind}`;
         button.dataset.transcriptOrigin = transcriptOriginKey(
             caseRecord,
@@ -426,15 +455,17 @@
         return button;
     }
 
-    function renderKeywords() {
+    function renderMeaningUnits() {
         const completed = casesForAnalysisForms().filter(item => item.hasReport);
         const { scroll, table } = createTable([
             ...COMPACT_IDENTIFIER_HEADERS,
             "Case report",
-            "Keyword record",
-            "Exact keyword",
+            "Meaning unit",
+            "Highlighted passage",
+            "Anchor expression(s)",
             "English transcript text",
-            "Linked code",
+            "Linked code(s)",
+            "Linked category(s)",
             "Linked theme(s)",
             "Transcript evidence",
             "Analysis status",
@@ -443,29 +474,58 @@
         ]);
         scroll.classList.add("keywordRecordsScroll");
         const body = document.createElement("tbody");
-        let keywordRecordCount = 0;
+        let meaningUnitCount = 0;
 
         completed.forEach(caseRecord => {
             const codeById = new Map((caseRecord.codes || []).map(code => [
                 code.id,
                 code
             ]));
+            const categoryById = new Map((caseRecord.categories || []).map(
+                category => [category.id, category]
+            ));
             const themeById = new Map((caseRecord.themes || []).map(theme => [
                 theme.id,
                 theme
             ]));
-            const themeIdsByCode = (caseRecord.themeCodes || []).reduce(
+            const codeIdsByUnit = (caseRecord.codeMeaningUnits || []).reduce(
+                (groups, mapping) => {
+                    const values = groups.get(mapping.meaning_unit_id) || [];
+                    values.push(mapping.code_id);
+                    groups.set(mapping.meaning_unit_id, values);
+                    return groups;
+                },
+                new Map()
+            );
+            const categoryIdsByCode = (caseRecord.categoryCodes || []).reduce(
                 (groups, mapping) => {
                     const values = groups.get(mapping.code_id) || [];
-                    values.push(mapping.theme_id);
+                    values.push(mapping.category_id);
                     groups.set(mapping.code_id, values);
                     return groups;
                 },
                 new Map()
             );
+            const themeIdsByCategory = (caseRecord.themeCategories || []).reduce(
+                (groups, mapping) => {
+                    const values = groups.get(mapping.category_id) || [];
+                    values.push(mapping.theme_id);
+                    groups.set(mapping.category_id, values);
+                    return groups;
+                },
+                new Map()
+            );
+            const units = (caseRecord.meaningUnits || []).length
+                ? caseRecord.meaningUnits
+                : (caseRecord.highlights || []).map(highlight => ({
+                    ...highlight,
+                    unit_number: highlight.keyword_number,
+                    anchor_expressions: [highlight.exact_text],
+                    legacy_code_id: highlight.code_id
+                }));
 
-            (caseRecord.highlights || []).forEach((highlight, index) => {
-                keywordRecordCount += 1;
+            units.forEach((unit, index) => {
+                meaningUnitCount += 1;
                 const row = document.createElement("tr");
                 createIdentifierCells(row, caseRecord);
                 const caseCell = document.createElement("td");
@@ -473,42 +533,75 @@
                 row.appendChild(caseCell);
                 createCell(
                     row,
-                    Number.isFinite(Number(highlight.keyword_number))
-                        ? `K${highlight.keyword_number}`
-                        : `K${index + 1}`,
+                    Number.isFinite(Number(unit.unit_number))
+                        ? `MU${unit.unit_number}`
+                        : `MU${index + 1}`,
                     "analysisIdentifierCell"
                 );
                 const keywordCell = document.createElement("td");
                 keywordCell.className = "analysisExactKeywordCell";
                 keywordCell.appendChild(keywordEvidenceButton(
                     caseRecord,
-                    highlight,
-                    highlight.exact_text || "Open keyword evidence"
+                    unit,
+                    unit.exact_text || "Open meaning unit"
                 ));
                 row.appendChild(keywordCell);
                 createCell(
                     row,
-                    highlight.english_translation || "—",
+                    (unit.anchor_expressions || []).join("; ") || "—",
+                    "analysisEvidenceTextCell"
+                );
+                createCell(
+                    row,
+                    unit.english_translation || "—",
                     "analysisEvidenceTextCell"
                 );
 
-                const code = codeById.get(highlight.code_id);
+                const codeIds = unit.legacy_code_id
+                    ? [unit.legacy_code_id]
+                    : [...new Set(codeIdsByUnit.get(unit.id) || [])];
+                const codes = codeIds.map(codeId => codeById.get(codeId))
+                    .filter(Boolean);
                 const codeCell = document.createElement("td");
-                if (code) {
-                    codeCell.appendChild(linkedRecordButton(caseRecord, "code", code));
-                    codeCell.appendChild(discussionSelectButton(
-                        caseRecord,
-                        "code",
-                        code
-                    ));
+                if (codes.length) {
+                    codes.forEach(code => {
+                        const line = document.createElement("div");
+                        line.appendChild(linkedRecordButton(caseRecord, "code", code));
+                        codeCell.appendChild(line);
+                    });
                 } else {
                     codeCell.textContent = "Unlinked";
                     codeCell.className = "analysisEmptyCell";
                 }
                 row.appendChild(codeCell);
 
+                const categoryIds = [...new Set(codeIds.flatMap(
+                    codeId => categoryIdsByCode.get(codeId) || []
+                ))];
+                const categories = categoryIds.map(categoryId =>
+                    categoryById.get(categoryId)
+                ).filter(Boolean);
+                const categoryCell = document.createElement("td");
+                if (categories.length) {
+                    categories.forEach(category => {
+                        const line = document.createElement("div");
+                        line.appendChild(linkedRecordButton(
+                            caseRecord,
+                            "category",
+                            category
+                        ));
+                        categoryCell.appendChild(line);
+                    });
+                } else {
+                    categoryCell.textContent = "Unsynthesized";
+                    categoryCell.className = "analysisEmptyCell";
+                }
+                row.appendChild(categoryCell);
+
                 const themeCell = document.createElement("td");
-                const themes = [...new Set(themeIdsByCode.get(highlight.code_id) || [])]
+                const themes = [...new Set(categoryIds.flatMap(
+                    categoryId => themeIdsByCategory.get(categoryId) || []
+                ))]
                     .map(themeId => themeById.get(themeId))
                     .filter(Boolean);
                 if (themes.length) {
@@ -527,17 +620,17 @@
                         themeCell.appendChild(line);
                     });
                 } else {
-                    themeCell.textContent = "Unlinked";
+                    themeCell.textContent = "No higher-level theme";
                     themeCell.className = "analysisEmptyCell";
                 }
                 row.appendChild(themeCell);
 
                 const evidenceCell = document.createElement("td");
-                evidenceCell.appendChild(keywordEvidenceButton(caseRecord, highlight));
-                if (highlight.message_id) {
+                evidenceCell.appendChild(keywordEvidenceButton(caseRecord, unit));
+                if (unit.message_id) {
                     const messageReference = document.createElement("small");
                     messageReference.className = "analysisLinkedContext";
-                    messageReference.textContent = `Message ${highlight.message_id}`;
+                    messageReference.textContent = `Message ${unit.message_id}`;
                     evidenceCell.appendChild(messageReference);
                 }
                 row.appendChild(evidenceCell);
@@ -561,14 +654,14 @@
             });
         });
 
-        if (!keywordRecordCount) {
+        if (!meaningUnitCount) {
             const row = document.createElement("tr");
             const cell = createCell(
                 row,
-                "No validated keyword evidence is available in the active completed reports.",
+                "No validated meaning units are available in the active completed reports.",
                 "analysisEmptyRow"
             );
-            cell.colSpan = 13;
+            cell.colSpan = 14;
             body.appendChild(row);
         }
 
@@ -613,9 +706,12 @@
         const completed = casesForAnalysisForms().filter(
             item => item.hasReport
         );
-        const recordsKey = kind === "codes" ? "codes" : "themes";
-        const prefix = kind === "codes" ? "C" : "T";
-        const numberKey = kind === "codes" ? "code_number" : "theme_number";
+        const recordsKey = kind === "codes" ? "codes"
+            : kind === "categories" ? "categories" : "themes";
+        const prefix = kind === "codes" ? "CO"
+            : kind === "categories" ? "CA" : "TH";
+        const numberKey = kind === "codes" ? "code_number"
+            : kind === "categories" ? "category_number" : "theme_number";
         const maximum = Math.max(0, ...completed.map(item =>
             Math.max(0, ...(item[recordsKey] || []).map(record => record[numberKey]))
         ));
@@ -645,7 +741,8 @@
                 if (records.length) {
                     records.forEach(record => {
                         const line = document.createElement("div");
-                        const recordKind = kind === "themes" ? "theme" : "code";
+                        const recordKind = kind === "themes" ? "theme"
+                            : kind === "categories" ? "category" : "code";
                         const button = linkedRecordButton(
                             caseRecord,
                             recordKind,
@@ -658,32 +755,7 @@
                             recordKind,
                             record
                         ));
-                        const context = document.createElement("small");
-                        context.className = "analysisLinkedContext";
-                        if (kind === "codes") {
-                            const linkedThemes = (caseRecord.themeCodes || [])
-                                .filter(mapping => mapping.code_id === record.id)
-                                .map(mapping => (caseRecord.themes || []).find(
-                                    theme => theme.id === mapping.theme_id
-                                ))
-                                .filter(Boolean)
-                                .map(theme => `T${theme.theme_number}`);
-                            const evidenceCount = (caseRecord.highlights || [])
-                                .filter(highlight => highlight.code_id === record.id)
-                                .length;
-                            context.textContent = `Keywords: ${evidenceCount} evidence mark${evidenceCount === 1 ? "" : "s"} · Themes: ${linkedThemes.join(", ") || "unlinked"}`;
-                        } else {
-                            const linkedCodes = (caseRecord.themeCodes || [])
-                                .filter(mapping => mapping.theme_id === record.id)
-                                .map(mapping => (caseRecord.codes || []).find(
-                                    code => code.id === mapping.code_id
-                                ))
-                                .filter(Boolean)
-                                .map(code => `C${code.code_number}`);
-                            context.textContent = `Codes: ${linkedCodes.join(", ") || "unlinked"}`;
-                        }
                         cell.appendChild(line);
-                        cell.appendChild(context);
                     });
                 } else {
                     cell.textContent = "—";
@@ -726,11 +798,11 @@
             ...FORM_ONE_DEMOGRAPHIC_COLUMNS.map(([, label]) => label),
             ...Array.from(
                 { length: maximumCodes },
-                (_, index) => `C${index + 1}`
+                (_, index) => `CO${index + 1}`
             ),
             ...Array.from(
                 { length: maximumThemes },
-                (_, index) => `T${index + 1}`
+                (_, index) => `TH${index + 1}`
             )
         ]);
         const body = document.createElement("tbody");
@@ -809,8 +881,9 @@
         const completedCases = casesForAnalysisForms().filter(
             caseRecord => caseRecord.hasReport
         );
-        const casesWithMarkedKeywords = completedCases.filter(
-            caseRecord => (caseRecord.highlights || []).length > 0
+        const casesWithMeaningUnits = completedCases.filter(
+            caseRecord => (caseRecord.meaningUnits || []).length > 0
+                || (caseRecord.highlights || []).length > 0
         ).length;
         ["pending", "processing", "failed"].forEach(key => {
             document.getElementById(
@@ -828,8 +901,8 @@
             renderIncomplete();
         } else if (activeView === "cases") {
             renderCases();
-        } else if (activeView === "keywords") {
-            renderKeywords();
+        } else if (activeView === "meaningUnits") {
+            renderMeaningUnits();
         } else {
             renderMatrix(activeView);
         }
@@ -843,23 +916,44 @@
             });
         document.getElementById("automaticAnalysisDescription").textContent =
             activeView === "cases"
-                ? `Form 1 · Cases: ${completedCases.length} available case reports are shown in permanent participant-code order, matching Forms 2–4. This compact register contains transcript, case-report, status, and separated demographic controls only; keyword evidence is kept in Form 2. Use Archive on a completed row to remove it from active analysis; it can later be restored from the Archive view.`
-                : activeView === "keywords"
-                    ? `Form 2 · Keywords: ${casesWithMarkedKeywords} cases contain validated transcript-grounded evidence. Keywords remain exact participant expressions, never invented summary labels. Select a keyword, linked code/theme, or “Open exact evidence” to open the annotated transcript at that source; the return control restores this form and record.`
+                ? `Form 1 · Cases: ${completedCases.length} completed case reports are shown in participant-code order. PLI finishes the analysis without waiting for researcher approval; feedback starts a new version afterward.`
+                : activeView === "meaningUnits"
+                    ? `Form 2 · Meaning Units: ${casesWithMeaningUnits} cases contain validated coherent transcript passages. The full meaning unit is highlighted; optional anchors remain inside it. Each row shows its code → category → theme path.`
                     : activeView === "codes"
-                        ? "Form 3 · Codes: each case starts at C1. Every code must be one coherent, human-meaningful semantic concept—one word preferred, two or three only as a natural phrase. Select a code to open its annotated transcript evidence; the return control restores this form and record."
+                        ? "Form 3 · Codes: each code is supportable by this case’s meaning units and uses common terminology suitable across cases."
+                        : activeView === "categories"
+                            ? "Form 4 · Categories: each firm descriptive category answers what is being described and groups related codes."
                         : activeView === "themes"
-                            ? "Form 4 · Themes: each case starts at T1. Every theme must be a clear, comparison-useful higher-level concept supported by its codes. Select a theme to open its annotated transcript evidence; the return control restores this form and record."
+                            ? "Form 5 · Themes: each completed interpretive theme states the patterned meaning linking two or more categories."
                         : activeView === "incomplete"
-                            ? "Needs attention: unfinished interviews are separate from Forms 1–4. Each row preserves its transcript and separated demographic fields, summarizes only the material actually recorded, and states how incomplete the interview is. No themes, codes, or keywords are assigned before formal completion."
-                            : "Archived cases are excluded from every active analysis form and from future automatic reanalysis. Each archived row preserves its transcript, report, language, demographic columns, mention-ranked C1–Cn code groups, mention-ranked T1–Tn theme groups, and archive history.";
+                            ? "Needs attention: unfinished interviews are separate from Forms 1–5. No meaning units, codes, categories, or themes are assigned before formal completion."
+                            : "Archived cases are excluded from every active analysis form and from future automatic reanalysis. Each archived row preserves its transcript, report, language, demographic columns, and its MU/CO/CA/TH hierarchy.";
         window.dispatchEvent(new CustomEvent("automatic-analysis-review-ready"));
     }
 
     function highlightedText(message, caseRecord) {
         const text = message.Message || "";
         const codeById = new Map((caseRecord.codes || []).map(code => [code.id, code]));
-        const highlights = (caseRecord.highlights || [])
+        const codeIdsByUnit = (caseRecord.codeMeaningUnits || []).reduce(
+            (groups, mapping) => {
+                const values = groups.get(mapping.meaning_unit_id) || [];
+                values.push(mapping.code_id);
+                groups.set(mapping.meaning_unit_id, values);
+                return groups;
+            },
+            new Map()
+        );
+        const meaningUnits = (caseRecord.meaningUnits || []).length
+            ? (caseRecord.meaningUnits || []).map(unit => ({
+                ...unit,
+                codes: [...new Set(codeIdsByUnit.get(unit.id) || [])]
+                    .map(codeId => codeById.get(codeId)).filter(Boolean)
+            }))
+            : (caseRecord.highlights || []).map(highlight => ({
+                ...highlight,
+                codes: [codeById.get(highlight.code_id)].filter(Boolean)
+            }));
+        const highlights = meaningUnits
             .filter(item => item.message_id === message.id)
             .sort((left, right) => left.start_offset - right.start_offset);
         const fragment = document.createDocumentFragment();
@@ -871,12 +965,20 @@
             }
 
             fragment.append(document.createTextNode(text.slice(cursor, item.start_offset)));
+            const annotation = document.createElement("span");
+            annotation.className = "meaningUnitAnnotation";
+            const label = document.createElement("span");
+            label.className = "meaningUnitCodeLabel";
+            label.textContent = item.codes.length
+                ? item.codes.map(code => `CO${code.code_number}: ${code.code_label}`).join(" · ")
+                : "Meaning unit";
             const mark = document.createElement("mark");
-            const code = codeById.get(item.code_id);
+            const code = item.codes[0];
             mark.className = `keywordColor${code?.color_slot || 1}`;
             mark.textContent = text.slice(item.start_offset, item.end_offset);
-            mark.title = code ? `C${code.code_number}: ${code.code_label}` : "Keyword";
-            fragment.append(mark);
+            mark.title = code ? `CO${code.code_number}: ${code.code_label}` : "Meaning unit";
+            annotation.append(label, mark);
+            fragment.append(annotation);
             cursor = item.end_offset;
         });
 
@@ -945,7 +1047,7 @@
         (caseRecord.codes || []).forEach(code => {
             const item = document.createElement("span");
             item.className = `keywordLegend keywordColor${code.color_slot}`;
-            item.textContent = `C${code.code_number}: ${code.code_label}`;
+            item.textContent = `CO${code.code_number}: ${code.code_label}`;
             item.title = code.rationale;
             legend.appendChild(item);
         });
@@ -1062,17 +1164,29 @@
         );
 
         const themeHeading = document.createElement("h3");
-        themeHeading.textContent = "Themes and codes";
+        themeHeading.textContent = "Themes, categories, codes, and meaning units";
         content.appendChild(themeHeading);
         const codeById = new Map((caseRecord.codes || []).map(code => [
             code.id,
             code
         ]));
-        const mappingsByTheme = (caseRecord.themeCodes || []).reduce(
+        const categoryById = new Map((caseRecord.categories || []).map(
+            category => [category.id, category]
+        ));
+        const categoriesByTheme = (caseRecord.themeCategories || []).reduce(
             (groups, mapping) => {
                 const values = groups.get(mapping.theme_id) || [];
-                values.push(mapping.code_id);
+                values.push(mapping.category_id);
                 groups.set(mapping.theme_id, values);
+                return groups;
+            },
+            new Map()
+        );
+        const codesByCategory = (caseRecord.categoryCodes || []).reduce(
+            (groups, mapping) => {
+                const values = groups.get(mapping.category_id) || [];
+                values.push(mapping.code_id);
+                groups.set(mapping.category_id, values);
                 return groups;
             },
             new Map()
@@ -1080,21 +1194,31 @@
         (caseRecord.themes || []).forEach(theme => {
             const section = document.createElement("section");
             const heading = document.createElement("h4");
-            heading.textContent = `T${theme.theme_number}: ${theme.theme_label}`;
+            heading.textContent = `TH${theme.theme_number}: ${theme.theme_label}`;
             const rationale = document.createElement("p");
             rationale.textContent = theme.rationale;
             const list = document.createElement("ul");
-            (mappingsByTheme.get(theme.id) || []).forEach(codeId => {
-                const code = codeById.get(codeId);
-                if (!code) return;
+            (categoriesByTheme.get(theme.id) || []).forEach(categoryId => {
+                const category = categoryById.get(categoryId);
+                if (!category) return;
                 const item = document.createElement("li");
-                item.textContent = `C${code.code_number}: ${code.code_label} — ${code.rationale}`;
+                const categoryLabel = document.createElement("strong");
+                categoryLabel.textContent = `CA${category.category_number}: ${category.category_label}`;
+                const codeList = document.createElement("ul");
+                (codesByCategory.get(category.id) || []).forEach(codeId => {
+                    const code = codeById.get(codeId);
+                    if (!code) return;
+                    const codeItem = document.createElement("li");
+                    codeItem.textContent = `CO${code.code_number}: ${code.code_label} — ${code.rationale}`;
+                    codeList.appendChild(codeItem);
+                });
+                item.append(categoryLabel, codeList);
                 list.appendChild(item);
             });
             section.append(heading, rationale, list);
             content.appendChild(section);
         });
-        const assignedCodeIds = new Set((caseRecord.themeCodes || []).map(
+        const assignedCodeIds = new Set((caseRecord.categoryCodes || []).map(
             mapping => mapping.code_id
         ));
         const ungroupedCodes = (caseRecord.codes || []).filter(
@@ -1103,30 +1227,47 @@
         if (ungroupedCodes.length) {
             const heading = document.createElement("h3");
             heading.textContent =
-                "Ungrouped codes — insufficient multi-code theme support";
+                "Firm codes retained without a category";
             const explanation = document.createElement("p");
             explanation.className = "automaticReanalysisWarning";
             explanation.textContent =
-                "These evidence-supported codes remain visible for researcher review. No one-code or artificial theme was created.";
+                "These evidence-supported codes are part of the completed result. PLI did not force an unsupported category.";
             const list = document.createElement("ul");
             ungroupedCodes.forEach(code => {
                 const item = document.createElement("li");
-                item.textContent = `C${code.code_number}: ${code.code_label} — ${code.rationale}`;
+                item.textContent = `CO${code.code_number}: ${code.code_label} — ${code.rationale}`;
                 list.appendChild(item);
             });
             content.append(heading, explanation, list);
         }
+        const themedCategoryIds = new Set((caseRecord.themeCategories || []).map(
+            mapping => mapping.category_id
+        ));
+        const unthemedCategories = (caseRecord.categories || []).filter(
+            category => !themedCategoryIds.has(category.id)
+        );
+        if (unthemedCategories.length) {
+            const heading = document.createElement("h3");
+            heading.textContent = "Firm categories retained without a theme";
+            const list = document.createElement("ul");
+            unthemedCategories.forEach(category => {
+                const item = document.createElement("li");
+                item.textContent = `CA${category.category_number}: ${category.category_label} — ${category.rationale}`;
+                list.appendChild(item);
+            });
+            content.append(heading, list);
+        }
         const hierarchyAudit = caseRecord.analysisHierarchyAudit;
         if (hierarchyAudit) {
             const heading = document.createElement("h3");
-            heading.textContent = "Theme hierarchy audit";
+            heading.textContent = "Completed analytical hierarchy audit";
             const summary = document.createElement("p");
             summary.className = hierarchyAudit.complete
                 ? "automaticReanalysisAudit"
                 : "automaticReanalysisWarning";
             summary.textContent = `${(hierarchyAudit.checks || []).filter(
                 check => check.accepted
-            ).length}/${(hierarchyAudit.checks || []).length} themes passed multi-code support, semantic coverage, higher-level abstraction, anti-paraphrase, coherent-story, and project-topic checks. ${(hierarchyAudit.ungroupedCodes || []).length} codes were retained as ungrouped review-needed findings.`;
+            ).length}/${(hierarchyAudit.checks || []).length} themes passed patterned-meaning and category-support checks. ${(hierarchyAudit.unsynthesized || []).length} firm lower-level findings were retained without forced synthesis.`;
             content.append(heading, summary);
         }
         archiveButton.textContent = caseRecord.archivedAt
@@ -1203,11 +1344,11 @@
                 ...FORM_ONE_DEMOGRAPHIC_COLUMNS.map(([, label]) => label),
                 ...Array.from(
                     { length: maximumCodes },
-                    (_, index) => `C${index + 1}`
+                    (_, index) => `CO${index + 1}`
                 ),
                 ...Array.from(
                     { length: maximumThemes },
-                    (_, index) => `T${index + 1}`
+                    (_, index) => `TH${index + 1}`
                 )
             ], ...payload.cases.map(item => [
                 participantCode(item),
@@ -1274,15 +1415,17 @@
                     ),
                     item.hasReport ? "Available" : item.status
                 ])];
-        } else if (activeView === "keywords") {
+        } else if (activeView === "meaningUnits") {
             rows = [[
                 "P#",
                 "S#",
-                "Keyword record",
-                "Exact keyword",
+                "MU",
+                "Meaning unit passage",
+                "Anchor expression(s)",
                 "English transcript text",
-                "Code",
-                "Themes",
+                "CO",
+                "CA",
+                "TH",
                 "Source message ID",
                 "Transcript link",
                 "Analysis status",
@@ -1296,25 +1439,74 @@
                     code.id,
                     code
                 ]));
+                const categoryById = new Map((item.categories || []).map(
+                    category => [category.id, category]
+                ));
                 const themeById = new Map((item.themes || []).map(theme => [
                     theme.id,
                     theme
                 ]));
-                (item.highlights || []).forEach(highlight => {
-                    const code = codeById.get(highlight.code_id);
-                    const themes = (item.themeCodes || [])
-                        .filter(mapping => mapping.code_id === highlight.code_id)
-                        .map(mapping => themeById.get(mapping.theme_id))
+                const codeIdsByUnit = (item.codeMeaningUnits || []).reduce(
+                    (groups, mapping) => {
+                        const values = groups.get(mapping.meaning_unit_id) || [];
+                        values.push(mapping.code_id);
+                        groups.set(mapping.meaning_unit_id, values);
+                        return groups;
+                    },
+                    new Map()
+                );
+                const categoryIdsByCode = (item.categoryCodes || []).reduce(
+                    (groups, mapping) => {
+                        const values = groups.get(mapping.code_id) || [];
+                        values.push(mapping.category_id);
+                        groups.set(mapping.code_id, values);
+                        return groups;
+                    },
+                    new Map()
+                );
+                const themeIdsByCategory = (item.themeCategories || []).reduce(
+                    (groups, mapping) => {
+                        const values = groups.get(mapping.category_id) || [];
+                        values.push(mapping.theme_id);
+                        groups.set(mapping.category_id, values);
+                        return groups;
+                    },
+                    new Map()
+                );
+                const units = (item.meaningUnits || []).length
+                    ? item.meaningUnits
+                    : (item.highlights || []).map(highlight => ({
+                        ...highlight,
+                        unit_number: highlight.keyword_number,
+                        anchor_expressions: [highlight.exact_text],
+                        legacy_code_id: highlight.code_id
+                    }));
+                units.forEach(unit => {
+                    const codeIds = unit.legacy_code_id
+                        ? [unit.legacy_code_id]
+                        : [...new Set(codeIdsByUnit.get(unit.id) || [])];
+                    const codes = codeIds.map(codeId => codeById.get(codeId))
                         .filter(Boolean);
+                    const categoryIds = [...new Set(codeIds.flatMap(
+                        codeId => categoryIdsByCode.get(codeId) || []
+                    ))];
+                    const categories = categoryIds.map(categoryId =>
+                        categoryById.get(categoryId)
+                    ).filter(Boolean);
+                    const themes = [...new Set(categoryIds.flatMap(
+                        categoryId => themeIdsByCategory.get(categoryId) || []
+                    ))].map(themeId => themeById.get(themeId)).filter(Boolean);
                     rows.push([
                         participantCode(item),
                         sessionNumber(item),
-                        highlight.keyword_number || "",
-                        highlight.exact_text || "",
-                        highlight.english_translation || "",
-                        code ? `C${code.code_number}: ${recordLabel(code, "code")}` : "",
-                        themes.map(theme => `T${theme.theme_number}: ${recordLabel(theme, "theme")}`).join(" | "),
-                        highlight.message_id || "",
+                        unit.unit_number ? `MU${unit.unit_number}` : "",
+                        unit.exact_text || "",
+                        (unit.anchor_expressions || []).join("; "),
+                        unit.english_translation || "",
+                        codes.map(code => recordLabel(code, "code")).join(" | "),
+                        categories.map(category => recordLabel(category, "category")).join(" | "),
+                        themes.map(theme => recordLabel(theme, "theme")).join(" | "),
+                        unit.message_id || "",
                         transcriptUrl(item),
                         item.status || "",
                         item.researchProject?.project_name || "",
@@ -1326,10 +1518,11 @@
             });
         } else {
             const recordsKey = activeView;
-            const isCodes = activeView === "codes";
-            const prefix = isCodes ? "C" : "T";
-            const numberKey = isCodes ? "code_number" : "theme_number";
-            const labelKey = isCodes ? "code_label" : "theme_label";
+            const [prefix, numberKey, labelKey] = {
+                codes: ["CO", "code_number", "code_label"],
+                categories: ["CA", "category_number", "category_label"],
+                themes: ["TH", "theme_number", "theme_label"]
+            }[activeView];
             const maximum = Math.max(0, ...completed.map(item =>
                 Math.max(0, ...(item[recordsKey] || []).map(record => record[numberKey]))
             ));

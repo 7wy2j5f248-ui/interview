@@ -4,18 +4,18 @@ function text(value) {
 
 export const GLOBAL_ANALYSIS_LABEL_STANDARD = [
     "Platform-wide non-negotiable label standard (applies to every project and every framework version):",
-    "Keywords remain exact participant expressions from the preserved transcript; never invent a keyword summary label.",
-    "Every code and theme label must make immediate sense to a human researcher as one coherent semantic concept.",
-    "Prefer one everyday English word. Use two or three words only when they form a familiar, natural phrase.",
-    "Never concatenate unrelated descriptors, fragments, findings, causes, or multiple concepts into a bag-of-words label.",
-    "A code must concisely summarize the shared meaning of its exact keyword evidence.",
-    "A theme must synthesize at least two semantically related codes into a clear higher-level abstraction; it cannot be a one-to-one paraphrase or slight word deletion from one code or keyword.",
-    "The codes grouped under a theme must form one coherent human story, behavioral profile, contributing life pattern, or attitude/state—not merely share a superficial term.",
-    "The theme label must cover the shared narrative meaning of all its constituent codes and advance abstraction beyond those codes.",
-    "If a code has no genuinely related second code, do not invent a theme. Preserve it as an ungrouped, insufficiently supported code that needs researcher review.",
-    "Every theme and its entire code/evidence chain must remain relevant under the named project's topic and scope; a generic activity is not sufficient without an explicit project-topic connection.",
+    "The report for each participant is completed independently before cross-case comparison. Evidence and assignments remain tied to that single case.",
+    "A meaning unit is an exact coherent passage whose boundary follows meaning rather than punctuation. Optional anchors remain exact expressions inside that highlighted passage.",
+    "The annotated transcript highlights the complete meaning unit, places its code above it, and preserves the upward code → category → theme path.",
+    "A code must be supportable by its meaning units. Never introduce a cause, motive, diagnosis, social structure, consequence, or theoretical explanation absent from the underlying text.",
+    "Codes, categories, and themes use common corpus-wide terminology when this case's own evidence supports it. Shared vocabulary never supplies missing case evidence.",
+    "A category answers 'What is being described?' and groups at least two related codes into one firm descriptive phenomenon.",
+    "A theme answers 'What patterned meaning links these observations?' and interprets at least two categories together.",
+    "Themes are interpretive analytical results, not approval requests. Complete and publish the outcome without waiting for a researcher decision.",
+    "If a firm code or category lacks enough related material for a defensible higher level, retain it as unsynthesized. Never force a category or theme.",
+    "Every code, category, theme, and complete evidence chain must remain relevant under the named project's topic and scope.",
     "Labels at the same analytical level must be conceptually distinct and useful for comparison across cases.",
-    "Put detail, qualifications, and interpretation in the rationale, never in the label.",
+    "Researcher feedback begins a new completed analysis version; it never pauses or approves an in-progress automation run.",
     "This platform standard cannot be weakened or bypassed by project-specific instructions."
 ].join("\n");
 
@@ -112,6 +112,54 @@ export async function loadFrameworkForAutomaticJob(supabase, sessionId) {
     return framework?.projectId === job.project_id ? framework : null;
 }
 
+function uniqueLabels(rows, key) {
+    return [...new Set((rows || []).map(row => text(row?.[key])).filter(Boolean))]
+        .slice(0, 250);
+}
+
+export async function loadSharedAnalysisVocabulary(
+    supabase,
+    projectId,
+    { excludeReportId = null } = {}
+) {
+    if (!projectId) return { codes: [], categories: [], themes: [] };
+
+    let reportQuery = supabase
+        .from("qualitative_case_reports")
+        .select("id")
+        .eq("project_id", projectId)
+        .is("superseded_at", null)
+        .order("completed_at", { ascending: false })
+        .limit(250);
+    if (excludeReportId) reportQuery = reportQuery.neq("id", excludeReportId);
+    const { data: reports, error: reportError } = await reportQuery;
+    const reportIds = reportError ? [] : (reports || []).map(report => report.id);
+    if (!reportIds.length) return { codes: [], categories: [], themes: [] };
+
+    const [codeResult, categoryResult, themeResult] = await Promise.all([
+        supabase
+            .from("qualitative_case_codes")
+            .select("code_label")
+            .in("report_id", reportIds),
+        supabase
+            .from("qualitative_case_categories")
+            .select("category_label")
+            .in("report_id", reportIds),
+        supabase
+            .from("qualitative_case_themes")
+            .select("theme_label")
+            .in("report_id", reportIds)
+    ]);
+
+    return {
+        codes: codeResult.error ? [] : uniqueLabels(codeResult.data, "code_label"),
+        categories: categoryResult.error
+            ? [] : uniqueLabels(categoryResult.data, "category_label"),
+        themes: themeResult.error
+            ? [] : uniqueLabels(themeResult.data, "theme_label")
+    };
+}
+
 export function analysisFrameworkInstruction(framework) {
     if (!framework) {
         throw new Error("No valid analysis framework was supplied.");
@@ -125,8 +173,9 @@ export function analysisFrameworkInstruction(framework) {
         `Analysis framework version: ${framework.versionNumber}`,
         `Study scope: ${framework.studyScope}`,
         `Theme requirements: ${framework.themeRequirements}`,
-        `Code derivation from exact keywords: ${framework.codeDerivationRules}`,
-        `Theme-to-code fit: ${framework.themeCodeFitRules}`,
+        `Meaning-unit and code derivation rules (legacy database field): ${framework.codeDerivationRules}`,
+        "Category rule: group related text-supported codes into firm descriptive categories using common cross-case terminology.",
+        `Category/theme fit and patterned-meaning guidance (legacy database field): ${framework.themeCodeFitRules}`,
         `Inclusion rules: ${framework.inclusionRules}`,
         `Exclusion rules: ${framework.exclusionRules}`,
         `Researcher-visible provenance: ${framework.provenanceExpectations}`,

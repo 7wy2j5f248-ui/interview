@@ -5,12 +5,14 @@ import { analysisFrameworkInstruction } from "./analysisFramework.js";
 export const QUALITATIVE_ANALYSIS_MODEL = DEFAULT_OPENAI_MODEL;
 export const QUALITATIVE_ANALYSIS_VERSION = "task-014-v7-complete-cases-before-summary";
 export const AUTOMATIC_CASE_ANALYSIS_VERSION =
-    "case-analysis-v4-theme-hierarchy-audited";
+    "case-analysis-v5-meaning-units-categories-completed";
 export const AUTOMATIC_CASE_REANALYSIS_VERSION =
-    "case-reanalysis-v3-theme-hierarchy-audited";
+    "case-reanalysis-v4-feedback-completed";
 export const DEFAULT_ANALYSIS_BATCH_SIZE = 40;
-export const MAX_THEME_SUBJECT_WORDS = 3;
-export const MAX_THEME_SUBJECT_LENGTH = 60;
+export const MAX_ANALYTIC_LABEL_WORDS = 8;
+export const MAX_ANALYTIC_LABEL_LENGTH = 100;
+export const MAX_THEME_PATTERN_WORDS = 16;
+export const MAX_THEME_PATTERN_LENGTH = 180;
 
 function normalizedText(value) {
     return typeof value === "string" && value.trim()
@@ -21,19 +23,34 @@ function normalizedText(value) {
 export function isNaturalAnalyticLabelShape(value) {
     const label = normalizedText(value)?.replace(/\s+/gu, " ");
 
-    if (!label || label.length > MAX_THEME_SUBJECT_LENGTH) {
+    if (!label || label.length > MAX_ANALYTIC_LABEL_LENGTH) {
         return false;
     }
 
     const words = label.split(" ").filter(Boolean);
-    return words.length <= MAX_THEME_SUBJECT_WORDS
-        && !/[.!?;:,/|&]/u.test(label)
-        && !/\b(?:and|or|but|because|while|although)\b/iu.test(label)
-        && !/\b(?:affects|causes|creates|disrupts|improves|increases|interrupts|leads|prevents|reduces|supports|worsens)\b/iu.test(label);
+    return words.length <= MAX_ANALYTIC_LABEL_WORDS
+        && !/[.!?;:/|&]/u.test(label)
+        && !/\b(?:and|or|but|because|although)\b/iu.test(label);
+}
+
+export function isThemePatternLabelShape(value) {
+    const label = normalizedText(value)?.replace(/\s+/gu, " ");
+
+    if (!label || label.length > MAX_THEME_PATTERN_LENGTH) {
+        return false;
+    }
+
+    const words = label.split(" ").filter(Boolean);
+    return words.length >= 3
+        && words.length <= MAX_THEME_PATTERN_WORDS
+        && !/[;:/|&]/u.test(label);
 }
 
 export function isShortThemeSubject(value) {
-    return isNaturalAnalyticLabelShape(value);
+    const label = normalizedText(value)?.replace(/\s+/gu, " ");
+    if (!label || label.length > MAX_ANALYTIC_LABEL_LENGTH) return false;
+    const words = label.split(" ").filter(Boolean);
+    return words.length <= 2 && !/[.!?;:/|&]/u.test(label);
 }
 
 function normalizedList(value) {
@@ -340,24 +357,32 @@ const automaticCaseSchema = {
                 properties: {
                     label: { type: "string" },
                     rationale: { type: "string" },
-                    keyword_evidence: {
+                    meaning_unit_evidence: {
                         type: "array",
                         items: {
                             type: "object",
                             properties: {
                                 message_id: { type: "string" },
-                                exact_text: { type: "string" }
+                                exact_text: { type: "string" },
+                                anchor_expressions: {
+                                    type: "array",
+                                    items: { type: "string" }
+                                }
                             },
-                            required: ["message_id", "exact_text"],
+                            required: [
+                                "message_id",
+                                "exact_text",
+                                "anchor_expressions"
+                            ],
                             additionalProperties: false
                         }
                     }
                 },
-                required: ["label", "rationale", "keyword_evidence"],
+                required: ["label", "rationale", "meaning_unit_evidence"],
                 additionalProperties: false
             }
         },
-        themes: {
+        categories: {
             type: "array",
             items: {
                 type: "object",
@@ -373,18 +398,41 @@ const automaticCaseSchema = {
                 additionalProperties: false
             }
         },
+        themes: {
+            type: "array",
+            items: {
+                type: "object",
+                properties: {
+                    label: { type: "string" },
+                    rationale: { type: "string" },
+                    category_numbers: {
+                        type: "array",
+                        items: { type: "integer" }
+                    }
+                },
+                required: ["label", "rationale", "category_numbers"],
+                additionalProperties: false
+            }
+        },
         case_interpretation: { type: "string" }
     },
-    required: ["demographics", "codes", "themes", "case_interpretation"],
+    required: [
+        "demographics",
+        "codes",
+        "categories",
+        "themes",
+        "case_interpretation"
+    ],
     additionalProperties: false
 };
 
-const automaticThemeSchema = {
+const automaticHierarchySchema = {
     type: "object",
     properties: {
+        categories: automaticCaseSchema.properties.categories,
         themes: automaticCaseSchema.properties.themes
     },
-    required: ["themes"],
+    required: ["categories", "themes"],
     additionalProperties: false
 };
 
@@ -401,6 +449,7 @@ const automaticCaseRelevanceAuditSchema = {
                     exact_text: { type: "string" },
                     transcript_grounded: { type: "boolean" },
                     supports_code: { type: "boolean" },
+                    supports_category: { type: "boolean" },
                     supports_theme: { type: "boolean" },
                     research_scope_relevant: { type: "boolean" },
                     explanation: { type: "string" }
@@ -411,6 +460,7 @@ const automaticCaseRelevanceAuditSchema = {
                     "exact_text",
                     "transcript_grounded",
                     "supports_code",
+                    "supports_category",
                     "supports_theme",
                     "research_scope_relevant",
                     "explanation"
@@ -432,7 +482,10 @@ const automaticLabelQualityAuditSchema = {
             items: {
                 type: "object",
                 properties: {
-                    kind: { type: "string", enum: ["code", "theme"] },
+                    kind: {
+                        type: "string",
+                        enum: ["code", "category", "theme"]
+                    },
                     number: { type: "integer" },
                     label: { type: "string" },
                     natural_language: { type: "boolean" },
@@ -441,11 +494,10 @@ const automaticLabelQualityAuditSchema = {
                     evidence_supported: { type: "boolean" },
                     topic_relevant: { type: "boolean" },
                     comparison_useful: { type: "boolean" },
-                    theme_has_multiple_codes: { type: "boolean" },
-                    theme_semantic_coverage: { type: "boolean" },
-                    theme_higher_level_abstraction: { type: "boolean" },
-                    theme_not_one_to_one_paraphrase: { type: "boolean" },
-                    theme_coherent_story: { type: "boolean" },
+                    has_multiple_children: { type: "boolean" },
+                    semantic_coverage: { type: "boolean" },
+                    higher_level_abstraction: { type: "boolean" },
+                    patterned_meaning: { type: "boolean" },
                     explanation: { type: "string" }
                 },
                 required: [
@@ -458,30 +510,32 @@ const automaticLabelQualityAuditSchema = {
                     "evidence_supported",
                     "topic_relevant",
                     "comparison_useful",
-                    "theme_has_multiple_codes",
-                    "theme_semantic_coverage",
-                    "theme_higher_level_abstraction",
-                    "theme_not_one_to_one_paraphrase",
-                    "theme_coherent_story",
+                    "has_multiple_children",
+                    "semantic_coverage",
+                    "higher_level_abstraction",
+                    "patterned_meaning",
                     "explanation"
                 ],
                 additionalProperties: false
             }
         },
-        ungrouped_code_checks: {
+        unsynthesized_checks: {
             type: "array",
             items: {
                 type: "object",
                 properties: {
-                    code_number: { type: "integer" },
+                    kind: {
+                        type: "string",
+                        enum: ["code", "category"]
+                    },
+                    number: { type: "integer" },
                     label: { type: "string" },
-                    review_needed: { type: "boolean" },
                     reason: { type: "string" }
                 },
                 required: [
-                    "code_number",
+                    "kind",
+                    "number",
                     "label",
-                    "review_needed",
                     "reason"
                 ],
                 additionalProperties: false
@@ -489,7 +543,7 @@ const automaticLabelQualityAuditSchema = {
         },
         overall_summary: { type: "string" }
     },
-    required: ["checks", "ungrouped_code_checks", "overall_summary"],
+    required: ["checks", "unsynthesized_checks", "overall_summary"],
     additionalProperties: false
 };
 
@@ -563,19 +617,23 @@ function exactTextOccurrences(source, phrase) {
     return occurrences;
 }
 
-function validateAutomaticThemes(rawThemes, codes) {
+function validateAutomaticHierarchy(rawCategories, rawThemes, codes) {
+    const categories = [];
     const themes = [];
     const assignedCodeNumbers = new Set();
+    const assignedCategoryNumbers = new Set();
     const invalidLabels = [];
+    const rejectedCategoryAssignments = [];
     const rejectedThemeAssignments = [];
+    let invalidCategories = 0;
     let invalidThemes = 0;
 
-    (Array.isArray(rawThemes) ? rawThemes : []).forEach(rawTheme => {
-        const label = normalizedText(rawTheme?.label);
-        const rationale = normalizedText(rawTheme?.rationale);
+    (Array.isArray(rawCategories) ? rawCategories : []).forEach(rawCategory => {
+        const label = normalizedText(rawCategory?.label);
+        const rationale = normalizedText(rawCategory?.rationale);
         const codeNumbers = [...new Set(
-            (Array.isArray(rawTheme?.code_numbers)
-                ? rawTheme.code_numbers
+            (Array.isArray(rawCategory?.code_numbers)
+                ? rawCategory.code_numbers
                 : []
             ).filter(number =>
                 Number.isInteger(number)
@@ -584,37 +642,80 @@ function validateAutomaticThemes(rawThemes, codes) {
             )
         )];
 
-        if (!isShortThemeSubject(label)
+        if (!isNaturalAnalyticLabelShape(label)
             || !rationale
             || codeNumbers.length < 2
         ) {
-            invalidThemes += 1;
-            if (!isShortThemeSubject(label)) {
-                invalidLabels.push({ kind: "theme", label: label || "" });
+            invalidCategories += 1;
+            if (!isNaturalAnalyticLabelShape(label)) {
+                invalidLabels.push({ kind: "category", label: label || "" });
             }
-            rejectedThemeAssignments.push({
+            rejectedCategoryAssignments.push({
                 label: label || "",
                 codeNumbers,
                 reason: codeNumbers.length < 2
-                    ? "A theme requires at least two semantically related codes; a one-code theme is not permitted."
-                    : "The proposed theme label or rationale failed structural validation."
+                    ? "A category requires at least two related codes describing the same broader phenomenon."
+                    : "The proposed category label or rationale failed structural validation."
             });
             return;
         }
 
         codeNumbers.forEach(number => assignedCodeNumbers.add(number));
-        themes.push({ label, rationale, codeNumbers });
+        categories.push({ label, rationale, codeNumbers });
+    });
+
+    (Array.isArray(rawThemes) ? rawThemes : []).forEach(rawTheme => {
+        const label = normalizedText(rawTheme?.label);
+        const rationale = normalizedText(rawTheme?.rationale);
+        const categoryNumbers = [...new Set(
+            (Array.isArray(rawTheme?.category_numbers)
+                ? rawTheme.category_numbers
+                : []
+            ).filter(number =>
+                Number.isInteger(number)
+                && number > 0
+                && number <= categories.length
+            )
+        )];
+
+        if (!isThemePatternLabelShape(label)
+            || !rationale
+            || categoryNumbers.length < 2
+        ) {
+            invalidThemes += 1;
+            if (!isThemePatternLabelShape(label)) {
+                invalidLabels.push({ kind: "theme", label: label || "" });
+            }
+            rejectedThemeAssignments.push({
+                label: label || "",
+                categoryNumbers,
+                reason: categoryNumbers.length < 2
+                    ? "A theme requires at least two categories whose patterned meaning can be interpreted together."
+                    : "The proposed theme label or rationale failed structural validation."
+            });
+            return;
+        }
+
+        categoryNumbers.forEach(number => assignedCategoryNumbers.add(number));
+        themes.push({ label, rationale, categoryNumbers });
     });
 
     const unassignedCodeNumbers = codes
         .map((_, index) => index + 1)
         .filter(number => !assignedCodeNumbers.has(number));
+    const unassignedCategoryNumbers = categories
+        .map((_, index) => index + 1)
+        .filter(number => !assignedCategoryNumbers.has(number));
 
     return {
+        categories,
         themes,
+        invalidCategories,
         invalidThemes,
         unassignedCodeNumbers,
+        unassignedCategoryNumbers,
         invalidLabels,
+        rejectedCategoryAssignments,
         rejectedThemeAssignments
     };
 }
@@ -726,7 +827,7 @@ export function validateAutomaticCaseAnalysis(value, availableMessages) {
             .map(message => [message.id, message])
     );
     const codes = [];
-    const usedHighlights = new Set();
+    const usedMeaningUnits = new Map();
     const invalidLabels = [];
     let invalidEvidence = 0;
     let droppedCodes = 0;
@@ -734,10 +835,10 @@ export function validateAutomaticCaseAnalysis(value, availableMessages) {
     (Array.isArray(value?.codes) ? value.codes : []).forEach(rawCode => {
         const label = normalizedText(rawCode?.label);
         const rationale = normalizedText(rawCode?.rationale);
-        const highlights = [];
+        const meaningUnits = [];
 
-        (Array.isArray(rawCode?.keyword_evidence)
-            ? rawCode.keyword_evidence
+        (Array.isArray(rawCode?.meaning_unit_evidence)
+            ? rawCode.meaning_unit_evidence
             : []
         ).forEach(evidence => {
             const messageId = normalizedText(evidence?.message_id);
@@ -757,19 +858,24 @@ export function validateAutomaticCaseAnalysis(value, availableMessages) {
 
             occurrences.forEach(occurrence => {
                 const key = `${messageId}:${occurrence.startOffset}:${occurrence.endOffset}`;
-
-                if (usedHighlights.has(key)) {
-                    return;
-                }
-
-                usedHighlights.add(key);
-                highlights.push({ messageId, ...occurrence });
+                const anchors = normalizedList(evidence?.anchor_expressions)
+                    .filter(anchor => exactTextOccurrences(
+                        occurrence.exactText,
+                        anchor
+                    ).length > 0);
+                const meaningUnit = usedMeaningUnits.get(key) || {
+                    messageId,
+                    ...occurrence,
+                    anchors
+                };
+                usedMeaningUnits.set(key, meaningUnit);
+                meaningUnits.push(meaningUnit);
             });
         });
 
         if (!isNaturalAnalyticLabelShape(label)
             || !rationale
-            || !highlights.length) {
+            || !meaningUnits.length) {
             invalidEvidence += 1;
             droppedCodes += 1;
             if (!isNaturalAnalyticLabelShape(label)) {
@@ -778,17 +884,34 @@ export function validateAutomaticCaseAnalysis(value, availableMessages) {
             return;
         }
 
-        codes.push({ label, rationale, highlights });
+        const uniqueMeaningUnits = [...new Map(meaningUnits.map(unit => [
+            `${unit.messageId}:${unit.startOffset}:${unit.endOffset}`,
+            unit
+        ])).values()];
+        codes.push({
+            label,
+            rationale,
+            meaningUnits: uniqueMeaningUnits,
+            highlights: uniqueMeaningUnits
+        });
     });
 
-    const themeValidation = validateAutomaticThemes(value?.themes, codes);
+    const hierarchyValidation = validateAutomaticHierarchy(
+        value?.categories,
+        value?.themes,
+        codes
+    );
     const {
+        categories,
         themes,
         unassignedCodeNumbers,
+        unassignedCategoryNumbers,
+        rejectedCategoryAssignments,
         rejectedThemeAssignments
-    } = themeValidation;
-    invalidLabels.push(...themeValidation.invalidLabels);
-    invalidEvidence += themeValidation.invalidThemes;
+    } = hierarchyValidation;
+    invalidLabels.push(...hierarchyValidation.invalidLabels);
+    invalidEvidence += hierarchyValidation.invalidCategories
+        + hierarchyValidation.invalidThemes;
     const demographicValidation = validateAutomaticDemographics(
         value?.demographics,
         messagesById
@@ -798,12 +921,15 @@ export function validateAutomaticCaseAnalysis(value, availableMessages) {
 
     return {
         codes,
+        categories,
         themes,
         caseInterpretation,
         invalidEvidence,
         droppedCodes,
         invalidLabels,
         unassignedCodeNumbers,
+        unassignedCategoryNumbers,
+        rejectedCategoryAssignments,
         rejectedThemeAssignments,
         ...demographicValidation,
         complete: Boolean(
@@ -823,13 +949,20 @@ export function validateAutomaticLabelQualityAudit(analysis, value) {
         ...(analysis?.codes || []).map((record, index) => ({
             kind: "code",
             number: index + 1,
-            label: record.label
+            label: record.label,
+            childNumbers: []
+        })),
+        ...(analysis?.categories || []).map((record, index) => ({
+            kind: "category",
+            number: index + 1,
+            label: record.label,
+            childNumbers: record.codeNumbers || []
         })),
         ...(analysis?.themes || []).map((record, index) => ({
             kind: "theme",
             number: index + 1,
             label: record.label,
-            codeNumbers: record.codeNumbers || []
+            childNumbers: record.categoryNumbers || []
         }))
     ];
     const labelCounts = expected.reduce((counts, item) => {
@@ -843,9 +976,8 @@ export function validateAutomaticLabelQualityAudit(analysis, value) {
     let duplicateChecks = 0;
 
     (Array.isArray(value?.checks) ? value.checks : []).forEach(check => {
-        const kind = check?.kind === "code" || check?.kind === "theme"
-            ? check.kind
-            : null;
+        const kind = ["code", "category", "theme"].includes(check?.kind)
+            ? check.kind : null;
         const number = Number.isInteger(check?.number) && check.number > 0
             ? check.number
             : null;
@@ -863,16 +995,11 @@ export function validateAutomaticLabelQualityAudit(analysis, value) {
             evidenceSupported: check.evidence_supported === true,
             topicRelevant: check.topic_relevant === true,
             comparisonUseful: check.comparison_useful === true,
-            themeHasMultipleCodes:
-                check.theme_has_multiple_codes === true,
-            themeSemanticCoverage:
-                check.theme_semantic_coverage === true,
-            themeHigherLevelAbstraction:
-                check.theme_higher_level_abstraction === true,
-            themeNotOneToOneParaphrase:
-                check.theme_not_one_to_one_paraphrase === true,
-            themeCoherentStory:
-                check.theme_coherent_story === true,
+            hasMultipleChildren: check.has_multiple_children === true,
+            semanticCoverage: check.semantic_coverage === true,
+            higherLevelAbstraction:
+                check.higher_level_abstraction === true,
+            patternedMeaning: check.patterned_meaning === true,
             explanation: normalizedText(check.explanation)
                 || "No label-quality explanation was supplied."
         });
@@ -881,19 +1008,20 @@ export function validateAutomaticLabelQualityAudit(analysis, value) {
     const checks = expected.map(item => {
         const audit = auditByKey.get(labelQualityKey(item.kind, item.number));
         const exactLabel = audit?.label === item.label;
-        const structurallyValid = isNaturalAnalyticLabelShape(item.label);
+        const structurallyValid = item.kind === "theme"
+            ? isThemePatternLabelShape(item.label)
+            : isNaturalAnalyticLabelShape(item.label);
         const uniqueAtLevel = labelCounts.get(
             `${item.kind}:${
                 normalizedText(item.label)?.toLocaleLowerCase() || ""
             }`
         ) === 1;
-        const themeHierarchyAccepted = item.kind !== "theme" || Boolean(
-            item.codeNumbers.length >= 2
-            && audit?.themeHasMultipleCodes
-            && audit?.themeSemanticCoverage
-            && audit?.themeHigherLevelAbstraction
-            && audit?.themeNotOneToOneParaphrase
-            && audit?.themeCoherentStory
+        const hierarchyAccepted = item.kind === "code" || Boolean(
+            item.childNumbers.length >= 2
+            && audit?.hasMultipleChildren
+            && audit?.semanticCoverage
+            && audit?.higherLevelAbstraction
+            && (item.kind !== "theme" || audit?.patternedMeaning)
         );
         const accepted = Boolean(
             exactLabel
@@ -905,7 +1033,7 @@ export function validateAutomaticLabelQualityAudit(analysis, value) {
             && audit?.evidenceSupported
             && audit?.topicRelevant
             && audit?.comparisonUseful
-            && themeHierarchyAccepted
+            && hierarchyAccepted
         );
         return {
             ...item,
@@ -916,18 +1044,16 @@ export function validateAutomaticLabelQualityAudit(analysis, value) {
             evidenceSupported: Boolean(audit?.evidenceSupported),
             topicRelevant: Boolean(audit?.topicRelevant),
             comparisonUseful: Boolean(audit?.comparisonUseful),
-            codeNumbers: item.codeNumbers || [],
-            themeHasMultipleCodes: item.kind !== "theme"
-                || Boolean(audit?.themeHasMultipleCodes)
-                    && item.codeNumbers.length >= 2,
-            themeSemanticCoverage: item.kind !== "theme"
-                || Boolean(audit?.themeSemanticCoverage),
-            themeHigherLevelAbstraction: item.kind !== "theme"
-                || Boolean(audit?.themeHigherLevelAbstraction),
-            themeNotOneToOneParaphrase: item.kind !== "theme"
-                || Boolean(audit?.themeNotOneToOneParaphrase),
-            themeCoherentStory: item.kind !== "theme"
-                || Boolean(audit?.themeCoherentStory),
+            childNumbers: item.childNumbers || [],
+            hasMultipleChildren: item.kind === "code"
+                || Boolean(audit?.hasMultipleChildren)
+                    && item.childNumbers.length >= 2,
+            semanticCoverage: item.kind === "code"
+                || Boolean(audit?.semanticCoverage),
+            higherLevelAbstraction: item.kind === "code"
+                || Boolean(audit?.higherLevelAbstraction),
+            patternedMeaning: item.kind !== "theme"
+                || Boolean(audit?.patternedMeaning),
             structurallyValid,
             accepted,
             explanation: audit?.explanation
@@ -941,59 +1067,63 @@ export function validateAutomaticLabelQualityAudit(analysis, value) {
         key => !expectedKeys.has(key)
     ).length;
     const rejectedLabels = checks.filter(check => !check.accepted);
-    const expectedUngrouped = new Map(
-        (analysis?.unassignedCodeNumbers || []).map(codeNumber => [
-            codeNumber,
-            analysis.codes?.[codeNumber - 1]?.label || ""
+    const expectedUnsynthesized = new Map([
+        ...(analysis?.unassignedCodeNumbers || []).map(number => [
+            `code:${number}`,
+            { kind: "code", number, label: analysis.codes?.[number - 1]?.label || "" }
+        ]),
+        ...(analysis?.unassignedCategoryNumbers || []).map(number => [
+            `category:${number}`,
+            { kind: "category", number, label: analysis.categories?.[number - 1]?.label || "" }
         ])
-    );
-    const ungroupedByNumber = new Map();
-    let duplicateUngroupedChecks = 0;
-    (Array.isArray(value?.ungrouped_code_checks)
-        ? value.ungrouped_code_checks
+    ]);
+    const unsynthesizedByKey = new Map();
+    let duplicateUnsynthesizedChecks = 0;
+    (Array.isArray(value?.unsynthesized_checks)
+        ? value.unsynthesized_checks
         : []
     ).forEach(check => {
-        const codeNumber = Number.isInteger(check?.code_number)
-            && check.code_number > 0
-            ? check.code_number
-            : null;
-        if (!codeNumber) return;
-        if (ungroupedByNumber.has(codeNumber)) duplicateUngroupedChecks += 1;
-        ungroupedByNumber.set(codeNumber, {
-            codeNumber,
+        const kind = ["code", "category"].includes(check?.kind)
+            ? check.kind : null;
+        const number = Number.isInteger(check?.number) && check.number > 0
+            ? check.number : null;
+        if (!kind || !number) return;
+        const key = `${kind}:${number}`;
+        if (unsynthesizedByKey.has(key)) duplicateUnsynthesizedChecks += 1;
+        unsynthesizedByKey.set(key, {
+            kind,
+            number,
             label: normalizedText(check?.label) || "",
-            reviewNeeded: check?.review_needed === true,
             reason: normalizedText(check?.reason)
-                || "No reason was supplied for this ungrouped code."
+                || "No reason was supplied for this unsynthesized observation."
         });
     });
-    const ungroupedCodes = [...expectedUngrouped].map(
-        ([codeNumber, label]) => {
-            const audit = ungroupedByNumber.get(codeNumber);
+    const unsynthesized = [...expectedUnsynthesized].map(
+        ([key, expectedItem]) => {
+            const audit = unsynthesizedByKey.get(key);
             const accepted = Boolean(
-                audit?.label === label
-                && audit?.reviewNeeded
+                audit?.label === expectedItem.label
                 && audit?.reason
             );
             return {
-                codeNumber,
-                label,
-                reviewNeeded: Boolean(audit?.reviewNeeded),
+                ...expectedItem,
                 reason: audit?.reason
-                    || "This code has no supported multi-code theme and needs researcher review.",
+                    || "This firm descriptive unit was retained without forcing it into an unsupported higher-level synthesis.",
                 accepted
             };
         }
     );
-    const unexpectedUngroupedChecks = [...ungroupedByNumber.keys()].filter(
-        codeNumber => !expectedUngrouped.has(codeNumber)
+    const unexpectedUnsynthesizedChecks = [...unsynthesizedByKey.keys()].filter(
+        key => !expectedUnsynthesized.has(key)
     ).length;
     const hierarchyChecks = checks.filter(check => check.kind === "theme");
+    const categoryChecks = checks.filter(check => check.kind === "category");
     const hierarchyComplete = Boolean(
         !hierarchyChecks.some(check => !check.accepted)
-        && !ungroupedCodes.some(check => !check.accepted)
-        && !duplicateUngroupedChecks
-        && !unexpectedUngroupedChecks
+        && !categoryChecks.some(check => !check.accepted)
+        && !unsynthesized.some(check => !check.accepted)
+        && !duplicateUnsynthesizedChecks
+        && !unexpectedUnsynthesizedChecks
     );
 
     return {
@@ -1005,7 +1135,14 @@ export function validateAutomaticLabelQualityAudit(analysis, value) {
         unexpectedCheckCount,
         themeHierarchy: {
             checks: hierarchyChecks,
-            ungroupedCodes,
+            categoryChecks,
+            unsynthesized,
+            ungroupedCodes: unsynthesized.filter(item => item.kind === "code"),
+            ungroupedCategories: unsynthesized.filter(
+                item => item.kind === "category"
+            ),
+            rejectedCategoryAssignments:
+                analysis?.rejectedCategoryAssignments || [],
             rejectedThemeAssignments:
                 analysis?.rejectedThemeAssignments || [],
             complete: hierarchyComplete
@@ -1027,15 +1164,22 @@ function automaticAnalysisDraftForModel(analysis) {
         codes: (analysis.codes || []).map(code => ({
             label: code.label,
             rationale: code.rationale,
-            keyword_evidence: (code.highlights || []).map(highlight => ({
-                message_id: highlight.messageId,
-                exact_text: highlight.exactText
+            meaning_unit_evidence: (code.meaningUnits || code.highlights || [])
+                .map(unit => ({
+                message_id: unit.messageId,
+                exact_text: unit.exactText,
+                anchor_expressions: unit.anchors || []
             }))
+        })),
+        categories: (analysis.categories || []).map(category => ({
+            label: category.label,
+            rationale: category.rationale,
+            code_numbers: category.codeNumbers
         })),
         themes: (analysis.themes || []).map(theme => ({
             label: theme.label,
             rationale: theme.rationale,
-            code_numbers: theme.codeNumbers
+            category_numbers: theme.categoryNumbers
         })),
         case_interpretation: analysis.caseInterpretation
     };
@@ -1064,21 +1208,18 @@ async function auditAutomaticLabelQuality(
             role: "system",
             content: [
                 "Act as a strict independent label-quality auditor for one qualitative case.",
-                "Return exactly one check for every numbered code and theme, and no other checks.",
+                "Return exactly one check for every numbered code, category, and theme, and no other checks.",
                 "Set natural_language true only for a normal everyday English word or familiar natural phrase, never a concatenation of descriptors.",
                 "Set coherent_concept true only when the whole label names one meaningful concept rather than a finding, sentence, list, or bag of words.",
                 "Set conceptually_distinct true only when the label is not duplicative or confusingly overlapping with another label at the same level.",
-                "Set evidence_supported true only when a code summarizes its exact keyword evidence or a theme is supported by its assigned codes.",
+                "Set evidence_supported true only when a code is supportable by its exact meaning units, a category is supported by its assigned codes, or a theme is supported by its assigned categories.",
                 "Set topic_relevant true only when the label satisfies the named project's topic, scope, inclusion, and exclusion rules.",
                 "Set comparison_useful true only when another researcher could understand and compare the concept across cases without reading its rationale.",
-                "For code checks, set all five theme_* fields true because they are not applicable to a code.",
-                "For a theme, set theme_has_multiple_codes true only when it has at least two distinct supporting codes.",
-                "Set theme_semantic_coverage true only when the theme covers the shared meaning of every assigned code, not just a repeated surface word.",
-                "Set theme_higher_level_abstraction true only when the theme advances beyond its codes into a genuine higher-level concept.",
-                "Set theme_not_one_to_one_paraphrase true only when the theme is not a paraphrase, slight word deletion, or relabeling of one code or keyword.",
-                "Set theme_coherent_story true only when the assigned codes combine into one meaningful participant story, behavioral profile, contributing life pattern, or attitude/state.",
-                "For the named project, reject a generic activity theme unless its entire code/evidence chain establishes explicit relevance to the research topic.",
-                "Return exactly one ungrouped_code_check for every code number that has no assigned valid theme and no others. Mark review_needed true and explain why a second semantically related code was unavailable. Never invent a theme to avoid an ungrouped code.",
+                "For a code, set has_multiple_children, semantic_coverage, higher_level_abstraction, and patterned_meaning true because those hierarchy checks do not apply.",
+                "For a category, set has_multiple_children true only when it groups at least two related codes that describe one broader phenomenon. Set semantic_coverage and higher_level_abstraction according to that code-to-category relationship; patterned_meaning is not required, so set it true.",
+                "For a theme, set has_multiple_children true only when it interprets at least two distinct categories. Set semantic_coverage true only when it accounts for every assigned category, higher_level_abstraction true only when it advances beyond description, and patterned_meaning true only when it states the interpretive pattern linking the categories.",
+                "For the named project, reject a generic category or theme unless its entire meaning-unit/code/category chain establishes explicit relevance to the research topic.",
+                "Return exactly one unsynthesized_check for every unassigned code and category and no others. Explain why it was retained as a firm descriptive result without forcing an unsupported higher-level synthesis. This is a completed analysis, not a request for researcher approval.",
                 analysisFrameworkInstruction(analysisFramework)
             ].join("\n\n")
         }, {
@@ -1526,17 +1667,35 @@ export async function generateAutomaticCaseAnalysis(
     {
         model = QUALITATIVE_ANALYSIS_MODEL,
         reanalysisContext = null,
-        analysisFramework = null
+        analysisFramework = null,
+        sharedVocabulary = null
     } = {}
 ) {
     const frameworkInstruction = analysisFrameworkInstruction(
         analysisFramework
     );
     const relevanceInstruction = reanalysisContext
-        ? " This is a researcher-requested re-analysis. Apply the framework's relevance boundary strictly. Exact quotation is necessary but not sufficient: each keyword must semantically support its code and that code's assigned theme. Reject unrelated cross-topic evidence. Researcher request context (JSON): "
+        ? " This is a completed re-analysis initiated by researcher feedback. Apply the framework's relevance boundary strictly, complete the revised report without pausing for approval, and treat the feedback as input to a new traceable analysis version. Researcher feedback context (JSON): "
             + JSON.stringify(reanalysisContext)
         : "";
-    const systemInstruction = "Read this single completed participant transcript line by line. The entire analytical report must be written in English, regardless of the interview language. This includes every demographic value, additional descriptor, code label, code rationale, theme label, theme rationale, and the case interpretation. Only exact_text keyword evidence remains verbatim in the participant's original language because it identifies the precise highlighted source text. First extract the fixed demographic fields. Every non-null demographic value must cite one exact participant original_text phrase and its message_id. Use null when the participant did not provide the information; never guess. Birth year must be explicitly stated. Birth cohort may be derived only from an explicitly stated birth year. Diaspora status may be derived from explicit residence and origin evidence. Mark each supported value as stated or derived. Then work strictly from evidence upward. Identify analytically meaningful words or short phrases in the participant's original_text and return them verbatim as keyword evidence with their exact message_id. Keywords are research evidence, not every word in the conversation. Never select greetings, introductions, thanks, farewells, politeness formulas, interviewer-directed courtesies, or other phatic conversational language as keywords or codes. Examples to exclude include hello, hi, good morning, thank you, and their equivalents in every interview language. Never return translated wording as exact_text or invent a keyword summary label. Then categorize the substantive keyword occurrences into participant-specific codes. A code label must be a concise, everyday, coherent English concept that summarizes its related exact keyword evidence. Prefer one word; use two or three only as a familiar natural phrase. Never concatenate multiple descriptors. Finally synthesize two or more semantically related codes into each higher-level theme. A theme must advance abstraction beyond its codes and make them cohere as one meaningful participant story, behavioral profile, contributing life pattern, or attitude/state. Never create a one-code theme, a one-to-one paraphrase, or a theme based only on a shared surface word. A theme and its entire code/evidence chain must be relevant to the named project's topic. Theme labels follow the same one-word-preferred, two-or-three-word-natural-phrase limit and must be useful for comparison across cases. If a code has no genuinely related second code, leave it unassigned; the platform will preserve it as an ungrouped review-needed code. Do not invent a theme merely to assign every code. Do not compare this case with any participant. Do not invent or paraphrase evidence. Return the substantive keyword occurrences needed to make the code system inspectable without flooding it with routine conversation. Codes, themes, and demographic values are proposals with exact provenance for researcher review, not confirmed findings."
+    const vocabularyInstruction = sharedVocabulary
+        ? "Reuse the following corpus-wide code, category, and theme terminology whenever this case's own evidence supports it. Shared vocabulary never supplies missing evidence and does not authorize comparison inside this single-case report. Create a new common term only when no existing term represents the meaning. Shared vocabulary (JSON): "
+            + JSON.stringify(sharedVocabulary)
+        : "No earlier corpus vocabulary is available. Create clear common-language terms that could be reused across cases.";
+    const systemInstruction = [
+        "Complete one autonomous qualitative analysis for exactly one participant session. Never compare, combine, or generalize across participants inside this case report.",
+        "Write the analytical report in English regardless of interview language. Preserve every meaning unit as exact_text in the participant's original language.",
+        "Extract demographics only from exact evidence. Never guess. Mark supported demographic values as stated or derived under the existing demographic rules.",
+        "Work strictly upward from evidence: meaning units → codes → categories → themes.",
+        "A meaning unit is an exact passage containing one reasonably coherent idea. It may be part of a sentence, one sentence, or several sentences; its boundary follows meaning rather than punctuation. Select enough context to keep the idea understandable. Return optional anchor_expressions as exact words or phrases inside the meaning unit.",
+        "Never select greetings, thanks, farewells, interviewer courtesies, or other phatic language as meaning units or codes.",
+        "A code names the specific phenomenon expressed by one or more meaning units. Every code must be supportable by its text. Do not add an unsupported cause, motive, diagnosis, social structure, evaluation, consequence, or theoretical explanation.",
+        "A category answers: What is being described? Group at least two related codes into one broader descriptive phenomenon. Categories must be firm, coherent, and evidence-grounded.",
+        "A theme answers: What patterned meaning links these observations? Interpret at least two categories together and state the resulting patterned meaning. A theme is interpretive, but it is still part of the completed analytical result; do not pause or ask for researcher confirmation.",
+        "If a firm code or category lacks enough related material for a defensible higher level, retain it as unsynthesized. Do not manufacture a category or theme, and do not label the result as waiting for researcher review.",
+        "Complete and return the whole case outcome. The researcher reviews completed work afterward and may provide feedback that starts a new version.",
+        vocabularyInstruction
+    ].join("\n\n")
         + "\n\n" + frameworkInstruction
         + relevanceInstruction;
     const createResponse = input => openaiClient.responses.create({
@@ -1571,13 +1730,14 @@ export async function generateAutomaticCaseAnalysis(
 
     if (!validated.complete
         || validated.invalidDemographicEvidence > 0
+        || validated.rejectedCategoryAssignments.length > 0
         || validated.rejectedThemeAssignments.length > 0
     ) {
         const repairResponse = await createResponse([
             {
                 role: "system",
                 content: systemInstruction
-                    + " Correct the supplied draft into a complete replacement. Preserve valid exact evidence. Remove or replace non-verbatim evidence and restore any dropped code using exact evidence. Keep a theme only when it synthesizes at least two semantically related codes into a coherent higher-level participant story relevant to the project topic. Remove one-code, paraphrase, superficial-term, or topic-detached themes. Leave a code unassigned when no valid multi-code theme exists; never invent a theme merely to assign it. Return the entire corrected JSON object."
+                    + " Correct the supplied draft into a complete replacement. Preserve valid exact meaning units. Remove or replace non-verbatim evidence and restore any dropped code using exact evidence. A category must descriptively group at least two related codes. A theme must interpret the patterned meaning linking at least two categories. Retain firm unsynthesized codes or categories instead of inventing a hierarchy. Return the entire corrected JSON object."
             },
             {
                 role: "user",
@@ -1591,10 +1751,14 @@ export async function generateAutomaticCaseAnalysis(
                             validated.invalidDemographicEvidence,
                         droppedCodes: validated.droppedCodes,
                         invalidLabels: validated.invalidLabels,
+                        rejectedCategoryAssignments:
+                            validated.rejectedCategoryAssignments,
                         rejectedThemeAssignments:
                             validated.rejectedThemeAssignments,
                         unassignedCodeNumbers:
-                            validated.unassignedCodeNumbers
+                            validated.unassignedCodeNumbers,
+                        unassignedCategoryNumbers:
+                            validated.unassignedCategoryNumbers
                     })
                 ].join("\n\n")
             }
@@ -1610,130 +1774,6 @@ export async function generateAutomaticCaseAnalysis(
         if (Number.isInteger(repairResponse?.usage?.input_tokens)) {
             inputTokenCount = (inputTokenCount || 0)
                 + repairResponse.usage.input_tokens;
-        }
-    }
-
-    if (!validated.complete
-        && validated.codes.length
-    ) {
-        const themeResponse = await openaiClient.responses.create({
-            model,
-            store: false,
-            text: {
-                format: {
-                    type: "json_schema",
-                    name: "automatic_case_theme_assignment",
-                    strict: true,
-                    schema: automaticThemeSchema
-                }
-            },
-            input: [{
-                role: "system",
-                content: "Synthesize genuinely related participant-specific codes into clear higher-level English themes. Every theme must contain at least two distinct code numbers, advance abstraction beyond those codes, and make them cohere as one meaningful participant story, behavioral profile, contributing life pattern, or attitude/state relevant to the named research topic. Prefer one everyday word; use two or three only when they form one familiar natural phrase. Write every label and rationale in English. Use only the numbered codes provided. A code may remain unassigned when no genuinely related second code exists. Never invent a one-code theme or group codes merely because they share a surface term. Return coherent comparison-useful concepts, never findings, sentences, or concatenated descriptor bundles."
-            }, {
-                role: "user",
-                content: JSON.stringify({
-                    codeCount: validated.codes.length,
-                    requiredCodeNumbers: validated.codes.map(
-                        (_, index) => index + 1
-                    ),
-                    codes: validated.codes.map((code, index) => ({
-                        code_number: index + 1,
-                        label: code.label,
-                        rationale: code.rationale
-                    }))
-                })
-            }]
-        });
-        const themeValidation = validateAutomaticThemes(
-            parseStructuredResponse(
-                themeResponse,
-                "Automatic case theme assignment"
-            )?.themes,
-            validated.codes
-        );
-        validated = {
-            ...validated,
-            themes: themeValidation.themes,
-            unassignedCodeNumbers: themeValidation.unassignedCodeNumbers,
-            rejectedThemeAssignments:
-                themeValidation.rejectedThemeAssignments,
-            invalidEvidence: validated.invalidEvidence
-                + themeValidation.invalidThemes,
-            complete: Boolean(
-                validated.codes.length
-                && validated.caseInterpretation
-                && !themeValidation.invalidThemes
-            )
-        };
-
-        if (Number.isInteger(themeResponse?.usage?.input_tokens)) {
-            inputTokenCount = (inputTokenCount || 0)
-                + themeResponse.usage.input_tokens;
-        }
-
-        if (!validated.complete) {
-            const themeRepairResponse = await openaiClient.responses.create({
-                model,
-                store: false,
-                text: {
-                    format: {
-                        type: "json_schema",
-                        name: "corrected_case_theme_assignment",
-                        strict: true,
-                        schema: automaticThemeSchema
-                    }
-                },
-                input: [{
-                    role: "system",
-                    content: "Return a corrected theme assignment containing only defensible multi-code themes. Every theme must synthesize at least two semantically related codes into a coherent higher-level participant story relevant to the project topic. A code may remain unassigned when it lacks a genuinely related second code. Remove one-code, paraphrase, superficial-term, and bag-of-words themes. Prefer one everyday word; use two or three only as one familiar natural phrase. Return the entire replacement theme list."
-                }, {
-                    role: "user",
-                    content: JSON.stringify({
-                        codeCount: validated.codes.length,
-                        requiredCodeNumbers: validated.codes.map(
-                            (_, index) => index + 1
-                        ),
-                        previouslyMissingCodeNumbers:
-                            validated.unassignedCodeNumbers,
-                        previousThemes: validated.themes,
-                        codes: validated.codes.map((code, index) => ({
-                            code_number: index + 1,
-                            label: code.label,
-                            rationale: code.rationale
-                        }))
-                    })
-                }]
-            });
-            const repairedThemes = validateAutomaticThemes(
-                parseStructuredResponse(
-                    themeRepairResponse,
-                    "Corrected case theme assignment"
-                )?.themes,
-                validated.codes
-            );
-            validated = {
-                ...validated,
-                themes: repairedThemes.themes,
-                unassignedCodeNumbers:
-                    repairedThemes.unassignedCodeNumbers,
-                rejectedThemeAssignments:
-                    repairedThemes.rejectedThemeAssignments,
-                invalidEvidence: validated.invalidEvidence
-                    + repairedThemes.invalidThemes,
-                complete: Boolean(
-                    validated.codes.length
-                    && validated.caseInterpretation
-                    && !repairedThemes.invalidThemes
-                )
-            };
-
-            if (Number.isInteger(
-                themeRepairResponse?.usage?.input_tokens
-            )) {
-                inputTokenCount = (inputTokenCount || 0)
-                    + themeRepairResponse.usage.input_tokens;
-            }
         }
     }
 
@@ -1759,7 +1799,7 @@ export async function generateAutomaticCaseAnalysis(
             const labelRepairResponse = await createResponse([{
                 role: "system",
                 content: systemInstruction
-                    + " Return one complete corrected report. Repair every rejected code or theme label so it names one everyday, coherent, evidence-supported, topic-relevant concept that is useful for cross-case comparison. Every theme must synthesize at least two semantically related codes into a coherent higher-level participant story, cover all assigned codes, and avoid one-to-one paraphrase. Remove a theme and leave its code unassigned when no valid multi-code abstraction exists. Prefer one word; use two or three only as a genuine natural phrase. Remove duplicate or bag-of-words labels. Preserve exact keyword evidence and all valid demographic provenance. Put descriptive detail in rationales."
+                    + " Return one complete corrected report. Repair every rejected code, category, or theme label. Codes and categories must use coherent common terms suitable across cases while remaining supportable by this case alone. Categories descriptively group related codes. Themes state the patterned meaning linking categories and may use a clear interpretive phrase. Retain unsynthesized lower units instead of forcing a hierarchy. Preserve exact meaning-unit evidence, anchors, and demographic provenance."
             }, {
                 role: "user",
                 content: [
@@ -1816,13 +1856,25 @@ function relevanceEvidenceKey(codeNumber, messageId, exactText) {
 
 export function validateAutomaticCaseRelevanceAudit(analysis, value) {
     const expected = [];
+    const categoriesByCode = new Map();
+    const themesByCategory = new Map();
     const themesByCode = new Map();
 
     (analysis?.themes || []).forEach((theme, themeIndex) => {
-        (theme.codeNumbers || []).forEach(codeNumber => {
-            const labels = themesByCode.get(codeNumber) || [];
-            labels.push(`T${themeIndex + 1} ${theme.label}`);
-            themesByCode.set(codeNumber, labels);
+        (theme.categoryNumbers || []).forEach(categoryNumber => {
+            const labels = themesByCategory.get(categoryNumber) || [];
+            labels.push(`TH${themeIndex + 1} ${theme.label}`);
+            themesByCategory.set(categoryNumber, labels);
+        });
+    });
+    (analysis?.categories || []).forEach((category, categoryIndex) => {
+        (category.codeNumbers || []).forEach(codeNumber => {
+            const labels = categoriesByCode.get(codeNumber) || [];
+            labels.push(`CA${categoryIndex + 1} ${category.label}`);
+            categoriesByCode.set(codeNumber, labels);
+            const themes = themesByCode.get(codeNumber) || [];
+            themes.push(...(themesByCategory.get(categoryIndex + 1) || []));
+            themesByCode.set(codeNumber, [...new Set(themes)]);
         });
     });
     (analysis?.codes || []).forEach((code, codeIndex) => {
@@ -1830,6 +1882,7 @@ export function validateAutomaticCaseRelevanceAudit(analysis, value) {
             expected.push({
                 codeNumber: codeIndex + 1,
                 codeLabel: code.label,
+                categoryLabels: categoriesByCode.get(codeIndex + 1) || [],
                 themeLabels: themesByCode.get(codeIndex + 1) || [],
                 messageId: highlight.messageId,
                 exactText: highlight.exactText
@@ -1854,6 +1907,7 @@ export function validateAutomaticCaseRelevanceAudit(analysis, value) {
             exactText,
             transcriptGrounded: check.transcript_grounded === true,
             supportsCode: check.supports_code === true,
+            supportsCategory: check.supports_category === true,
             supportsTheme: check.supports_theme === true,
             researchScopeRelevant: check.research_scope_relevant === true,
             explanation: normalizedText(check.explanation) ||
@@ -1868,6 +1922,10 @@ export function validateAutomaticCaseRelevanceAudit(analysis, value) {
             evidence.exactText
         );
         const audit = auditByKey.get(key);
+        const hasAssignedCategory = evidence.categoryLabels.length > 0;
+        const categoryAssignmentAccepted = hasAssignedCategory
+            ? audit?.supportsCategory === true
+            : audit?.supportsCategory === false;
         const hasAssignedTheme = evidence.themeLabels.length > 0;
         const themeAssignmentAccepted = hasAssignedTheme
             ? audit?.supportsTheme === true
@@ -1875,6 +1933,7 @@ export function validateAutomaticCaseRelevanceAudit(analysis, value) {
         const accepted = Boolean(
             audit?.transcriptGrounded
             && audit.supportsCode
+            && categoryAssignmentAccepted
             && themeAssignmentAccepted
             && audit.researchScopeRelevant
         );
@@ -1882,7 +1941,10 @@ export function validateAutomaticCaseRelevanceAudit(analysis, value) {
             ...evidence,
             transcriptGrounded: Boolean(audit?.transcriptGrounded),
             supportsCode: Boolean(audit?.supportsCode),
+            supportsCategory: Boolean(audit?.supportsCategory),
             supportsTheme: Boolean(audit?.supportsTheme),
+            hasAssignedCategory,
+            categoryAssignmentAccepted,
             hasAssignedTheme,
             themeAssignmentAccepted,
             researchScopeRelevant: Boolean(audit?.researchScopeRelevant),
@@ -1925,15 +1987,31 @@ async function auditAutomaticCaseRelevance(
     model,
     analysisFramework
 ) {
+    const categoriesByCode = new Map();
+    const themesByCategory = new Map();
     const themesByCode = new Map();
     analysis.themes.forEach((theme, themeIndex) => {
-        theme.codeNumbers.forEach(codeNumber => {
-            const themes = themesByCode.get(codeNumber) || [];
+        theme.categoryNumbers.forEach(categoryNumber => {
+            const themes = themesByCategory.get(categoryNumber) || [];
             themes.push({
                 theme_number: themeIndex + 1,
                 label: theme.label,
                 rationale: theme.rationale
             });
+            themesByCategory.set(categoryNumber, themes);
+        });
+    });
+    analysis.categories.forEach((category, categoryIndex) => {
+        category.codeNumbers.forEach(codeNumber => {
+            const categories = categoriesByCode.get(codeNumber) || [];
+            categories.push({
+                category_number: categoryIndex + 1,
+                label: category.label,
+                rationale: category.rationale
+            });
+            categoriesByCode.set(codeNumber, categories);
+            const themes = themesByCode.get(codeNumber) || [];
+            themes.push(...(themesByCategory.get(categoryIndex + 1) || []));
             themesByCode.set(codeNumber, themes);
         });
     });
@@ -1942,6 +2020,7 @@ async function auditAutomaticCaseRelevance(
             code_number: codeIndex + 1,
             code_label: code.label,
             code_rationale: code.rationale,
+            assigned_categories: categoriesByCode.get(codeIndex + 1) || [],
             assigned_themes: themesByCode.get(codeIndex + 1) || [],
             message_id: highlight.messageId,
             exact_text: highlight.exactText
@@ -1960,7 +2039,7 @@ async function auditAutomaticCaseRelevance(
         },
         input: [{
             role: "system",
-            content: "Act as a strict independent evidence auditor for one qualitative case. Return exactly one check for every proposed evidence item and no others. Exact transcript grounding is necessary but insufficient. Set supports_code true only when the exact phrase semantically supports the assigned code. Set supports_theme true only when that code and phrase support at least one assigned valid multi-code theme. When assigned_themes is empty because the code is explicitly ungrouped and needs review, set supports_theme false; that is the correct auditable state and must not be repaired by inventing a theme. Set research_scope_relevant true only when the evidence satisfies the supplied project-specific inclusion, exclusion, and study-scope rules. Reject unrelated cross-topic evidence even when the quotation is exact. Explain each judgment briefly.\n\n"
+            content: "Act as a strict independent evidence auditor for one completed qualitative case. Return exactly one check for every proposed meaning unit and no others. Exact transcript grounding is necessary but insufficient. Set supports_code true only when the meaning unit supports its code without importing an unsupported explanation. Set supports_category true only when that code validly contributes to an assigned descriptive category; when no category is assigned, set it false. Set supports_theme true only when the code's category validly contributes to an assigned patterned-meaning theme; when no theme is assigned, set it false. An unassigned lower unit is a completed unsynthesized finding, not a request for approval. Set research_scope_relevant true only when the evidence satisfies the project scope. Explain each judgment briefly.\n\n"
                 + analysisFrameworkInstruction(analysisFramework)
         }, {
             role: "user",
@@ -1990,14 +2069,20 @@ export async function generateAutomaticCaseReanalysis(
     researcherRequest,
     {
         model = QUALITATIVE_ANALYSIS_MODEL,
-        analysisFramework = null
+        analysisFramework = null,
+        sharedVocabulary = null
     } = {}
 ) {
     let totalInputTokens = 0;
     let analysis = await generateAutomaticCaseAnalysis(
         openaiClient,
         messages,
-        { model, reanalysisContext: researcherRequest, analysisFramework }
+        {
+            model,
+            reanalysisContext: researcherRequest,
+            analysisFramework,
+            sharedVocabulary
+        }
     );
     totalInputTokens += analysis.inputTokenCount || 0;
 
@@ -2031,11 +2116,12 @@ export async function generateAutomaticCaseReanalysis(
             {
                 model,
                 analysisFramework,
+                sharedVocabulary,
                 reanalysisContext: {
                     ...researcherRequest,
                     rejectedEvidenceFromIndependentAudit: rejected,
                     correctionInstruction:
-                        "Return a new complete report that excludes every rejected evidence item and any unsupported code or theme."
+                        "Return a new complete report that excludes every rejected evidence item and any unsupported code, category, or theme."
                 }
             }
         );

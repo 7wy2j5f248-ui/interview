@@ -495,6 +495,21 @@
             padding: 0.05rem 0.15rem;
         }
 
+        .meaningUnitAnnotation {
+            display: inline-flex;
+            flex-direction: column;
+            margin-block: 0.15rem;
+            vertical-align: bottom;
+        }
+
+        .meaningUnitCodeLabel {
+            color: #34445d;
+            font-size: 0.72rem;
+            font-weight: 700;
+            line-height: 1.15;
+            margin-block-end: 0.12rem;
+        }
+
         .keywordColor1 { background: #ffe08a; }
         .keywordColor2 { background: #bdebd2; }
         .keywordColor3 { background: #bcd9ff; }
@@ -904,26 +919,20 @@
         not start or control the analysis.
     </p>
     <p>
-        The sequence is evidence first: exact keywords are highlighted in the
-        transcript and colour-grouped into participant-specific codes; codes
-        are then grouped into participant-specific themes. Within each case,
-        K1, C1, and T1 are deterministic mention-count levels of validated
-        evidence, not generation order. Equal mention totals share the same
-        level, and the labels never carry a fixed meaning across participants.
+        The sequence is evidence first: complete meaning units are highlighted
+        in the transcript with their code above; related codes form categories,
+        and categories support interpretive themes. Every result is completed
+        for one case before cross-case comparison, while code, category, and
+        theme terms use the common project vocabulary.
     </p>
     <p class="automaticPipelineNote">
-        <strong>Global label standard for every project:</strong> keywords stay
-        as exact participant expressions. Codes and themes must be meaningful,
-        everyday semantic concepts: one word is preferred, and two or three
-        words are allowed only as one natural phrase. Bag-of-words labels are
-        rejected and repaired before a future report or re-analysis proposal
-        can be completed. A theme must synthesize at least two semantically
-        related codes into a higher-level, project-relevant participant story
-        or pattern; it cannot paraphrase one code or rely on a superficial
-        shared term. Codes without a genuinely related partner remain visibly
-        ungrouped for researcher review—no theme is invented. Project-specific
-        frameworks add topic and inclusion rules but cannot weaken this
-        standard.
+        <strong>Analytical abbreviations:</strong> TH = Theme · CA = Category ·
+        CO = Code · MU = Meaning Unit.
+        Meaning units, codes, and categories are firm evidence-grounded units.
+        A category answers “What is being described?” A theme states the
+        patterned meaning linking categories. PLI publishes the completed
+        outcome without pausing for researcher approval; researcher feedback
+        starts a new traceable version afterward.
     </p>
 
     <div id="automaticAnalysisTokenGate">
@@ -953,9 +962,10 @@
         </div>
         <nav class="analysisViewTabs" aria-label="Automatic analysis forms">
             <button type="button" data-automatic-analysis-view="cases" aria-pressed="true">Form 1 · Cases</button>
-            <button type="button" data-automatic-analysis-view="keywords" aria-pressed="false">Form 2 · Keywords</button>
+            <button type="button" data-automatic-analysis-view="meaningUnits" aria-pressed="false">Form 2 · Meaning Units</button>
             <button type="button" data-automatic-analysis-view="codes" aria-pressed="false">Form 3 · Codes</button>
-            <button type="button" data-automatic-analysis-view="themes" aria-pressed="false">Form 4 · Themes</button>
+            <button type="button" data-automatic-analysis-view="categories" aria-pressed="false">Form 4 · Categories</button>
+            <button type="button" data-automatic-analysis-view="themes" aria-pressed="false">Form 5 · Themes</button>
             <button type="button" data-automatic-analysis-view="incomplete" aria-pressed="false">Needs attention</button>
             <button type="button" data-automatic-analysis-view="archive" aria-pressed="false">Archive</button>
         </nav>
@@ -965,7 +975,7 @@
         <section id="automaticAnalysisReview" class="analysisDiscussion" aria-labelledby="automaticAnalysisReviewHeading">
             <h3 id="automaticAnalysisReviewHeading">Second-layer analysis discussion</h3>
             <p class="muted">
-                Select one or more case, theme, or code cells above. The AI
+                Select one or more case, theme, category, or code cells above. The AI
                 discussion receives those exact case numbers and source
                 positions, their stored reports and evidence, and the latest
                 uploaded researcher workbook. Original automatic case reports
@@ -989,7 +999,7 @@
 
             <p><strong>Selected source records</strong></p>
             <div id="automaticReviewSelectionList" class="automaticReviewSelectionList">
-                <span class="muted">Select a case, Tn theme, or Cn code above.</span>
+                <span class="muted">Select a case, THn theme, CAn category, or COn code above.</span>
             </div>
             <p id="automaticReviewSelectionSummary" class="automaticReviewScopeSummary">
                 No analytical scope selected.
@@ -1009,27 +1019,26 @@
             <section class="automaticReanalysisPanel" aria-labelledby="automaticReanalysisHeading">
                 <h4 id="automaticReanalysisHeading">Request re-analysis for this case</h4>
                 <p class="muted">
-                    Select exactly one case above. The preserved transcript and
-                    every earlier report remain unchanged. AI creates a new
-                    proposal with exact-evidence, semantic relevance, and
-                    human-meaningful label-quality checks;
-                    it becomes current only after your explicit approval.
+                    Select exactly one case above. PLI uses the preserved
+                    transcript to complete a new evidence-grounded version,
+                    including MU → CO → CA → TH lineage. Earlier versions remain
+                    available for audit; no approval step interrupts automation.
                 </p>
                 <p class="muted">
                     A manual note here is case-specific. By contrast, rules saved
                     in Research Design → Analysis Framework are global within
                     their named research project/topic. If that framework includes
                     completed interviews, each eligible same-project case receives
-                    its own separately stored proposal and audit for review; other
+                    its own separately stored completed version and audit; other
                     projects and archived cases are excluded.
                 </p>
                 <p id="automaticReanalysisSelectedCase" class="muted">
-                    Select one case, theme, or code from a single case.
+                    Select one case, theme, category, or code from a single case.
                 </p>
                 <label>
                     Reason
                     <select id="automaticReanalysisReason">
-                        <option value="keywords_unrelated_to_theme">Keywords unrelated to theme</option>
+                        <option value="keywords_unrelated_to_theme">Meaning units unrelated to the analytical hierarchy</option>
                         <option value="evidence_theme_mismatch">Evidence-to-theme mismatch</option>
                         <option value="other">Other analytical concern</option>
                     </select>
@@ -1038,12 +1047,12 @@
                     Researcher notes
                     <textarea
                         id="automaticReanalysisNotes"
-                        placeholder="For example: The exact keyword is about AI-chatbot use, but it does not support a sleep-related theme."
+                        placeholder="For example: This meaning unit concerns AI-chatbot use, but it does not support the assigned code, category, or sleep-related theme."
                     ></textarea>
                 </label>
                 <div class="actionRow">
                     <button id="automaticReanalysisRequestButton" type="button" disabled>
-                        Create proposed re-analysis
+                        Send feedback and generate completed version
                     </button>
                 </div>
                 <p id="automaticReanalysisStatus" class="muted" role="status"></p>
@@ -1056,11 +1065,11 @@
                     Apply one selected project/topic-bound Analysis Framework
                     version to every eligible completed case in that same project.
                     Preview and confirm the exact scope first. Each case receives
-                    its own proposal, relevance audit, rationale, evidence checks,
-                    and source-quality flags. The full batch completes without
-                    case-by-case approval and can then be downloaded as one revised,
-                    proposed analysis. Downloading never promotes or overwrites a
-                    current report.
+                    its own completed version, relevance audit, rationale,
+                    evidence checks, and source-quality flags. The full batch
+                    completes without case-by-case approval and can then be
+                    downloaded as one revised analysis. Earlier versions remain
+                    available for audit.
                 </p>
                 <div class="actionRow">
                     <label>
@@ -1122,7 +1131,7 @@
                     Your question or analytical instruction
                     <textarea
                         id="automaticReviewDiscussionInput"
-                        placeholder="For example: P0107 T1 has only one supporting mention. Check whether Work Schedule is a valid rare theme, should be regrouped, or needs transcript review."
+                        placeholder="For example: P0107-S01 TH1 appears weakly supported. Check its CA links and underlying CO/MU evidence."
                     ></textarea>
                 </label>
                 <button id="automaticReviewDiscussionSendButton" type="submit" disabled>
@@ -1130,7 +1139,7 @@
                 </button>
             </form>
             <p class="muted">
-                Every message stores the selected case/Tn/Cn references,
+                Every message stores the selected case/THn/CAn/COn references,
                 workbook layer, model, timestamp, and evidence provenance so
                 the discussion can be reopened later.
             </p>
@@ -1984,7 +1993,7 @@ document.getElementById("periodResetButton").addEventListener("click", () => {
 loadStatistics();
 
 </script>
-<script src="researcher-automatic-analysis.js?version=20260831-theme-hierarchy-v1"></script>
+<script src="researcher-automatic-analysis.js?version=20260831-meaning-unit-category-v1"></script>
     
 </body>
 </html>

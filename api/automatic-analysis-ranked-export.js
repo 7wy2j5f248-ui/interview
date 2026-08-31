@@ -1,7 +1,6 @@
 import ExcelJS from "exceljs";
 import { createClient } from "@supabase/supabase-js";
 import { authorizeResearcher } from "../server/researcherAuth.js";
-import { rankAnalysisCase } from "../server/analysisFrequencyRanking.js";
 import { enrichAnalysisHighlightSources } from "../server/analysisHighlightSources.js";
 import {
     allRows,
@@ -78,49 +77,19 @@ function sortCases(cases) {
     });
 }
 
-function plural(count, singular, pluralValue = `${singular}s`) {
-    return count === 1 ? singular : pluralValue;
-}
-
-function keywordPrimaryText(keyword) {
-    return keyword.englishSourceTexts?.length
-        ? `English source: ${keyword.englishSourceTexts.join(" / ")}`
-        : keyword.text;
-}
-
-function keywordGroupValue(group) {
-    const values = [...new Set(
-        group.items.map(keywordPrimaryText).filter(Boolean)
-    )];
-    return `${group.mentionCount} ${plural(
-        group.mentionCount,
-        "mention"
-    )} each · ${values.join("; ")}`;
-}
-
-function keywordGroupReference(group) {
+function meaningUnitReference(unit) {
     const lines = [
-        `K${group.rank}: ${group.mentionCount} validated ${plural(
-            group.mentionCount,
-            "mention"
-        )} for each tied keyword.`
+        `MU${unit.unit_number}: exact coherent passage from the preserved transcript.`,
+        "",
+        `Original evidence: ${unit.exact_text}`
     ];
-
-    group.items.forEach(keyword => {
-        lines.push("", `Original evidence: ${keyword.text}`);
-        if (keyword.englishSourceTexts?.length) {
-            keyword.englishSourceTexts.forEach(value => {
-                lines.push(`Stored English source message: ${value}`);
-            });
-        }
-        if (keyword.sourceMessageIds?.length) {
-            lines.push(
-                `Source message ID${keyword.sourceMessageIds.length === 1 ? "" : "s"}: ${
-                    keyword.sourceMessageIds.join(", ")
-                }`
-            );
-        }
-    });
+    if (unit.anchor_expressions?.length) {
+        lines.push(`Anchor expressions: ${unit.anchor_expressions.join("; ")}`);
+    }
+    if (unit.english_translation) {
+        lines.push(`Stored English source message: ${unit.english_translation}`);
+    }
+    if (unit.message_id) lines.push(`Source message ID: ${unit.message_id}`);
 
     return lines.join("\n");
 }
@@ -171,46 +140,20 @@ function buildReferenceRows(cases) {
                 details: item.caseInterpretation
             });
         }
-        item.rankedKeywordGroups.forEach(group => {
-            addReference(`${caseIndex}:keyword:${group.rank}`, {
+        (item.meaningUnits || []).forEach(unit => {
+            addReference(`${caseIndex}:meaningUnit:${unit.unit_number}`, {
                 participant: participantCode(item),
                 sessionNumber: sessionNumber(item),
                 sessionId: item.sessionId,
-                sourceCell: `${excelColumnName(reportColumn + group.rank)}${caseRow}`,
-                referenceType: "Keyword evidence",
-                rank: `K${group.rank}`,
-                details: keywordGroupReference(group)
+                sourceCell: `${excelColumnName(reportColumn + unit.unit_number)}${caseRow}`,
+                referenceType: "Meaning unit",
+                rank: `MU${unit.unit_number}`,
+                details: meaningUnitReference(unit)
             });
         });
     });
 
     return { rows, destinations };
-}
-
-function codeGroupValue(group) {
-    const values = group.items.map(code =>
-        `${code.code_label} (${code.keywordCount} ${plural(
-            code.keywordCount,
-            "keyword"
-        )})`
-    );
-    return `${group.mentionCount} ${plural(
-        group.mentionCount,
-        "mention"
-    )} each · ${values.join("; ")}`;
-}
-
-function themeGroupValue(group) {
-    const values = group.items.map(theme =>
-        `${theme.theme_label} (${theme.codeCount} ${plural(
-            theme.codeCount,
-            "code"
-        )}, ${theme.keywordCount} ${plural(theme.keywordCount, "keyword")})`
-    );
-    return `${group.mentionCount} ${plural(
-        group.mentionCount,
-        "mention"
-    )} each · ${values.join("; ")}`;
 }
 
 function prepareSheet(sheet, rowCount, streaming) {
@@ -296,17 +239,52 @@ export async function loadActiveCases(supabase) {
     ]));
 
     const reportIds = reports.map(report => report.id);
-    const [codes, themes, highlights, themeCodes] = await Promise.all([
+    const [
+        codes,
+        categories,
+        themes,
+        meaningUnits,
+        codeMeaningUnits,
+        categoryCodes,
+        themeCategories,
+        highlights,
+        themeCodes
+    ] = await Promise.all([
         relatedRows(reportIds, chunk => supabase
             .from("qualitative_case_codes")
             .select("id, report_id, code_number, code_label")
             .in("report_id", chunk)
             .order("report_id", { ascending: true }), "Case codes could not be loaded for export."),
         relatedRows(reportIds, chunk => supabase
+            .from("qualitative_case_categories")
+            .select("id, report_id, category_number, category_label, rationale")
+            .in("report_id", chunk)
+            .order("report_id", { ascending: true }), "Case categories could not be loaded for export."),
+        relatedRows(reportIds, chunk => supabase
             .from("qualitative_case_themes")
             .select("id, report_id, theme_number, theme_label")
             .in("report_id", chunk)
             .order("report_id", { ascending: true }), "Case themes could not be loaded for export."),
+        relatedRows(reportIds, chunk => supabase
+            .from("qualitative_case_meaning_units")
+            .select("id, report_id, unit_number, message_id, exact_text, start_offset, end_offset, anchor_expressions")
+            .in("report_id", chunk)
+            .order("report_id", { ascending: true }), "Case meaning units could not be loaded for export."),
+        relatedRows(reportIds, chunk => supabase
+            .from("qualitative_case_code_meaning_units")
+            .select("report_id, code_id, meaning_unit_id")
+            .in("report_id", chunk)
+            .order("report_id", { ascending: true }), "Code-meaning-unit mappings could not be loaded for export."),
+        relatedRows(reportIds, chunk => supabase
+            .from("qualitative_case_category_codes")
+            .select("report_id, category_id, code_id")
+            .in("report_id", chunk)
+            .order("report_id", { ascending: true }), "Category-code mappings could not be loaded for export."),
+        relatedRows(reportIds, chunk => supabase
+            .from("qualitative_case_theme_categories")
+            .select("report_id, theme_id, category_id")
+            .in("report_id", chunk)
+            .order("report_id", { ascending: true }), "Theme-category mappings could not be loaded for export."),
         relatedRows(reportIds, chunk => supabase
             .from("qualitative_case_keyword_highlights")
             .select("id, report_id, code_id, keyword_number, message_id, exact_text")
@@ -318,18 +296,22 @@ export async function loadActiveCases(supabase) {
             .in("report_id", chunk)
             .order("report_id", { ascending: true }), "Theme-code mappings could not be loaded for export.")
     ]);
-    const exportHighlights = await enrichAnalysisHighlightSources(
-        supabase,
-        highlights,
-        { schedule }
-    );
+    const [exportMeaningUnits, exportHighlights] = await Promise.all([
+        enrichAnalysisHighlightSources(supabase, meaningUnits, { schedule }),
+        enrichAnalysisHighlightSources(supabase, highlights, { schedule })
+    ]);
 
     const reportBySession = new Map(reports.map(row => [row.session_id, row]));
     const sessionById = new Map(sessions.map(row => [row.session_id, row]));
     const descriptorBySession = new Map(descriptors.map(row => [row.session_id, row]));
     const caseCodeBySession = new Map(caseCodes.map(row => [row.session_id, row]));
     const codesByReport = groupBy(codes, "report_id");
+    const categoriesByReport = groupBy(categories, "report_id");
     const themesByReport = groupBy(themes, "report_id");
+    const meaningUnitsByReport = groupBy(exportMeaningUnits, "report_id");
+    const codeMeaningUnitsByReport = groupBy(codeMeaningUnits, "report_id");
+    const categoryCodesByReport = groupBy(categoryCodes, "report_id");
+    const themeCategoriesByReport = groupBy(themeCategories, "report_id");
     const highlightsByReport = groupBy(exportHighlights, "report_id");
     const themeCodesByReport = groupBy(themeCodes, "report_id");
 
@@ -337,7 +319,7 @@ export async function loadActiveCases(supabase) {
         const report = reportBySession.get(job.session_id);
         const session = sessionById.get(job.session_id);
         const caseCode = caseCodeBySession.get(job.session_id);
-        return rankAnalysisCase({
+        return {
             caseNumber: caseCode?.case_number || job.case_number,
             sessionNumber: caseCode?.session_number || null,
             sessionId: job.session_id,
@@ -350,10 +332,15 @@ export async function loadActiveCases(supabase) {
             demographics: mergedDemographics(report, descriptorBySession.get(job.session_id) || {}),
             caseInterpretation: report?.case_interpretation || "",
             codes: report ? (codesByReport.get(report.id) || []) : [],
+            categories: report ? (categoriesByReport.get(report.id) || []) : [],
             themes: report ? (themesByReport.get(report.id) || []) : [],
+            meaningUnits: report ? (meaningUnitsByReport.get(report.id) || []) : [],
+            codeMeaningUnits: report ? (codeMeaningUnitsByReport.get(report.id) || []) : [],
+            categoryCodes: report ? (categoryCodesByReport.get(report.id) || []) : [],
+            themeCategories: report ? (themeCategoriesByReport.get(report.id) || []) : [],
             highlights: report ? (highlightsByReport.get(report.id) || []) : [],
             themeCodes: report ? (themeCodesByReport.get(report.id) || []) : []
-        });
+        };
     }));
 }
 
@@ -363,12 +350,15 @@ function addCasesSheet(
     referenceDestinations,
     { streaming = false } = {}
 ) {
-    const maximumKeywords = Math.max(
+    const maximumMeaningUnits = Math.max(
         0,
-        ...cases.map(item => item.rankedKeywordGroups.length)
+        ...cases.map(item => Math.max(
+            0,
+            ...(item.meaningUnits || []).map(unit => unit.unit_number)
+        ))
     );
     const sheet = workbook.addWorksheet(
-        "1 Cases & keywords",
+        "1 Cases & meaning units",
         streaming
             ? { views: [{ state: "frozen", xSplit: 2, ySplit: 1 }] }
             : undefined
@@ -383,9 +373,9 @@ function addCasesSheet(
             width: Math.min(22, Math.max(12, label.length + 2))
         })),
         { header: "Case report", key: "reportStatus", width: 12 },
-        ...Array.from({ length: maximumKeywords }, (_, index) => ({
-            header: `K${index + 1}`,
-            key: `keyword_${index + 1}`,
+        ...Array.from({ length: maximumMeaningUnits }, (_, index) => ({
+            header: `MU${index + 1}`,
+            key: `meaning_unit_${index + 1}`,
             width: 30
         }))
     ];
@@ -398,20 +388,20 @@ function addCasesSheet(
             language: item.language || "",
             reportStatus: item.hasReport
                 ? (reportReferenceRow
-                    ? internalLink("Available", "4 Notes & sources", `A${reportReferenceRow}`)
+                    ? internalLink("Available", "5 Notes & sources", `A${reportReferenceRow}`)
                     : "Available")
                 : item.status
         };
         DEMOGRAPHIC_FIELDS.forEach(([key]) => {
             row[key] = cleanValue(item.demographics?.[key]);
         });
-        item.rankedKeywordGroups.forEach(group => {
+        (item.meaningUnits || []).forEach(unit => {
             const referenceRow = referenceDestinations.get(
-                `${caseIndex}:keyword:${group.rank}`
+                `${caseIndex}:meaningUnit:${unit.unit_number}`
             );
-            const value = keywordGroupValue(group);
-            row[`keyword_${group.rank}`] = referenceRow
-                ? internalLink(value, "4 Notes & sources", `A${referenceRow}`)
+            const value = unit.exact_text;
+            row[`meaning_unit_${unit.unit_number}`] = referenceRow
+                ? internalLink(value, "5 Notes & sources", `A${referenceRow}`)
                 : value;
         });
         appendRow(sheet, row, streaming, worksheetRow => {
@@ -421,8 +411,8 @@ function addCasesSheet(
                     underline: true
                 };
             }
-            item.rankedKeywordGroups.forEach(group => {
-                worksheetRow.getCell(`keyword_${group.rank}`).font = {
+            (item.meaningUnits || []).forEach(unit => {
+                worksheetRow.getCell(`meaning_unit_${unit.unit_number}`).font = {
                     color: { argb: "FF0563C1" },
                     underline: true
                 };
@@ -434,7 +424,7 @@ function addCasesSheet(
 
 function addReferencesSheet(workbook, referenceRows, { streaming = false } = {}) {
     const sheet = workbook.addWorksheet(
-        "4 Notes & sources",
+        "5 Notes & sources",
         streaming
             ? { views: [{ state: "frozen", xSplit: 2, ySplit: 1 }] }
             : undefined
@@ -455,7 +445,7 @@ function addReferencesSheet(workbook, referenceRows, { streaming = false } = {})
             ...reference,
             sourceCell: internalLink(
                 reference.sourceCell,
-                "1 Cases & keywords",
+                "1 Cases & meaning units",
                 reference.sourceCell
             )
         }, streaming, row => {
@@ -480,7 +470,10 @@ function addCodesSheet(workbook, cases, { streaming = false } = {}) {
     const completed = cases.filter(item => item.hasReport);
     const maximum = Math.max(
         0,
-        ...completed.map(item => item.rankedCodeGroups.length)
+        ...completed.map(item => Math.max(
+            0,
+            ...(item.codes || []).map(code => code.code_number)
+        ))
     );
     const sheet = workbook.addWorksheet(
         "2 Codes",
@@ -493,8 +486,8 @@ function addCodesSheet(workbook, cases, { streaming = false } = {}) {
         { header: "S#", key: "sessionNumber", width: 5 },
         { header: "Session ID", key: "sessionId", width: 18 },
         ...Array.from({ length: maximum }, (_, index) => ({
-            header: `C${index + 1}`,
-            key: `C${index + 1}`,
+            header: `CO${index + 1}`,
+            key: `CO${index + 1}`,
             width: 34
         }))
     ];
@@ -505,22 +498,25 @@ function addCodesSheet(workbook, cases, { streaming = false } = {}) {
             sessionNumber: sessionNumber(item),
             sessionId: item.sessionId
         };
-        item.rankedCodeGroups.forEach(group => {
-            row[`C${group.rank}`] = codeGroupValue(group);
+        (item.codes || []).forEach(code => {
+            row[`CO${code.code_number}`] = code.code_label;
         });
         appendRow(sheet, row, streaming);
     });
     finishSheet(sheet, streaming);
 }
 
-function addThemesSheet(workbook, cases, { streaming = false } = {}) {
+function addCategoriesSheet(workbook, cases, { streaming = false } = {}) {
     const completed = cases.filter(item => item.hasReport);
     const maximum = Math.max(
         0,
-        ...completed.map(item => item.rankedThemeGroups.length)
+        ...completed.map(item => Math.max(
+            0,
+            ...(item.categories || []).map(category => category.category_number)
+        ))
     );
     const sheet = workbook.addWorksheet(
-        "3 Themes",
+        "3 Categories",
         streaming
             ? { views: [{ state: "frozen", xSplit: 2, ySplit: 1 }] }
             : undefined
@@ -530,8 +526,8 @@ function addThemesSheet(workbook, cases, { streaming = false } = {}) {
         { header: "S#", key: "sessionNumber", width: 5 },
         { header: "Session ID", key: "sessionId", width: 18 },
         ...Array.from({ length: maximum }, (_, index) => ({
-            header: `T${index + 1}`,
-            key: `T${index + 1}`,
+            header: `CA${index + 1}`,
+            key: `CA${index + 1}`,
             width: 36
         }))
     ];
@@ -542,8 +538,48 @@ function addThemesSheet(workbook, cases, { streaming = false } = {}) {
             sessionNumber: sessionNumber(item),
             sessionId: item.sessionId
         };
-        item.rankedThemeGroups.forEach(group => {
-            row[`T${group.rank}`] = themeGroupValue(group);
+        (item.categories || []).forEach(category => {
+            row[`CA${category.category_number}`] = category.category_label;
+        });
+        appendRow(sheet, row, streaming);
+    });
+    finishSheet(sheet, streaming);
+}
+
+function addThemesSheet(workbook, cases, { streaming = false } = {}) {
+    const completed = cases.filter(item => item.hasReport);
+    const maximum = Math.max(
+        0,
+        ...completed.map(item => Math.max(
+            0,
+            ...(item.themes || []).map(theme => theme.theme_number)
+        ))
+    );
+    const sheet = workbook.addWorksheet(
+        "4 Themes",
+        streaming
+            ? { views: [{ state: "frozen", xSplit: 2, ySplit: 1 }] }
+            : undefined
+    );
+    sheet.columns = [
+        { header: "P#", key: "participant", width: 9 },
+        { header: "S#", key: "sessionNumber", width: 5 },
+        { header: "Session ID", key: "sessionId", width: 18 },
+        ...Array.from({ length: maximum }, (_, index) => ({
+            header: `TH${index + 1}`,
+            key: `TH${index + 1}`,
+            width: 36
+        }))
+    ];
+    prepareSheet(sheet, completed.length + 1, streaming);
+    completed.forEach(item => {
+        const row = {
+            participant: participantCode(item),
+            sessionNumber: sessionNumber(item),
+            sessionId: item.sessionId
+        };
+        (item.themes || []).forEach(theme => {
+            row[`TH${theme.theme_number}`] = theme.theme_label;
         });
         appendRow(sheet, row, streaming);
     });
@@ -566,6 +602,7 @@ export async function writeRankedAnalysisWorkbook(
     const references = buildReferenceRows(cases);
     addCasesSheet(workbook, cases, references.destinations, { streaming: true });
     addCodesSheet(workbook, cases, { streaming: true });
+    addCategoriesSheet(workbook, cases, { streaming: true });
     addThemesSheet(workbook, cases, { streaming: true });
     addReferencesSheet(workbook, references.rows, { streaming: true });
     await workbook.commit();
@@ -590,19 +627,19 @@ export default async function handler(req, res) {
         const createdAt = new Date();
         const stamp = createdAt.toISOString().slice(0, 10);
         res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-        res.setHeader("Content-Disposition", `attachment; filename="PLI-frequency-ranked-analysis-${stamp}.xlsx"`);
+        res.setHeader("Content-Disposition", `attachment; filename="PLI-complete-case-analysis-${stamp}.xlsx"`);
         res.setHeader("X-PLI-Case-Count", String(cases.length));
         res.status(200);
         await writeRankedAnalysisWorkbook(res, cases, createdAt);
         return undefined;
     } catch (error) {
-        console.error("Frequency-ranked analysis export failed:", error);
+        console.error("Complete case-analysis export failed:", error);
         if (res.headersSent) {
             res.destroy(error);
             return undefined;
         }
         return res.status(500).json({
-            error: "The frequency-ranked Excel export could not be generated."
+            error: "The complete case-analysis Excel export could not be generated."
         });
     }
 }

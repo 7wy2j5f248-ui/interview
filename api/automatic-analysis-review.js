@@ -147,7 +147,7 @@ async function loadReanalysisWorkspace(supabase) {
     const requests = await requireData(
         supabase
             .from(TABLES.reanalysisRequests)
-            .select("id, session_id, source_report_id, request_number, reason_code, researcher_notes, requested_by, status, analysis_version, model, attempt_count, requested_at, processing_started_at, proposal_ready_at, reviewed_at, last_error, project_id, analysis_framework_id, project_reanalysis_batch_id, cancelled_at, cancellation_reason")
+            .select("id, session_id, source_report_id, request_number, reason_code, researcher_notes, requested_by, status, analysis_version, model, attempt_count, requested_at, processing_started_at, proposal_ready_at, analysis_completed_at, reviewed_at, last_error, project_id, analysis_framework_id, project_reanalysis_batch_id, cancelled_at, cancellation_reason")
             .order("requested_at", { ascending: false })
             .limit(60),
         "Case re-analysis requests could not be loaded."
@@ -187,7 +187,17 @@ async function loadReanalysisWorkspace(supabase) {
             "Source report versions could not be loaded."
         ) : []
     ]);
-    const [sourceCodes, sourceThemes, sourceHighlights, sourceThemeCodes] =
+    const [
+        sourceCodes,
+        sourceCategories,
+        sourceThemes,
+        sourceMeaningUnits,
+        sourceCodeMeaningUnits,
+        sourceCategoryCodes,
+        sourceThemeCategories,
+        sourceHighlights,
+        sourceThemeCodes
+    ] =
         sourceReportIds.length ? await Promise.all([
             requireData(
                 supabase
@@ -199,11 +209,48 @@ async function loadReanalysisWorkspace(supabase) {
             ),
             requireData(
                 supabase
+                    .from("qualitative_case_categories")
+                    .select("id, report_id, category_number, category_label, rationale")
+                    .in("report_id", sourceReportIds)
+                    .order("category_number", { ascending: true }),
+                "Source report categories could not be loaded."
+            ),
+            requireData(
+                supabase
                     .from("qualitative_case_themes")
                     .select("id, report_id, theme_number, theme_label, rationale")
                     .in("report_id", sourceReportIds)
                     .order("theme_number", { ascending: true }),
                 "Source report themes could not be loaded."
+            ),
+            requireData(
+                supabase
+                    .from("qualitative_case_meaning_units")
+                    .select("id, report_id, unit_number, message_id, exact_text, start_offset, end_offset, anchor_expressions")
+                    .in("report_id", sourceReportIds)
+                    .order("unit_number", { ascending: true }),
+                "Source report meaning units could not be loaded."
+            ),
+            requireData(
+                supabase
+                    .from("qualitative_case_code_meaning_units")
+                    .select("report_id, code_id, meaning_unit_id")
+                    .in("report_id", sourceReportIds),
+                "Source code-to-meaning-unit links could not be loaded."
+            ),
+            requireData(
+                supabase
+                    .from("qualitative_case_category_codes")
+                    .select("report_id, category_id, code_id")
+                    .in("report_id", sourceReportIds),
+                "Source category-to-code links could not be loaded."
+            ),
+            requireData(
+                supabase
+                    .from("qualitative_case_theme_categories")
+                    .select("report_id, theme_id, category_id")
+                    .in("report_id", sourceReportIds),
+                "Source theme-to-category links could not be loaded."
             ),
             requireData(
                 supabase
@@ -220,7 +267,7 @@ async function loadReanalysisWorkspace(supabase) {
                     .in("report_id", sourceReportIds),
                 "Source theme-to-code links could not be loaded."
             )
-        ]) : [[], [], [], []];
+        ]) : [[], [], [], [], [], [], [], [], []];
 
     const [projects, frameworks, activeFrameworks, batches] = await Promise.all([
         requireData(
@@ -289,7 +336,12 @@ async function loadReanalysisWorkspace(supabase) {
         projectWideSourceCases,
         sourceReports,
         sourceCodes,
+        sourceCategories,
         sourceThemes,
+        sourceMeaningUnits,
+        sourceCodeMeaningUnits,
+        sourceCategoryCodes,
+        sourceThemeCategories,
         sourceHighlights,
         sourceThemeCodes
     };
@@ -355,7 +407,7 @@ async function downloadProjectReanalysisBatch(req, res, supabase) {
     );
     res.setHeader("X-PLI-Batch-ID", data.batch.id);
     res.setHeader("X-PLI-Case-Count", String(data.requests.length));
-    res.setHeader("X-PLI-Report-Effect", "none-proposal-export-only");
+    res.setHeader("X-PLI-Report-Effect", "none-read-only-export");
     res.status(200);
     await writeProjectReanalysisBatchWorkbook(res, data, createdAt);
     return undefined;
@@ -442,7 +494,18 @@ async function loadSelectedCaseContext(supabase, selection) {
         );
     }
     const reportIds = reports.map(report => report.id);
-    const [codes, themes, highlights, themeCodes, messages] = await Promise.all([
+    const [
+        codes,
+        categories,
+        themes,
+        meaningUnits,
+        codeMeaningUnits,
+        categoryCodes,
+        themeCategories,
+        highlights,
+        themeCodes,
+        messages
+    ] = await Promise.all([
         requireData(
             supabase
                 .from("qualitative_case_codes")
@@ -454,12 +517,51 @@ async function loadSelectedCaseContext(supabase, selection) {
         ),
         requireData(
             supabase
+                .from("qualitative_case_categories")
+                .select("id, report_id, category_number, category_label, rationale")
+                .in("report_id", reportIds)
+                .order("report_id", { ascending: true })
+                .order("category_number", { ascending: true }),
+            "Selected case categories could not be loaded."
+        ),
+        requireData(
+            supabase
                 .from("qualitative_case_themes")
                 .select("id, report_id, theme_number, theme_label, rationale")
                 .in("report_id", reportIds)
                 .order("report_id", { ascending: true })
                 .order("theme_number", { ascending: true }),
             "Selected case themes could not be loaded."
+        ),
+        requireData(
+            supabase
+                .from("qualitative_case_meaning_units")
+                .select("id, report_id, unit_number, message_id, exact_text, start_offset, end_offset, anchor_expressions")
+                .in("report_id", reportIds)
+                .order("report_id", { ascending: true })
+                .order("unit_number", { ascending: true }),
+            "Selected meaning units could not be loaded."
+        ),
+        requireData(
+            supabase
+                .from("qualitative_case_code_meaning_units")
+                .select("report_id, code_id, meaning_unit_id")
+                .in("report_id", reportIds),
+            "Selected code-to-meaning-unit links could not be loaded."
+        ),
+        requireData(
+            supabase
+                .from("qualitative_case_category_codes")
+                .select("report_id, category_id, code_id")
+                .in("report_id", reportIds),
+            "Selected category-to-code links could not be loaded."
+        ),
+        requireData(
+            supabase
+                .from("qualitative_case_theme_categories")
+                .select("report_id, theme_id, category_id")
+                .in("report_id", reportIds),
+            "Selected theme-to-category links could not be loaded."
         ),
         requireData(
             supabase
@@ -498,7 +600,12 @@ async function loadSelectedCaseContext(supabase, selection) {
         new Map()
     );
     const codesByReport = byReport(codes);
+    const categoriesByReport = byReport(categories);
     const themesByReport = byReport(themes);
+    const meaningUnitsByReport = byReport(meaningUnits);
+    const codeMeaningUnitsByReport = byReport(codeMeaningUnits);
+    const categoryCodesByReport = byReport(categoryCodes);
+    const themeCategoriesByReport = byReport(themeCategories);
     const highlightsByReport = byReport(highlights);
     const mappingsByReport = byReport(themeCodes);
     const messagesBySession = byReport(messages, "Session");
@@ -510,10 +617,15 @@ async function loadSelectedCaseContext(supabase, selection) {
     return selection.map(source => {
         const report = reportBySession.get(source.sessionId);
         const reportThemes = themesByReport.get(report.id) || [];
+        const reportCategories = categoriesByReport.get(report.id) || [];
         const reportCodes = codesByReport.get(report.id) || [];
-        const number = Number.parseInt(source.position.slice(1), 10);
+        const number = Number.parseInt(source.position.replace(/^\D+/u, ""), 10);
         const focus = source.kind === "theme"
             ? reportThemes.find(theme => theme.theme_number === number)
+            : source.kind === "category"
+                ? reportCategories.find(category =>
+                    category.category_number === number
+                )
             : source.kind === "code"
                 ? reportCodes.find(code => code.code_number === number)
                 : null;
@@ -526,7 +638,7 @@ async function loadSelectedCaseContext(supabase, selection) {
         return {
             selectedSource: {
                 ...source,
-                label: focus?.theme_label || focus?.code_label
+                label: focus?.theme_label || focus?.category_label || focus?.code_label
                     || source.label
             },
             report: {
@@ -542,7 +654,12 @@ async function loadSelectedCaseContext(supabase, selection) {
                 completedAt: report.completed_at
             },
             themes: reportThemes,
+            categories: reportCategories,
             codes: reportCodes,
+            meaningUnits: meaningUnitsByReport.get(report.id) || [],
+            codeMeaningUnits: codeMeaningUnitsByReport.get(report.id) || [],
+            categoryCodes: categoryCodesByReport.get(report.id) || [],
+            themeCategories: themeCategoriesByReport.get(report.id) || [],
             themeCodes: mappingsByReport.get(report.id) || [],
             keywordEvidence: (highlightsByReport.get(report.id) || []).map(
                 highlight => ({
@@ -567,7 +684,7 @@ async function loadSelectedCaseContext(supabase, selection) {
     });
 }
 
-async function loadComparableThemeIndex(supabase, selectedCases) {
+async function loadComparableAnalysisIndex(supabase, selectedCases) {
     const activeJobs = await requireData(
         supabase
             .from("automatic_case_analysis_jobs")
@@ -596,25 +713,93 @@ async function loadComparableThemeIndex(supabase, selectedCases) {
             .order("theme_number", { ascending: true }),
         "The comparable theme index could not be loaded."
     ) : [];
+    const categories = reportIds.length ? await requireData(
+        supabase
+            .from("qualitative_case_categories")
+            .select("report_id, category_number, category_label")
+            .in("report_id", reportIds)
+            .order("report_id", { ascending: true })
+            .order("category_number", { ascending: true }),
+        "The comparable category index could not be loaded."
+    ) : [];
+    const codes = reportIds.length ? await requireData(
+        supabase
+            .from("qualitative_case_codes")
+            .select("report_id, code_number, code_label")
+            .in("report_id", reportIds)
+            .order("report_id", { ascending: true })
+            .order("code_number", { ascending: true }),
+        "The comparable code index could not be loaded."
+    ) : [];
     const reportById = new Map(reports.map(report => [report.id, report]));
     const index = themes.map(theme => {
         const report = reportById.get(theme.report_id);
         return {
+            kind: "theme",
             caseNumber: report.case_number,
             participantCode: report.participant_code,
             sessionId: report.session_id,
-            position: `T${theme.theme_number}`,
+            position: `TH${theme.theme_number}`,
             label: theme.theme_label
         };
-    });
+    }).concat(categories.map(category => {
+        const report = reportById.get(category.report_id);
+        return {
+            kind: "category",
+            caseNumber: report.case_number,
+            participantCode: report.participant_code,
+            sessionId: report.session_id,
+            position: `CA${category.category_number}`,
+            label: category.category_label
+        };
+    }), codes.map(code => {
+        const report = reportById.get(code.report_id);
+        return {
+            kind: "code",
+            caseNumber: report.case_number,
+            participantCode: report.participant_code,
+            sessionId: report.session_id,
+            position: `CO${code.code_number}`,
+            label: code.code_label
+        };
+    }));
     selectedCases.forEach(caseContext => {
         caseContext.themes.forEach(theme => {
             const source = {
+                kind: "theme",
                 caseNumber: caseContext.report.caseNumber,
                 participantCode: caseContext.report.participantCode,
                 sessionId: caseContext.report.sessionId,
-                position: `T${theme.theme_number}`,
+                position: `TH${theme.theme_number}`,
                 label: theme.theme_label
+            };
+            if (!index.some(item =>
+                item.caseNumber === source.caseNumber
+                && item.position === source.position
+            )) index.push(source);
+        });
+        caseContext.categories.forEach(category => {
+            const source = {
+                kind: "category",
+                caseNumber: caseContext.report.caseNumber,
+                participantCode: caseContext.report.participantCode,
+                sessionId: caseContext.report.sessionId,
+                position: `CA${category.category_number}`,
+                label: category.category_label
+            };
+            if (!index.some(item =>
+                item.caseNumber === source.caseNumber
+                && item.position === source.position
+            )) index.push(source);
+        });
+        caseContext.codes.forEach(code => {
+            const source = {
+                kind: "code",
+                caseNumber: caseContext.report.caseNumber,
+                participantCode: caseContext.report.participantCode,
+                sessionId: caseContext.report.sessionId,
+                position: `CO${code.code_number}`,
+                label: code.code_label
             };
             if (!index.some(item =>
                 item.caseNumber === source.caseNumber
@@ -671,7 +856,7 @@ async function discuss(req, res, supabase, openaiClient) {
     if (!selection.length) {
         throw new ReviewRequestError(
             400,
-            "Select at least one case, theme, or code from Forms 1–3 before sending a discussion message."
+            "Select at least one case, code, category, or theme before sending a discussion message."
         );
     }
     const requestedWorkbookId = safeId(req.body?.workbookImportId);
@@ -729,7 +914,7 @@ async function discuss(req, res, supabase, openaiClient) {
         supabase,
         selection
     );
-    const comparableThemeIndex = await loadComparableThemeIndex(
+    const comparableAnalysisIndex = await loadComparableAnalysisIndex(
         supabase,
         selectedCases
     );
@@ -738,7 +923,7 @@ async function discuss(req, res, supabase, openaiClient) {
         {
             selection,
             selectedCases,
-            comparableThemeIndex,
+            comparableAnalysisIndex,
             workbookImport,
             conversation: [
                 ...previousMessages,
@@ -752,7 +937,7 @@ async function discuss(req, res, supabase, openaiClient) {
         selectedCaseNumbers: selectedCases.map(item =>
             item.report.caseNumber
         ),
-        comparableThemeCount: comparableThemeIndex.length,
+        comparableAnalysisCount: comparableAnalysisIndex.length,
         sourceAssessments: result.sourceAssessments,
         proposedGroupings: result.proposedGroupings,
         uncertainty: result.uncertainty
@@ -810,7 +995,7 @@ async function requestCaseReanalysis(req, res, supabase, openaiClient) {
     if (requestError?.code === "23505") {
         throw new ReviewRequestError(
             409,
-            "This case already has a re-analysis request awaiting review. Review or reject that proposal before starting another."
+            "This case already has a re-analysis run in progress. Wait for it to finish before sending more feedback."
         );
     }
     if (requestError || !requestId) {
@@ -869,7 +1054,8 @@ async function previewProjectWideReanalysis(req, res, supabase) {
             eligibleCaseCount: preview.eligible_case_count,
             openRequestExcludedCount: preview.open_request_excluded_count,
             archivedCaseExcludedCount: preview.archived_case_excluded_count,
-            currentReportsPreserved: true,
+            priorReportVersionsPreserved: true,
+            completedVersionsPublishedAutomatically: true,
             researcherApprovalRequiredBeforeInspection: false,
             consolidatedBatchDownloadWhenComplete: true
         }
@@ -911,7 +1097,8 @@ async function requestProjectWideReanalysis(req, res, supabase) {
         eligibleCaseCount: batch.eligible_case_count,
         queuedCaseCount: batch.queued_case_count,
         workerScheduled,
-        currentReportsPreserved: true,
+        priorReportVersionsPreserved: true,
+        completedVersionsPublishedAutomatically: true,
         researcherApprovalRequiredBeforeInspection: false,
         consolidatedBatchDownloadWhenComplete: true
     });
@@ -927,48 +1114,6 @@ async function cancelProjectWideReanalysis(req, res, supabase) {
     } catch (error) {
         throw new ReviewRequestError(409, error.message);
     }
-}
-
-async function reviewCaseReanalysis(req, res, supabase) {
-    const requestId = safeId(req.body?.requestId);
-    if (!requestId) {
-        throw new ReviewRequestError(400, "Choose a re-analysis proposal.");
-    }
-    const decision = req.body?.decision === "approved"
-        ? "approved"
-        : req.body?.decision === "rejected"
-            ? "rejected"
-            : null;
-    if (!decision) {
-        throw new ReviewRequestError(
-            400,
-            "Choose whether to approve or reject the proposed report."
-        );
-    }
-    const reviewerNotes = safeResearcherNotes(
-        req.body?.reviewerNotes,
-        { required: false }
-    );
-    const { data: newReportId, error } = await supabase.rpc(
-        "review_automatic_case_reanalysis",
-        {
-            p_request_id: requestId,
-            p_decision: decision,
-            p_reviewer_notes: reviewerNotes
-        }
-    );
-    if (error) {
-        throw new ReviewRequestError(
-            409,
-            "This proposal could not be reviewed. Refresh the workspace; its source report may no longer be current or it may already have a decision."
-        );
-    }
-    return res.status(200).json({
-        requestId,
-        decision,
-        newReportId: newReportId || null,
-        currentReportChanged: decision === "approved"
-    });
 }
 
 export default async function handler(req, res) {
@@ -1052,9 +1197,6 @@ export default async function handler(req, res) {
         }
         if (req.body?.action === "cancel_project_wide_reanalysis") {
             return await cancelProjectWideReanalysis(req, res, supabase);
-        }
-        if (req.body?.action === "review_case_reanalysis") {
-            return await reviewCaseReanalysis(req, res, supabase);
         }
         throw new ReviewRequestError(400, "Unknown review action.");
     } catch (error) {

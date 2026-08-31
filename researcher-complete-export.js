@@ -11,7 +11,7 @@
     const button = originalButton.cloneNode(true);
     button.id = originalButton.id;
     button.textContent = "Download complete Excel analysis";
-    button.title = "Downloads every active case in one Excel workbook. The workbook keeps its established compact layout while the dashboard provides four separate review forms; the 100-case dashboard page size does not limit this export.";
+    button.title = "Downloads every active case in one Excel workbook with separate MU, CO, CA, and TH structures; the 100-case dashboard page size does not limit this export.";
     originalButton.replaceWith(button);
 
     if (lockButton) {
@@ -30,7 +30,7 @@
         button.disabled = true;
         const oldLabel = button.textContent;
         button.textContent = "Preparing complete Excel…";
-        status.textContent = "Preparing the complete corpus. Total validated mentions define each K/C/T level, and equal mention counts are grouped together. Keyword, code, and theme ties are ordered alphabetically inside their shared rank cell.";
+        status.textContent = "Preparing the complete corpus. MU, CO, CA, and TH identifiers remain in headers while analytical cells contain substantive content only.";
         status.className = "muted";
 
         try {
@@ -44,14 +44,14 @@
             if (!response.ok) {
                 const data = await response.json().catch(() => ({}));
                 throw new Error(
-                    data.error || "The frequency-ranked Excel export could not be generated."
+                    data.error || "The complete case-analysis Excel export could not be generated."
                 );
             }
 
             const blob = await response.blob();
             const disposition = response.headers.get("Content-Disposition") || "";
             const filename = disposition.match(/filename="([^"]+)"/)?.[1]
-                || "PLI-frequency-ranked-analysis.xlsx";
+                || "PLI-complete-case-analysis.xlsx";
             const caseCount = response.headers.get("X-PLI-Case-Count");
             const link = document.createElement("a");
             const url = URL.createObjectURL(blob);

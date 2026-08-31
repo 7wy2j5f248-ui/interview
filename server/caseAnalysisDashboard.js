@@ -400,7 +400,19 @@ export async function handleCaseAnalysisDashboard(req, res) {
         const frameworkIds = [...new Set(reports.map(
             report => report.analysis_framework_id
         ).filter(Boolean))];
-        const [codes, themes, highlights, themeCodes, projects, frameworks] =
+        const [
+            codes,
+            categories,
+            themes,
+            meaningUnits,
+            codeMeaningUnits,
+            categoryCodes,
+            themeCategories,
+            highlights,
+            themeCodes,
+            projects,
+            frameworks
+        ] =
             await Promise.all([
                 reportIds.length ? requireAllData(
                     () => supabase
@@ -413,12 +425,51 @@ export async function handleCaseAnalysisDashboard(req, res) {
                 ) : [],
                 reportIds.length ? requireAllData(
                     () => supabase
+                        .from("qualitative_case_categories")
+                        .select("id, report_id, category_number, category_label, rationale")
+                        .in("report_id", reportIds)
+                        .order("report_id", { ascending: true })
+                        .order("category_number", { ascending: true }),
+                    "Case categories could not be loaded."
+                ) : [],
+                reportIds.length ? requireAllData(
+                    () => supabase
                         .from("qualitative_case_themes")
                         .select("id, report_id, theme_number, theme_label, rationale")
                         .in("report_id", reportIds)
                         .order("report_id", { ascending: true })
                         .order("theme_number", { ascending: true }),
                     "Case themes could not be loaded."
+                ) : [],
+                reportIds.length ? requireAllData(
+                    () => supabase
+                        .from("qualitative_case_meaning_units")
+                        .select("id, report_id, unit_number, message_id, exact_text, start_offset, end_offset, anchor_expressions")
+                        .in("report_id", reportIds)
+                        .order("report_id", { ascending: true })
+                        .order("unit_number", { ascending: true }),
+                    "Transcript meaning units could not be loaded."
+                ) : [],
+                reportIds.length ? requireAllData(
+                    () => supabase
+                        .from("qualitative_case_code_meaning_units")
+                        .select("report_id, code_id, meaning_unit_id")
+                        .in("report_id", reportIds),
+                    "Code-to-meaning-unit relationships could not be loaded."
+                ) : [],
+                reportIds.length ? requireAllData(
+                    () => supabase
+                        .from("qualitative_case_category_codes")
+                        .select("report_id, category_id, code_id")
+                        .in("report_id", reportIds),
+                    "Category-to-code relationships could not be loaded."
+                ) : [],
+                reportIds.length ? requireAllData(
+                    () => supabase
+                        .from("qualitative_case_theme_categories")
+                        .select("report_id, theme_id, category_id")
+                        .in("report_id", reportIds),
+                    "Theme-to-category relationships could not be loaded."
                 ) : [],
                 reportIds.length ? requireAllData(
                     () => supabase
@@ -454,6 +505,10 @@ export async function handleCaseAnalysisDashboard(req, res) {
                     "Case analysis-framework lineage could not be loaded."
                 ) : []
             ]);
+        const enrichedMeaningUnits = await enrichAnalysisHighlightSources(
+            supabase,
+            meaningUnits
+        );
         const enrichedHighlights = await enrichAnalysisHighlightSources(
             supabase,
             highlights
@@ -472,7 +527,21 @@ export async function handleCaseAnalysisDashboard(req, res) {
             descriptor
         ]));
         const codesByReport = groupedBy(codes, "report_id");
+        const categoriesByReport = groupedBy(categories, "report_id");
         const themesByReport = groupedBy(themes, "report_id");
+        const meaningUnitsByReport = groupedBy(
+            enrichedMeaningUnits,
+            "report_id"
+        );
+        const codeMeaningUnitsByReport = groupedBy(
+            codeMeaningUnits,
+            "report_id"
+        );
+        const categoryCodesByReport = groupedBy(categoryCodes, "report_id");
+        const themeCategoriesByReport = groupedBy(
+            themeCategories,
+            "report_id"
+        );
         const highlightsByReport = groupedBy(
             enrichedHighlights,
             "report_id"
@@ -537,7 +606,14 @@ export async function handleCaseAnalysisDashboard(req, res) {
                     reanalysisRequestId: report.reanalysis_request_id || null
                 },
                 codes: codesByReport.get(report.id) || [],
+                categories: categoriesByReport.get(report.id) || [],
                 themes: themesByReport.get(report.id) || [],
+                meaningUnits: meaningUnitsByReport.get(report.id) || [],
+                codeMeaningUnits:
+                    codeMeaningUnitsByReport.get(report.id) || [],
+                categoryCodes: categoryCodesByReport.get(report.id) || [],
+                themeCategories:
+                    themeCategoriesByReport.get(report.id) || [],
                 highlights: highlightsByReport.get(report.id) || [],
                 themeCodes: mappingsByReport.get(report.id) || []
             }, {

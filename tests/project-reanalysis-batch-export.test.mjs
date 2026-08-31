@@ -59,7 +59,7 @@ function sampleData() {
             request_number: 1,
             reason_code: "analysis_framework_changed",
             researcher_notes: "Apply direct sleep relevance.",
-            status: "proposal_ready",
+            status: "completed",
             project_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
             analysis_framework_id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
             project_reanalysis_batch_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
@@ -73,11 +73,22 @@ function sampleData() {
                 themes: [{
                     label: "Sleep routine",
                     rationale: "Directly concerns sleep timing.",
+                    categoryNumbers: [1],
+                    codeNumbers: [1]
+                }],
+                categories: [{
+                    label: "Delayed sleep timing",
+                    rationale: "Related descriptions of going to bed late.",
                     codeNumbers: [1]
                 }],
                 codes: [{
                     label: "Late bedtime",
                     rationale: "Repeated delayed bedtime.",
+                    meaningUnits: [{
+                        messageId: "message-1",
+                        exactText: "go to bed after midnight",
+                        anchors: ["after midnight"]
+                    }],
                     highlights: [{
                         messageId: "message-1",
                         exactText: "go to bed after midnight"
@@ -94,6 +105,7 @@ function sampleData() {
                     exactText: "go to bed after midnight",
                     transcriptGrounded: true,
                     supportsCode: true,
+                    supportsCategory: true,
                     supportsTheme: true,
                     researchScopeRelevant: true,
                     accepted: true,
@@ -111,7 +123,7 @@ function sampleData() {
             participant_code: "P0001",
             case_interpretation: "The participant discusses work and sleep.",
             analysis_version: "automatic-case-analysis-v4",
-            superseded_at: null
+            superseded_at: "2026-08-31T07:59:00.000Z"
         }],
         sourceCodes: [{
             id: "code-source",
@@ -159,7 +171,7 @@ async function workbookBuffer(data) {
     return Buffer.concat(chunks);
 }
 
-test("complete batch export separates current and proposed analysis with provenance", async () => {
+test("complete batch export separates prior and completed analysis with provenance", async () => {
     const buffer = await workbookBuffer(sampleData());
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(buffer);
@@ -168,31 +180,33 @@ test("complete batch export separates current and proposed analysis with provena
         "1 Batch summary",
         "2 Case comparison",
         "3 Current source evidence",
-        "4 Revised proposed evidence",
+        "4 Completed revised evidence",
         "5 Relevance & quality audit"
     ]);
     const summary = workbook.getWorksheet("1 Batch summary");
     assert.equal(summary.getCell("B2").value,
-        "Complete project-wide revised analysis — proposed output only");
-    assert.match(String(summary.getCell("B21").value), /does not approve/);
+        "Completed project-wide revised analysis");
+    assert.match(String(summary.getCell("B21").value), /already published/);
 
     const comparison = workbook.getWorksheet("2 Case comparison");
     assert.equal(comparison.getCell("A2").value, "P0001-S01");
-    assert.equal(comparison.getCell("G2").value, "Current report preserved");
+    assert.match(String(comparison.getCell("G2").value), /^Superseded/);
     assert.match(String(comparison.getCell("N2").value), /irregular sleep/);
-    assert.match(String(comparison.getCell("R2").value), /Not audited/);
-    assert.equal(comparison.getCell("Z2").value,
-        "Not reviewed — proposal only");
+    assert.match(String(comparison.getCell("R2").value), /1\/1 accepted/);
+    assert.match(String(comparison.getCell("S2").value), /Not audited/);
+    assert.equal(comparison.getCell("AA2").value,
+        "Completed automatically; researcher review follows");
 
-    const proposed = workbook.getWorksheet("4 Revised proposed evidence");
-    assert.equal(proposed.getCell("D2").value, "Sleep routine");
-    assert.equal(proposed.getCell("G2").value, "Late bedtime");
-    assert.equal(proposed.getCell("P2").value,
-        "Proposal only — not current");
+    const completed = workbook.getWorksheet("4 Completed revised evidence");
+    assert.equal(completed.getCell("D2").value, "Sleep routine");
+    assert.equal(completed.getCell("G2").value, "Delayed sleep timing");
+    assert.equal(completed.getCell("J2").value, "Late bedtime");
+    assert.equal(completed.getCell("S2").value, "Completed and current");
 
     const audit = workbook.getWorksheet("5 Relevance & quality audit");
     assert.equal(audit.getCell("M2").value, true);
-    assert.match(String(audit.getCell("N2").value), /Direct sleep/);
+    assert.equal(audit.getCell("N2").value, true);
+    assert.match(String(audit.getCell("O2").value), /Direct sleep/);
 });
 
 test("complete batch workbook contains no legacy comments or VML", async () => {
@@ -212,16 +226,17 @@ test("project-wide UI makes consolidated inspection independent of approval", as
         readFile(new URL("../supabase/migrations/20260831074725_complete_project_reanalysis_for_export.sql", import.meta.url), "utf8"),
         readFile(new URL("../server/projectReanalysisBatchExport.js", import.meta.url), "utf8")
     ]);
-    assert.match(html, /full batch completes without[\s\S]*case-by-case approval/);
+    assert.match(html, /full batch[\s\S]*completes without case-by-case approval/);
     assert.match(client, /Download complete batch review/);
     assert.match(client, /download_project_reanalysis_batch/);
-    assert.match(client, /!request\.project_reanalysis_batch_id/);
+    assert.match(client, /batch\.queued_case_count === 0/);
+    assert.match(client, /batch\.processing_case_count === 0/);
     assert.match(endpoint, /X-PLI-Report-Effect/);
     assert.match(endpoint, /writeProjectReanalysisBatchWorkbook/);
     assert.match(migration, /Unreviewed proposals do not block batch completion/);
     assert.match(migration, /when failed_count > 0 then 'completed_with_failures'/);
     assert.match(exporter, /Theme hierarchy audit/);
-    assert.match(exporter, /Ungrouped review-needed code/);
-    assert.match(exporter, /No theme was invented/);
+    assert.match(exporter, /Firm code retained without a category/);
+    assert.match(exporter, /No unsupported category or theme was forced/);
     assert.doesNotMatch(migration, /set status\s*=\s*'approved'/);
 });

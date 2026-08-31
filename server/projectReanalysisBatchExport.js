@@ -60,7 +60,7 @@ export async function loadProjectReanalysisBatchExport(supabase, batchIdValue) {
         || batch.queued_case_count > 0
         || batch.processing_case_count > 0) {
         const error = new Error(
-            "The complete batch review will be available after every eligible case has a proposal or a documented terminal failure."
+            "The complete batch review will be available after every eligible case has a completed result or a documented terminal failure."
         );
         error.status = 409;
         throw error;
@@ -107,7 +107,7 @@ export async function loadProjectReanalysisBatchExport(supabase, batchIdValue) {
         relatedRows(requestIds, chunk => supabase
             .from("automatic_case_reanalysis_proposals")
             .select("id, request_id, source_report_id, proposal_version, model, proposed_report, relevance_audit, source_quality_flags, input_token_count, created_at, project_id, analysis_framework_id")
-            .in("request_id", chunk), "Batch proposals could not be loaded."),
+            .in("request_id", chunk), "Completed batch results could not be loaded."),
         relatedRows(requestIds, chunk => supabase
             .from("automatic_case_reanalysis_reviews")
             .select("id, request_id, proposal_id, decision, reviewer_notes, reviewed_by, new_report_id, reviewed_at")
@@ -204,15 +204,15 @@ function finishSheet(sheet) {
 }
 
 function summarizeThemes(report) {
-    return (report?.themes || []).map((theme, index) =>
-        `T${index + 1} ${theme.label}`
-    ).join("; ");
+    return (report?.themes || []).map(theme => theme.label).join("; ");
 }
 
 function summarizeCodes(report) {
-    return (report?.codes || []).map((code, index) =>
-        `C${index + 1} ${code.label}`
-    ).join("; ");
+    return (report?.codes || []).map(code => code.label).join("; ");
+}
+
+function summarizeCategories(report) {
+    return (report?.categories || []).map(category => category.label).join("; ");
 }
 
 function summaryRows(data, createdAt) {
@@ -222,7 +222,7 @@ function summaryRows(data, createdAt) {
     ).length;
     const preserved = sourceReports.filter(report => !report.superseded_at).length;
     return [
-        ["Export type", "Complete project-wide revised analysis — proposed output only"],
+        ["Export type", "Completed project-wide revised analysis"],
         ["Research project", project.project_name],
         ["Research topic", project.research_topic],
         ["Project code", project.project_code],
@@ -236,12 +236,12 @@ function summaryRows(data, createdAt) {
         ["Exported at", createdAt.toISOString()],
         ["Eligible cases", batch.eligible_case_count],
         ["Stored case requests", requests.length],
-        ["Proposal-ready cases", statusCount("proposal_ready")],
+        ["Completed cases", statusCount("completed")],
         ["Failed cases", statusCount("failed")],
         ["Cancelled cases", statusCount("cancelled")],
-        ["Stored proposals", proposals.length],
-        ["Current source reports preserved", `${preserved}/${sourceReports.length}`],
-        ["Promotion caused by download", "None — downloading does not approve, promote, supersede, or overwrite any report"],
+        ["Stored completed result payloads", proposals.length],
+        ["Prior source reports still current", `${preserved}/${sourceReports.length}`],
+        ["Effect of download", "None — downloading is read-only; PLI already published each completed version automatically"],
         ["Batch reason", batch.reason_code],
         ["Researcher notes", batch.researcher_notes],
         ["Study scope", framework.study_scope],
@@ -297,11 +297,11 @@ function orderedRequests(data, maps) {
 function sourceHierarchySummary(report, maps) {
     const themes = (maps.themesByReport.get(report.id) || [])
         .sort((a, b) => a.theme_number - b.theme_number)
-        .map(theme => `T${theme.theme_number} ${theme.theme_label}`)
+        .map(theme => theme.theme_label)
         .join("; ");
     const codes = (maps.codesByReport.get(report.id) || [])
         .sort((a, b) => a.code_number - b.code_number)
-        .map(code => `C${code.code_number} ${code.code_label}`)
+        .map(code => code.code_label)
         .join("; ");
     return { themes, codes };
 }
@@ -322,11 +322,12 @@ function addComparisonSheet(workbook, data, maps) {
         { header: "Source case interpretation", key: "sourceInterpretation", width: 55 },
         { header: "Source themes", key: "sourceThemes", width: 55 },
         { header: "Source codes", key: "sourceCodes", width: 55 },
-        { header: "Proposed report ID", key: "proposalId", width: 38 },
-        { header: "Proposed analysis version", key: "proposalVersion", width: 28 },
-        { header: "Proposed case interpretation", key: "proposedInterpretation", width: 55 },
-        { header: "Proposed themes", key: "proposedThemes", width: 55 },
-        { header: "Proposed codes", key: "proposedCodes", width: 55 },
+        { header: "Completed result ID", key: "proposalId", width: 38 },
+        { header: "Completed analysis version", key: "proposalVersion", width: 28 },
+        { header: "Completed case interpretation", key: "proposedInterpretation", width: 55 },
+        { header: "Completed themes", key: "proposedThemes", width: 55 },
+        { header: "Completed categories", key: "proposedCategories", width: 55 },
+        { header: "Completed codes", key: "proposedCodes", width: 55 },
         { header: "Relevance audit", key: "audit", width: 42 },
         { header: "Theme hierarchy audit", key: "hierarchyAudit", width: 55 },
         { header: "Source-quality flags", key: "flags", width: 20 },
@@ -335,8 +336,8 @@ function addComparisonSheet(workbook, data, maps) {
         { header: "Researcher notes", key: "notes", width: 55 },
         { header: "Framework version", key: "frameworkVersion", width: 18 },
         { header: "Project / topic", key: "projectTopic", width: 40 },
-        { header: "Proposal created", key: "proposalCreated", width: 24 },
-        { header: "Review decision", key: "decision", width: 18 }
+        { header: "Result generated", key: "proposalCreated", width: 24 },
+        { header: "Researcher review", key: "decision", width: 38 }
     ]);
     orderedRequests(data, maps).forEach(request => {
         const report = maps.reportById.get(request.source_report_id) || {};
@@ -364,6 +365,7 @@ function addComparisonSheet(workbook, data, maps) {
                 proposal?.proposed_report?.caseInterpretation
             ),
             proposedThemes: cellText(summarizeThemes(proposal?.proposed_report)),
+            proposedCategories: cellText(summarizeCategories(proposal?.proposed_report)),
             proposedCodes: cellText(summarizeCodes(proposal?.proposed_report)),
             audit: proposal
                 ? `${checks.filter(check => check.accepted).length}/${checks.length} accepted · ${proposal.relevance_audit?.overallSummary || ""}`
@@ -373,8 +375,8 @@ function addComparisonSheet(workbook, data, maps) {
                     const hierarchy = proposal.relevance_audit
                         ?.labelQualityAudit?.themeHierarchy;
                     return hierarchy
-                        ? `${(hierarchy.checks || []).filter(check => check.accepted).length}/${(hierarchy.checks || []).length} themes accepted · ${(hierarchy.ungroupedCodes || []).length} ungrouped review-needed codes · no automatic promotion`
-                        : "Not audited under the expanded global theme hierarchy standard";
+                        ? `${(hierarchy.checks || []).filter(check => check.accepted).length}/${(hierarchy.checks || []).length} themes accepted · ${(hierarchy.unsynthesized || []).length} lower-level findings retained without forced synthesis`
+                        : "Not audited under the MU → CO → CA → TH standard";
                 })()
                 : "",
             flags: (proposal?.source_quality_flags || []).length,
@@ -384,7 +386,7 @@ function addComparisonSheet(workbook, data, maps) {
             frameworkVersion: data.framework.version_number,
             projectTopic: `${data.project.project_name} / ${data.project.research_topic}`,
             proposalCreated: proposal?.created_at || "",
-            decision: review?.decision || "Not reviewed — proposal only"
+            decision: review?.decision || "Completed automatically; researcher review follows"
         }, proposal ? "FFFFF2CC" : request.status === "failed" ? "FFFCE4D6" : null);
     });
     finishSheet(sheet);
@@ -406,15 +408,15 @@ function addSourceEvidenceSheet(workbook, data, maps) {
     configureSheet(sheet, [
         { header: "Case", key: "case", width: 16 },
         { header: "Source report ID", key: "sourceId", width: 38 },
-        { header: "Tn", key: "themePosition", width: 7 },
+        { header: "TH", key: "themePosition", width: 7 },
         { header: "Current theme", key: "theme", width: 28 },
         { header: "Theme rationale", key: "themeRationale", width: 55 },
-        { header: "Cn", key: "codePosition", width: 7 },
+        { header: "CO", key: "codePosition", width: 7 },
         { header: "Current code", key: "code", width: 30 },
         { header: "Code rationale", key: "codeRationale", width: 55 },
-        { header: "Kn", key: "keywordPosition", width: 7 },
+        { header: "MU", key: "keywordPosition", width: 7 },
         { header: "Message ID", key: "messageId", width: 28 },
-        { header: "Exact keyword evidence", key: "exact", width: 45 },
+        { header: "Meaning unit evidence", key: "exact", width: 45 },
         { header: "Source language", key: "language", width: 14 },
         { header: "Stored source message", key: "message", width: 55 },
         { header: "Stored English translation", key: "english", width: 55 }
@@ -435,7 +437,7 @@ function addSourceEvidenceSheet(workbook, data, maps) {
                 appendRow(sheet, {
                     case: report.case_number,
                     sourceId: report.id,
-                    themePosition: `T${theme.theme_number}`,
+                    themePosition: `TH${theme.theme_number}`,
                     theme: theme.theme_label,
                     themeRationale: cellText(theme.rationale)
                 });
@@ -453,13 +455,13 @@ function addSourceEvidenceSheet(workbook, data, maps) {
                     appendRow(sheet, {
                         case: report.case_number,
                         sourceId: report.id,
-                        themePosition: `T${theme.theme_number}`,
+                        themePosition: `TH${theme.theme_number}`,
                         theme: theme.theme_label,
                         themeRationale: cellText(theme.rationale),
-                        codePosition: `C${code.code_number}`,
+                        codePosition: `CO${code.code_number}`,
                         code: code.code_label,
                         codeRationale: cellText(code.rationale),
-                        keywordPosition: highlight ? `K${highlight.keyword_number}` : "",
+                        keywordPosition: highlight ? `MU${highlight.keyword_number}` : "",
                         messageId: highlight?.message_id || "",
                         exact: cellText(highlight?.exact_text),
                         ...translation
@@ -476,10 +478,10 @@ function addSourceEvidenceSheet(workbook, data, maps) {
                     case: report.case_number,
                     sourceId: report.id,
                     theme: "Unassigned in preserved source",
-                    codePosition: `C${code.code_number}`,
+                    codePosition: `CO${code.code_number}`,
                     code: code.code_label,
                     codeRationale: cellText(code.rationale),
-                    keywordPosition: highlight ? `K${highlight.keyword_number}` : "",
+                    keywordPosition: highlight ? `MU${highlight.keyword_number}` : "",
                     messageId: highlight?.message_id || "",
                     exact: cellText(highlight?.exact_text),
                     ...evidenceTranslation(maps, highlight?.message_id)
@@ -491,26 +493,29 @@ function addSourceEvidenceSheet(workbook, data, maps) {
 }
 
 function addProposedEvidenceSheet(workbook, data, maps) {
-    const sheet = workbook.addWorksheet("4 Revised proposed evidence", {
+    const sheet = workbook.addWorksheet("4 Completed revised evidence", {
         views: [{ state: "frozen", ySplit: 1 }]
     });
     configureSheet(sheet, [
         { header: "Case", key: "case", width: 16 },
-        { header: "Proposal ID", key: "proposalId", width: 38 },
-        { header: "Tn", key: "themePosition", width: 7 },
-        { header: "PROPOSED theme", key: "theme", width: 28 },
-        { header: "Proposed theme rationale", key: "themeRationale", width: 55 },
-        { header: "Cn", key: "codePosition", width: 7 },
-        { header: "PROPOSED code", key: "code", width: 30 },
-        { header: "Proposed code rationale", key: "codeRationale", width: 55 },
-        { header: "Kn", key: "keywordPosition", width: 7 },
+        { header: "Completed result ID", key: "proposalId", width: 38 },
+        { header: "TH", key: "themePosition", width: 7 },
+        { header: "Theme", key: "theme", width: 28 },
+        { header: "Theme rationale", key: "themeRationale", width: 55 },
+        { header: "CA", key: "categoryPosition", width: 7 },
+        { header: "Category", key: "category", width: 32 },
+        { header: "Category rationale", key: "categoryRationale", width: 55 },
+        { header: "CO", key: "codePosition", width: 7 },
+        { header: "Code", key: "code", width: 30 },
+        { header: "Code rationale", key: "codeRationale", width: 55 },
+        { header: "MU", key: "keywordPosition", width: 7 },
         { header: "Message ID", key: "messageId", width: 28 },
-        { header: "Exact proposed evidence", key: "exact", width: 45 },
+        { header: "Meaning unit evidence", key: "exact", width: 45 },
         { header: "Source language", key: "language", width: 14 },
         { header: "Stored source message", key: "message", width: 55 },
         { header: "Stored English translation", key: "english", width: 55 },
         { header: "Framework version", key: "frameworkVersion", width: 18 },
-        { header: "Proposal status", key: "status", width: 18 }
+        { header: "Completion status", key: "status", width: 22 }
     ]);
     orderedRequests(data, maps).forEach(request => {
         const source = maps.reportById.get(request.source_report_id) || {};
@@ -518,6 +523,7 @@ function addProposedEvidenceSheet(workbook, data, maps) {
         if (!proposal) return;
         const report = proposal.proposed_report || {};
         const codes = report.codes || [];
+        const categories = report.categories || [];
         const linkedCodes = new Set();
         (report.themes || []).forEach((theme, themeIndex) => {
             const codeNumbers = theme.codeNumbers || [];
@@ -525,34 +531,44 @@ function addProposedEvidenceSheet(workbook, data, maps) {
                 appendRow(sheet, {
                     case: source.case_number || request.session_id,
                     proposalId: proposal.id,
-                    themePosition: `T${themeIndex + 1}`,
+                    themePosition: `TH${themeIndex + 1}`,
                     theme: theme.label,
                     themeRationale: cellText(theme.rationale),
                     frameworkVersion: data.framework.version_number,
-                    status: "Proposal only"
+                    status: "Completed"
                 }, "FFFFF2CC");
             }
             codeNumbers.forEach(codeNumber => {
                 const code = codes[codeNumber - 1];
                 if (!code) return;
+                const categoryIndex = categories.findIndex((category, index) =>
+                    (theme.categoryNumbers || []).includes(index + 1)
+                    && (category.codeNumbers || []).includes(codeNumber)
+                );
+                const category = categoryIndex >= 0
+                    ? categories[categoryIndex]
+                    : null;
                 linkedCodes.add(codeNumber);
                 const highlights = code.highlights || [];
                 (highlights.length ? highlights : [null]).forEach((highlight, index) => {
                     appendRow(sheet, {
                         case: source.case_number || request.session_id,
                         proposalId: proposal.id,
-                        themePosition: `T${themeIndex + 1}`,
+                        themePosition: `TH${themeIndex + 1}`,
                         theme: theme.label,
                         themeRationale: cellText(theme.rationale),
-                        codePosition: `C${codeNumber}`,
+                        categoryPosition: category ? `CA${categoryIndex + 1}` : "",
+                        category: category?.label || "",
+                        categoryRationale: cellText(category?.rationale),
+                        codePosition: `CO${codeNumber}`,
                         code: code.label,
                         codeRationale: cellText(code.rationale),
-                        keywordPosition: highlight ? `K${index + 1}` : "",
+                        keywordPosition: highlight ? `MU${index + 1}` : "",
                         messageId: highlight?.messageId || "",
                         exact: cellText(highlight?.exactText),
                         ...evidenceTranslation(maps, highlight?.messageId),
                         frameworkVersion: data.framework.version_number,
-                        status: "Proposal only — not current"
+                        status: "Completed and current"
                     }, "FFFFF2CC");
                 });
             });
@@ -564,16 +580,16 @@ function addProposedEvidenceSheet(workbook, data, maps) {
                 appendRow(sheet, {
                     case: source.case_number || request.session_id,
                     proposalId: proposal.id,
-                    theme: "Ungrouped review-needed code — no theme invented",
-                    codePosition: `C${codeIndex + 1}`,
+                    theme: "Firm code retained without forced synthesis",
+                    codePosition: `CO${codeIndex + 1}`,
                     code: code.label,
                     codeRationale: cellText(code.rationale),
-                    keywordPosition: highlight ? `K${index + 1}` : "",
+                    keywordPosition: highlight ? `MU${index + 1}` : "",
                     messageId: highlight?.messageId || "",
                     exact: cellText(highlight?.exactText),
                     ...evidenceTranslation(maps, highlight?.messageId),
                     frameworkVersion: data.framework.version_number,
-                    status: "Proposal only — not current"
+                    status: "Completed and current"
                 }, "FFFFF2CC");
             });
         });
@@ -589,13 +605,14 @@ function addAuditSheet(workbook, data, maps) {
         { header: "Case", key: "case", width: 16 },
         { header: "Request status", key: "status", width: 18 },
         { header: "Record type", key: "type", width: 24 },
-        { header: "Cn", key: "codePosition", width: 7 },
+        { header: "CO", key: "codePosition", width: 7 },
         { header: "Code", key: "code", width: 30 },
         { header: "Themes", key: "themes", width: 40 },
         { header: "Message ID", key: "messageId", width: 28 },
         { header: "Exact evidence / source turn", key: "exact", width: 50 },
         { header: "Transcript grounded", key: "grounded", width: 20 },
         { header: "Supports code", key: "supportsCode", width: 16 },
+        { header: "Supports category", key: "supportsCategory", width: 19 },
         { header: "Supports theme", key: "supportsTheme", width: 18 },
         { header: "Project-scope relevant", key: "scope", width: 22 },
         { header: "Accepted", key: "accepted", width: 12 },
@@ -621,13 +638,14 @@ function addAuditSheet(workbook, data, maps) {
             case: source.case_number || request.session_id,
             status: request.status,
             type: "Independent relevance check",
-            codePosition: `C${check.codeNumber}`,
+            codePosition: `CO${check.codeNumber}`,
             code: check.codeLabel,
             themes: (check.themeLabels || []).join("; "),
             messageId: check.messageId,
             exact: cellText(check.exactText),
             grounded: check.transcriptGrounded,
             supportsCode: check.supportsCode,
+            supportsCategory: check.supportsCategory,
             supportsTheme: check.supportsTheme,
             scope: check.researchScopeRelevant,
             accepted: check.accepted,
@@ -637,12 +655,11 @@ function addAuditSheet(workbook, data, maps) {
             case: source.case_number || request.session_id,
             status: request.status,
             type: "Theme hierarchy audit",
-            themes: `T${check.number} ${check.label} ← ${(check.codeNumbers || []).map(number => `C${number}`).join(", ")}`,
-            supportsTheme: check.themeHasMultipleCodes
-                && check.themeSemanticCoverage
-                && check.themeHigherLevelAbstraction
-                && check.themeNotOneToOneParaphrase
-                && check.themeCoherentStory,
+            themes: `TH${check.number} ${check.label} ← ${(check.childNumbers || []).map(number => `CA${number}`).join(", ")}`,
+            supportsTheme: check.hasMultipleChildren
+                && check.semanticCoverage
+                && check.higherLevelAbstraction
+                && check.patternedMeaning,
             scope: check.topicRelevant,
             accepted: check.accepted,
             explanation: cellText(check.explanation)
@@ -650,12 +667,12 @@ function addAuditSheet(workbook, data, maps) {
         (hierarchy?.ungroupedCodes || []).forEach(check => appendRow(sheet, {
             case: source.case_number || request.session_id,
             status: request.status,
-            type: "Ungrouped review-needed code",
-            codePosition: `C${check.codeNumber}`,
+            type: "Firm code retained without a category",
+            codePosition: `CO${check.number || check.codeNumber}`,
             code: check.label,
             supportsTheme: false,
             accepted: check.accepted,
-            explanation: cellText(`${check.reason} No theme was invented.`)
+            explanation: cellText(`${check.reason} No unsupported category or theme was forced.`)
         }, "FFFFF2CC"));
         flags.forEach(flag => appendRow(sheet, {
             case: source.case_number || request.session_id,

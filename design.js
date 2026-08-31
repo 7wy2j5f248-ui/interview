@@ -363,7 +363,7 @@
         const reason = cancellationReason.trim();
         if (!reason) throw new Error("Explain why the older run should stop.");
         if (!window.confirm(
-            "Stop this project-wide re-analysis? Queued and in-flight work will be cancelled. Existing reports will remain unchanged and all prior proposals will be retained for audit."
+            "Stop this project-wide re-analysis? Queued and in-flight work will be cancelled. Already completed versions remain current and fully auditable."
         )) return;
         setAnalysisStatus("Stopping the older project-wide instruction…");
         const response = await fetch("/api/saveDesign", {
@@ -486,7 +486,7 @@
             ? frameworkWorkspace.projects.find(item => item.id === framework.projectId)
             : null;
         const scope = framework.applicationScope === "include_completed"
-            ? "Include completed interviews from this same project/topic only. Queue versioned proposals; preserve current reports until explicit approval."
+            ? "Include completed interviews from this same project/topic only. Complete and publish new versions automatically while preserving earlier versions for review."
             : "Future analysis only. Leave all existing reports unchanged.";
         analysisReviewSummary.replaceChildren(
             reviewField("Research project", project?.project_name

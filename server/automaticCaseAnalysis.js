@@ -7,7 +7,10 @@ import {
 import { normalizeOpenAIModel } from "./modelConfiguration.js";
 import { loadParticipantCodeMap } from "./participantCodes.js";
 import { ensureEnglishTranslations } from "./messageTranslation.js";
-import { loadFrameworkForAutomaticJob } from "./analysisFramework.js";
+import {
+    loadFrameworkForAutomaticJob,
+    loadSharedAnalysisVocabulary
+} from "./analysisFramework.js";
 
 const WORKER_PATH = "/api/automatic-analysis";
 
@@ -170,10 +173,14 @@ export async function processOldestAutomaticCase(
                 "No project-bound Analysis Framework was frozen for this case. Create a framework for this research project before analysis continues."
             );
         }
+        const sharedVocabulary = await loadSharedAnalysisVocabulary(
+            supabaseClient,
+            analysisFramework.projectId
+        );
         const analysis = await generateAutomaticCaseAnalysis(
             openaiClient,
             source.messages,
-            { model, analysisFramework }
+            { model, analysisFramework, sharedVocabulary }
         );
         const { error: demographicError } = await supabaseClient.rpc(
             "save_automatic_case_demographics",
@@ -200,10 +207,12 @@ export async function processOldestAutomaticCase(
             throw new Error(
                 "The automatic individual case report was incomplete and was not saved. "
                 + `Validated ${analysis.codes.length} codes, `
+                + `${analysis.categories.length} categories, `
                 + `${analysis.themes.length} themes, and `
                 + `${analysis.invalidEvidence} invalid evidence records; `
                 + `${analysis.droppedCodes} codes were dropped and `
-                + `${analysis.unassignedCodeNumbers.length} codes were preserved as ungrouped review-needed findings.`
+                + `${analysis.unassignedCodeNumbers.length} codes and `
+                + `${analysis.unassignedCategoryNumbers.length} categories were preserved as firm unsynthesized findings.`
                 + labelProblems
             );
         }
@@ -215,11 +224,20 @@ export async function processOldestAutomaticCase(
             descriptorSources: analysis.descriptorSources,
             caseInterpretation: analysis.caseInterpretation,
             codes: analysis.codes,
-            themes: analysis.themes,
+            categories: analysis.categories,
+            themes: analysis.themes.map(theme => ({
+                ...theme,
+                codeNumbers: [...new Set(theme.categoryNumbers.flatMap(
+                    categoryNumber => analysis.categories[
+                        categoryNumber - 1
+                    ]?.codeNumbers || []
+                ))]
+            })),
             labelQualityAudit: analysis.labelQualityAudit,
             analysisHierarchyAudit:
                 analysis.labelQualityAudit?.themeHierarchy || null,
             ungroupedCodeNumbers: analysis.unassignedCodeNumbers,
+            ungroupedCategoryNumbers: analysis.unassignedCategoryNumbers,
             analysisFrameworkId: analysisFramework.id,
             analysisFrameworkVersion: analysisFramework.versionNumber,
             researchProjectId: analysisFramework.projectId,
@@ -228,7 +246,7 @@ export async function processOldestAutomaticCase(
         };
         const { data: reportId, error: completionError } =
             await supabaseClient.rpc(
-                "complete_automatic_case_analysis",
+                "complete_automatic_case_analysis_v5",
                 {
                     p_session_id: job.session_id,
                     p_model: model,

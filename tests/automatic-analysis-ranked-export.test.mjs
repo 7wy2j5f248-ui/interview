@@ -12,7 +12,6 @@ import {
     createTaskLimiter,
     rowsForIds
 } from "../server/supabaseBatching.js";
-import { rankAnalysisCase } from "../server/analysisFrequencyRanking.js";
 
 async function workbookBuffer(cases) {
     const stream = new PassThrough();
@@ -28,8 +27,8 @@ async function workbookBuffer(cases) {
     return Buffer.concat(chunks);
 }
 
-test("complete workbook uses the shared ranking and contains compact linked references", async () => {
-    const ranked = rankAnalysisCase({
+test("complete workbook uses MU CO CA TH headers and content-only analytical cells", async () => {
+    const caseRecord = {
         caseNumber: "P0001-S01",
         participantCode: "P0001",
         sessionNumber: 1,
@@ -39,35 +38,25 @@ test("complete workbook uses the shared ranking and contains compact linked refe
         language: "en",
         demographics: {},
         caseInterpretation: "Interpretation",
-        codes: [
-            { id: "weak", code_number: 1, code_label: "Weak" },
-            { id: "strong", code_number: 2, code_label: "Strong" }
-        ],
-        themes: [
-            { id: "weak-theme", theme_number: 1, theme_label: "Weak theme" },
-            { id: "strong-theme", theme_number: 2, theme_label: "Strong theme" }
-        ],
-        themeCodes: [
-            { theme_id: "weak-theme", code_id: "weak" },
-            { theme_id: "strong-theme", code_id: "strong" }
-        ],
-        highlights: [
-            { id: "w1", code_id: "weak", exact_text: "small" },
-            ...Array.from({ length: 3 }, (_, index) => ({
-                id: `s${index}`,
-                code_id: "strong",
-                exact_text: "large"
-            }))
-        ]
-    });
+        codes: [{ id: "code-1", code_number: 1, code_label: "Sleep interruption" }],
+        categories: [{ id: "category-1", category_number: 1, category_label: "Interrupted sleep" }],
+        themes: [{ id: "theme-1", theme_number: 1, theme_label: "Work disrupting boundaries around sleep" }],
+        meaningUnits: [{
+            id: "unit-1",
+            unit_number: 1,
+            message_id: "message-1",
+            exact_text: "I keep waking up at three in the morning because I am thinking about tomorrow's work.",
+            anchor_expressions: ["waking up at three", "thinking about tomorrow's work"]
+        }]
+    };
     const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(await workbookBuffer([ranked]));
+    await workbook.xlsx.load(await workbookBuffer([caseRecord]));
 
     assert.deepEqual(
         workbook.worksheets.map(sheet => sheet.name),
-        ["1 Cases & keywords", "2 Codes", "3 Themes", "4 Notes & sources"]
+        ["1 Cases & meaning units", "2 Codes", "3 Categories", "4 Themes", "5 Notes & sources"]
     );
-    const formOne = workbook.getWorksheet("1 Cases & keywords");
+    const formOne = workbook.getWorksheet("1 Cases & meaning units");
     const headers = formOne.getRow(1).values.slice(1);
     assert.deepEqual(headers.slice(0, 3), ["P#", "S#", "Language"]);
     assert.ok(!headers.includes("Session ID"));
@@ -76,31 +65,29 @@ test("complete workbook uses the shared ranking and contains compact linked refe
     assert.equal(formOne.getRow(2).getCell(reportColumn).value.result, "Available");
     assert.equal(
         formOne.getRow(2).getCell(reportColumn).value.formula,
-        "HYPERLINK(\"#'4 Notes & sources'!A2\",\"Available\")"
+        "HYPERLINK(\"#'5 Notes & sources'!A2\",\"Available\")"
     );
     assert.equal(formOne.getRow(2).height, 18);
     assert.equal(formOne.getColumn(1).width, 9);
     assert.equal(formOne.getColumn(2).width, 5);
-    assert.match(
-        workbook.getWorksheet("2 Codes").getCell("D2").value,
-        /^3 mentions each · Strong \(1 keyword\)$/
-    );
-    assert.match(
-        workbook.getWorksheet("3 Themes").getCell("D2").value,
-        /^3 mentions each · Strong theme \(1 code, 1 keyword\)$/
-    );
-    const references = workbook.getWorksheet("4 Notes & sources");
+    assert.equal(workbook.getWorksheet("2 Codes").getCell("D1").value, "CO1");
+    assert.equal(workbook.getWorksheet("2 Codes").getCell("D2").value, "Sleep interruption");
+    assert.equal(workbook.getWorksheet("3 Categories").getCell("D1").value, "CA1");
+    assert.equal(workbook.getWorksheet("3 Categories").getCell("D2").value, "Interrupted sleep");
+    assert.equal(workbook.getWorksheet("4 Themes").getCell("D1").value, "TH1");
+    assert.equal(workbook.getWorksheet("4 Themes").getCell("D2").value, "Work disrupting boundaries around sleep");
+    const references = workbook.getWorksheet("5 Notes & sources");
     assert.equal(references.getCell("A2").value, "R000001");
     assert.equal(references.getCell("F2").value, "Case briefing");
     assert.equal(references.getCell("H2").value, "Interpretation");
     assert.equal(
         references.getCell("E2").value.formula,
-        "HYPERLINK(\"#'1 Cases & keywords'!P2\",\"P2\")"
+        "HYPERLINK(\"#'1 Cases & meaning units'!P2\",\"P2\")"
     );
 });
 
-test("workbook groups equal mention ranks and uses stored English source text", async () => {
-    const ranked = rankAnalysisCase({
+test("workbook keeps position identifiers in headers and meaning-unit evidence in notes", async () => {
+    const caseRecord = {
         caseNumber: "P0002-S01",
         participantCode: "P0002",
         sessionNumber: 1,
@@ -112,86 +99,53 @@ test("workbook groups equal mention ranks and uses stored English source text", 
         caseInterpretation: "Late sleep and night work recur in this case.",
         codes: [
             { id: "work", code_number: 1, code_label: "Work schedule" },
-            { id: "sleep", code_number: 2, code_label: "Sleep patterns" }
+            { id: "sleep", code_number: 2, code_label: "Sleep timing" }
         ],
-        themes: [
-            { id: "work-theme", theme_number: 1, theme_label: "Work" },
-            { id: "sleep-theme", theme_number: 2, theme_label: "Sleep" }
+        categories: [
+            { id: "work-category", category_number: 1, category_label: "Night work scheduling" },
+            { id: "sleep-category", category_number: 2, category_label: "Delayed sleep timing" }
         ],
-        themeCodes: [
-            { theme_id: "work-theme", code_id: "work" },
-            { theme_id: "sleep-theme", code_id: "sleep" }
-        ],
-        highlights: [
-            {
-                id: "s1",
-                code_id: "sleep",
-                message_id: "message-1",
-                exact_text: "晚睡",
-                source_language: "zh",
-                english_translation: "I go to bed late."
-            },
-            {
-                id: "s2",
-                code_id: "sleep",
-                message_id: "message-2",
-                exact_text: "晚睡",
-                source_language: "zh",
-                english_translation: "I go to bed late."
-            },
-            {
-                id: "w1",
-                code_id: "work",
-                message_id: "message-3",
-                exact_text: "夜班",
-                source_language: "zh",
-                english_translation: "I work night shifts."
-            },
-            {
-                id: "w2",
-                code_id: "work",
-                message_id: "message-4",
-                exact_text: "夜班",
-                source_language: "zh",
-                english_translation: "I work night shifts."
-            }
-        ]
-    });
+        themes: [{ id: "theme-1", theme_number: 1, theme_label: "Work shifting the timing of sleep" }],
+        meaningUnits: [{
+            id: "unit-1",
+            unit_number: 1,
+            message_id: "message-1",
+            exact_text: "晚睡",
+            source_language: "zh",
+            english_translation: "I go to bed late.",
+            anchor_expressions: ["晚睡"]
+        }]
+    };
     const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(await workbookBuffer([ranked]));
+    await workbook.xlsx.load(await workbookBuffer([caseRecord]));
 
-    const formOne = workbook.getWorksheet("1 Cases & keywords");
+    const formOne = workbook.getWorksheet("1 Cases & meaning units");
     const headers = formOne.getRow(1).values.slice(1);
-    const keywordColumn = headers.indexOf("K1") + 1;
-    const keywordCell = formOne.getRow(2).getCell(keywordColumn);
-    assert.match(keywordCell.value.result, /^2 mentions each/);
-    assert.match(keywordCell.value.result, /I go to bed late\./);
-    assert.match(keywordCell.value.result, /I work night shifts\./);
-    assert.doesNotMatch(keywordCell.value.result, /晚睡|夜班/);
-    assert.match(keywordCell.value.formula, /#'4 Notes & sources'!A3/);
+    const unitColumn = headers.indexOf("MU1") + 1;
+    const unitCell = formOne.getRow(2).getCell(unitColumn);
+    assert.equal(unitCell.value.result, "晚睡");
+    assert.match(unitCell.value.formula, /#'5 Notes & sources'!A3/);
 
-    const references = workbook.getWorksheet("4 Notes & sources");
-    const keywordReference = references.getCell("H3").value;
-    assert.match(keywordReference, /晚睡/);
-    assert.match(keywordReference, /夜班/);
-    assert.match(keywordReference, /message-1/);
-    assert.match(keywordReference, /message-4/);
+    const references = workbook.getWorksheet("5 Notes & sources");
+    const unitReference = references.getCell("H3").value;
+    assert.match(unitReference, /晚睡/);
+    assert.match(unitReference, /I go to bed late\./);
+    assert.match(unitReference, /message-1/);
 
     const codeSheet = workbook.getWorksheet("2 Codes");
-    assert.equal(codeSheet.getCell("D1").value, "C1");
-    assert.equal(codeSheet.getCell("E1").value, null);
-    assert.match(
-        codeSheet.getCell("D2").value,
-        /^2 mentions each · Sleep patterns \(1 keyword\); Work schedule \(1 keyword\)$/
-    );
+    assert.equal(codeSheet.getCell("D1").value, "CO1");
+    assert.equal(codeSheet.getCell("E1").value, "CO2");
+    assert.equal(codeSheet.getCell("D2").value, "Work schedule");
+    assert.equal(codeSheet.getCell("E2").value, "Sleep timing");
+    assert.doesNotMatch(codeSheet.getCell("D2").value, /^CO1:/);
 
-    const themeSheet = workbook.getWorksheet("3 Themes");
-    assert.equal(themeSheet.getCell("D1").value, "T1");
-    assert.equal(themeSheet.getCell("E1").value, null);
-    assert.match(
-        themeSheet.getCell("D2").value,
-        /^2 mentions each · Sleep \(1 code, 1 keyword\); Work \(1 code, 1 keyword\)$/
-    );
+    const categorySheet = workbook.getWorksheet("3 Categories");
+    assert.equal(categorySheet.getCell("D1").value, "CA1");
+    assert.equal(categorySheet.getCell("D2").value, "Night work scheduling");
+    const themeSheet = workbook.getWorksheet("4 Themes");
+    assert.equal(themeSheet.getCell("D1").value, "TH1");
+    assert.equal(themeSheet.getCell("D2").value, "Work shifting the timing of sleep");
+    assert.doesNotMatch(themeSheet.getCell("D2").value, /^TH1:/);
 });
 
 test("streamed complete workbook represents 10,000 cases in one file", async () => {
@@ -205,24 +159,22 @@ test("streamed complete workbook represents 10,000 cases in one file", async () 
         language: "en",
         demographics: {},
         caseInterpretation: "",
-        rankedCodes: [],
-        rankedThemes: [],
-        rankedKeywords: [],
-        rankedCodeGroups: [],
-        rankedThemeGroups: [],
-        rankedKeywordGroups: []
+        codes: [],
+        categories: [],
+        themes: [],
+        meaningUnits: []
     }));
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(await workbookBuffer(cases));
 
-    assert.equal(workbook.getWorksheet("1 Cases & keywords").rowCount, 10_001);
-    assert.equal(workbook.getWorksheet("1 Cases & keywords").getCell("A10001").value, "P10000");
-    assert.equal(workbook.worksheets.length, 4);
-    assert.equal(workbook.getWorksheet("4 Notes & sources").rowCount, 1);
+    assert.equal(workbook.getWorksheet("1 Cases & meaning units").rowCount, 10_001);
+    assert.equal(workbook.getWorksheet("1 Cases & meaning units").getCell("A10001").value, "P10000");
+    assert.equal(workbook.worksheets.length, 5);
+    assert.equal(workbook.getWorksheet("5 Notes & sources").rowCount, 1);
 });
 
 test("generated XLSX package contains no legacy comments or VML drawings", async () => {
-    const ranked = rankAnalysisCase({
+    const caseRecord = {
         caseNumber: "P0003-S01",
         participantCode: "P0003",
         sessionNumber: 1,
@@ -233,18 +185,19 @@ test("generated XLSX package contains no legacy comments or VML drawings", async
         demographics: {},
         caseInterpretation: "Compact case briefing.",
         codes: [{ id: "code-1", code_number: 1, code_label: "Sleep" }],
-        themes: [{ id: "theme-1", theme_number: 1, theme_label: "Rest" }],
-        themeCodes: [{ theme_id: "theme-1", code_id: "code-1" }],
-        highlights: [{
-            id: "highlight-1",
-            code_id: "code-1",
+        categories: [],
+        themes: [],
+        meaningUnits: [{
+            id: "unit-1",
+            unit_number: 1,
             message_id: "message-1",
             exact_text: "晚睡",
             source_language: "zh",
-            english_translation: "I go to bed late."
+            english_translation: "I go to bed late.",
+            anchor_expressions: ["晚睡"]
         }]
-    });
-    const zip = await JSZip.loadAsync(await workbookBuffer([ranked]));
+    };
+    const zip = await JSZip.loadAsync(await workbookBuffer([caseRecord]));
     const paths = Object.keys(zip.files);
     const commentsOrVml = paths.filter(path =>
         /^xl\/comments\d+\.xml$/i.test(path)
@@ -257,7 +210,7 @@ test("generated XLSX package contains no legacy comments or VML drawings", async
     assert.doesNotMatch(contentTypes, /comments/i);
     assert.doesNotMatch(caseSheet, /legacyDrawing/i);
     assert.ok(!zip.file("xl/worksheets/_rels/sheet1.xml.rels"));
-    assert.match(caseSheet, /HYPERLINK\(&quot;#&apos;4 Notes &amp; sources&apos;!A2&quot;/);
+    assert.match(caseSheet, /HYPERLINK\(&quot;#&apos;5 Notes &amp; sources&apos;!A2&quot;/);
 });
 
 test("10,000-ID related reads are bounded but no longer sequential", async () => {
@@ -332,7 +285,7 @@ test("Vercel function entries remain within the Hobby deployment limit", async (
     assert.ok(!apiFiles.includes("automatic-analysis-export.js"));
 });
 
-test("separate keyword records are rebuilt from each fully loaded page set", async () => {
+test("separate meaning-unit records are rebuilt from each fully loaded page set", async () => {
     const dashboard = await readFile(
         new URL("../researcher-automatic-analysis-legacy.js", import.meta.url),
         "utf8"
@@ -345,7 +298,7 @@ test("separate keyword records are rebuilt from each fully loaded page set", asy
     assert.match(dashboard, /const remainingPages = await fetchRemainingDashboardPages/);
     assert.match(dashboard, /DASHBOARD_PAGE_CONCURRENCY = 4/);
     assert.match(dashboard, /payload = \{ \.\.\.firstPage, cases \};[\s\S]*render\(\)/);
-    assert.match(dashboard, /function renderKeywords[\s\S]*caseRecord\.highlights/);
+    assert.match(dashboard, /function renderMeaningUnits[\s\S]*caseRecord\.meaningUnits/);
     assert.match(dashboard, /Framework \/ report provenance/);
     assert.match(dashboard, /Open exact evidence/);
     assert.match(dashboard, /tableHost\.replaceChildren\(scroll\)/);

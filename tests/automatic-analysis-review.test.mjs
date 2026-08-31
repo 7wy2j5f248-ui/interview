@@ -25,6 +25,10 @@ const reanalysisMigrationUrl = new URL(
     "../supabase/migrations/20260831042540_researcher_case_reanalysis.sql",
     import.meta.url
 );
+const autonomousFeedbackMigrationUrl = new URL(
+    "../supabase/migrations/20260831173903_add_meaning_units_categories_autonomous_feedback.sql",
+    import.meta.url
+);
 
 test("researcher workbook import preserves row order and hidden structure", async () => {
     const workbook = new ExcelJS.Workbook();
@@ -60,14 +64,14 @@ test("researcher workbook import preserves row order and hidden structure", asyn
     assert.equal(parsed.caseIndex.P0108[0].rowHidden, true);
 });
 
-test("AI discussion selections retain participant-local Tn and Cn provenance", () => {
+test("AI discussion selections retain participant-local THn CAn and COn provenance", () => {
     const selection = normalizeAutomaticReviewSelection([
         {
             kind: "theme",
             sessionId: "session-107",
             caseNumber: "P0107-S01",
             participantCode: "P0107",
-            position: "t1",
+            position: "th1",
             recordId: "theme-1",
             label: "Work"
         },
@@ -76,7 +80,7 @@ test("AI discussion selections retain participant-local Tn and Cn provenance", (
             sessionId: "session-107",
             caseNumber: "P0107-S01",
             participantCode: "P0107",
-            position: "T1",
+            position: "TH1",
             recordId: "duplicate",
             label: "Must be removed"
         },
@@ -85,18 +89,27 @@ test("AI discussion selections retain participant-local Tn and Cn provenance", (
             sessionId: "session-108",
             caseNumber: "P0108-S01",
             participantCode: "P0108",
-            position: "C2",
+            position: "CO2",
             label: "Media"
+        },
+        {
+            kind: "category",
+            sessionId: "session-108",
+            caseNumber: "P0108-S01",
+            participantCode: "P0108",
+            position: "CA1",
+            label: "Bedtime media use"
         }
     ]);
 
-    assert.equal(selection.length, 2);
-    assert.equal(selection[0].position, "T1");
+    assert.equal(selection.length, 3);
+    assert.equal(selection[0].position, "TH1");
     assert.equal(selection[0].recordId, "theme-1");
-    assert.equal(selection[1].position, "C2");
+    assert.equal(selection[1].position, "CO2");
+    assert.equal(selection[2].position, "CA1");
     assert.equal(
         automaticReviewThreadTitle(selection),
-        "P0107-S01 T1 · Work"
+        "P0107-S01 TH1 · Work"
     );
 });
 
@@ -144,7 +157,7 @@ test("visible automatic-analysis workspace restores discussion and upload contro
     assert.match(migration, /file_sha256 text not null/);
 });
 
-test("researcher-controlled re-analysis preserves versions until explicit approval", async () => {
+test("researcher feedback creates a completed version without an approval gate", async () => {
     const [html, client, api, processor, migration] = await Promise.all([
         readFile(htmlUrl, "utf8"),
         readFile(clientUrl, "utf8"),
@@ -156,26 +169,22 @@ test("researcher-controlled re-analysis preserves versions until explicit approv
             new URL("../server/frameworkReanalysis.js", import.meta.url),
             "utf8"
         ),
-        readFile(reanalysisMigrationUrl, "utf8")
+        readFile(autonomousFeedbackMigrationUrl, "utf8")
     ]);
 
     assert.match(html, /Request re-analysis for this case/);
     assert.match(html, /id="automaticReanalysisNotes"/);
-    assert.match(client, /Approve proposed report/);
     assert.match(client, /action: "request_case_reanalysis"/);
-    assert.match(client, /action: "review_case_reanalysis"/);
+    assert.doesNotMatch(client, /action: "review_case_reanalysis"/);
     assert.match(client, /Historical interview-protocol issue/);
     assert.match(api, /processCaseReanalysisRequest/);
     assert.match(processor, /generateAutomaticCaseReanalysis/);
     assert.match(processor, /detectCompoundQuestionTurns/);
-    assert.match(migration, /automatic_case_reanalysis_requests/);
-    assert.match(migration, /automatic_case_reanalysis_proposals/);
-    assert.match(migration, /automatic_case_reanalysis_reviews/);
-    assert.match(migration, /automatic_case_reanalysis_events/);
-    assert.match(migration, /source_report_id uuid/);
-    assert.match(migration, /reanalysis_request_id uuid unique/);
-    assert.match(migration, /review_automatic_case_reanalysis/);
-    assert.match(migration, /p_decision = 'rejected'/);
+    assert.match(processor, /complete_automatic_case_reanalysis/);
+    assert.match(migration, /status = 'completed'/);
+    assert.match(migration, /analysis_completed_at/);
+    assert.match(migration, /feedbackStartsNewVersion/);
+    assert.doesNotMatch(api, /review_case_reanalysis/);
     assert.match(migration, /enable row level security/g);
     assert.match(migration, /substring\([\s\S]*message\."Message"/);
 });

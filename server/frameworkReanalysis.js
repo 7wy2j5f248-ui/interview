@@ -4,7 +4,10 @@ import {
     generateAutomaticCaseReanalysis,
     prepareParticipantMessages
 } from "./analysisCore.js";
-import { loadAnalysisFrameworkById } from "./analysisFramework.js";
+import {
+    loadAnalysisFrameworkById,
+    loadSharedAnalysisVocabulary
+} from "./analysisFramework.js";
 import { normalizeOpenAIModel } from "./modelConfiguration.js";
 
 const REQUESTS = "automatic_case_reanalysis_requests";
@@ -122,6 +125,11 @@ export async function processCaseReanalysisRequest(
         if (!prepared.messages.length) {
             throw new Error("The preserved transcript has no participant evidence.");
         }
+        const sharedVocabulary = await loadSharedAnalysisVocabulary(
+            supabase,
+            analysisFramework.projectId,
+            { excludeReportId: sourceReport.id }
+        );
         const analysis = await generateAutomaticCaseReanalysis(
             openaiClient,
             prepared.messages,
@@ -138,7 +146,7 @@ export async function processCaseReanalysisRequest(
                 analysisFrameworkId: analysisFramework.id,
                 analysisFrameworkVersion: analysisFramework.versionNumber
             },
-            { model: selectedModel, analysisFramework }
+            { model: selectedModel, analysisFramework, sharedVocabulary }
         );
         const proposedReport = {
             participantCode: sourceReport.participant_code,
@@ -146,8 +154,17 @@ export async function processCaseReanalysisRequest(
             demographics: sourceReport.demographics,
             caseInterpretation: analysis.caseInterpretation,
             codes: analysis.codes,
-            themes: analysis.themes,
+            categories: analysis.categories,
+            themes: analysis.themes.map(theme => ({
+                ...theme,
+                codeNumbers: [...new Set(theme.categoryNumbers.flatMap(
+                    categoryNumber => analysis.categories[
+                        categoryNumber - 1
+                    ]?.codeNumbers || []
+                ))]
+            })),
             ungroupedCodeNumbers: analysis.unassignedCodeNumbers,
+            ungroupedCategoryNumbers: analysis.unassignedCategoryNumbers,
             analysisHierarchyAudit:
                 analysis.labelQualityAudit?.themeHierarchy || null,
             researchProjectId: analysisFramework.projectId,
@@ -200,49 +217,20 @@ export async function processCaseReanalysisRequest(
         if (proposalError || !proposal) {
             throw new Error("The proposed report version could not be stored.");
         }
-        const proposalReadyAt = new Date().toISOString();
-        const { error: readyError } = await supabase
-            .from(REQUESTS)
-            .update({
-                status: "proposal_ready",
-                proposal_ready_at: proposalReadyAt,
-                last_error: null
-            })
-            .eq("id", requestId)
-            .eq("status", "processing");
-        if (readyError) {
-            throw new Error("The proposal-ready status could not be stored.");
+        const { data: completedReportId, error: completionError } =
+            await supabase.rpc("complete_automatic_case_reanalysis", {
+                p_request_id: requestId
+            });
+        if (completionError || !completedReportId) {
+            throw new Error("The completed feedback analysis could not be promoted.", {
+                cause: completionError || undefined
+            });
         }
-        await storeEvent(supabase, requestId, "proposal_ready", {
-            proposalId: proposal.id,
-            sourceReportId: sourceReport.id,
-            sourceQualityFlagCount: sourceQualityFlags.length,
-            relevanceCheckCount: analysis.relevanceAudit.checks.length,
-            labelQualityCheckCount:
-                analysis.relevanceAudit.labelQualityAudit?.checks?.length || 0,
-            rejectedLabelCount:
-                analysis.relevanceAudit.labelQualityAudit?.rejectedLabels?.length || 0,
-            ungroupedCodeCount:
-                analysis.relevanceAudit.labelQualityAudit?.themeHierarchy
-                    ?.ungroupedCodes?.length || 0,
-            rejectedThemeAssignmentCount:
-                analysis.relevanceAudit.labelQualityAudit?.themeHierarchy
-                    ?.rejectedThemeAssignments?.length || 0,
-            projectId: analysisFramework.projectId,
-            projectName: analysisFramework.projectName,
-            researchTopic: analysisFramework.researchTopic,
-            analysisFrameworkId: analysisFramework.id,
-            analysisFrameworkVersion: analysisFramework.versionNumber,
-            currentReportPreserved: true,
-            researcherApprovalRequired:
-                !request.project_reanalysis_batch_id,
-            proposalAccessibleWithoutApproval: true,
-            projectWideBatchId: request.project_reanalysis_batch_id || null
-        });
         return {
             requestId,
             proposalId: proposal.id,
-            status: "proposal_ready",
+            reportId: completedReportId,
+            status: "completed",
             caseNumber: sourceReport.case_number,
             sourceQualityFlagCount: sourceQualityFlags.length,
             analysisFramework

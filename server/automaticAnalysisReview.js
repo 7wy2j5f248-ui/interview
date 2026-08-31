@@ -289,7 +289,7 @@ export function normalizeAutomaticReviewSelection(value) {
     return (Array.isArray(value) ? value : [])
         .slice(0, MAX_AUTOMATIC_REVIEW_SELECTIONS * 2)
         .map(source => {
-            const kind = ["case", "theme", "code"].includes(source?.kind)
+            const kind = ["case", "theme", "category", "code"].includes(source?.kind)
                 ? source.kind
                 : null;
             const sessionId = compactText(source?.sessionId, 160);
@@ -302,7 +302,7 @@ export function normalizeAutomaticReviewSelection(value) {
             if (!kind || !sessionId || !caseNumber || !participantCode) {
                 return null;
             }
-            if (kind !== "case" && !/^[TC]\d+$/.test(position)) {
+            if (kind !== "case" && !/^(?:TH|CA|CO)\d+$/.test(position)) {
                 return null;
             }
             const key = `${sessionId}:${kind}:${position || "case"}`;
@@ -369,7 +369,7 @@ export async function discussAutomaticCaseAnalysisReview(
     {
         selection,
         selectedCases,
-        comparableThemeIndex,
+        comparableAnalysisIndex,
         workbookImport,
         conversation
     },
@@ -393,7 +393,7 @@ export async function discussAutomaticCaseAnalysisReview(
         input: [
             {
                 role: "system",
-                content: "You are the AI analytical collaborator inside a qualitative research dashboard. The researcher is conducting a second-layer review of already completed individual case reports. Discuss only the supplied source analyses, codes, keyword evidence, transcripts, participant/case identifiers, and uploaded researcher workbook rows. Original automatic case reports are immutable source records. Any grouping or re-abstraction is a new researcher-review layer and must preserve the source case number plus its local Tn or Cn position. T1 is local to each case and is not a global theme identity. A T1 mention count is within-case evidence support, not cross-case prevalence. Low frequency is a review flag, not proof of an error. When comparing cases, name the exact case number and Tn/Cn position. Distinguish four possible assessments: confirmed rare, regroup, reabstract, and check transcript. Do not invent cases, positions, evidence, frequencies, quotations, or workbook decisions. Treat workbook rows as researcher-authored decisions, not transcript evidence. If evidence is insufficient, say so plainly."
+                content: "You are the AI analytical collaborator inside a qualitative research dashboard. The researcher is reviewing already completed individual case reports. Discuss only the supplied source analyses, meaning units, codes, categories, themes, transcripts, participant/case identifiers, and uploaded researcher workbook rows. Preserve the source case number and its local MUn, COn, CAn, or THn position. These identifiers are local structural metadata, never part of the substantive label and never a global concept identity. Cross-case comparison concerns substantive labels and evidence, not matching position numbers. A meaning unit is an exact coherent passage; a code must be supportable by it; a category describes what related codes depict; a theme interprets patterned meaning across categories. Do not invent cases, positions, evidence, frequencies, quotations, or workbook decisions. Treat workbook rows as researcher-authored feedback, not transcript evidence. If evidence is insufficient, say so plainly."
             },
             {
                 role: "user",
@@ -402,8 +402,8 @@ export async function discussAutomaticCaseAnalysisReview(
                     JSON.stringify(selection),
                     "Authoritative selected case reports and transcript evidence (JSON):",
                     JSON.stringify(selectedCases),
-                    "Compact index of comparable participant-specific themes (JSON):",
-                    JSON.stringify(comparableThemeIndex),
+                    "Compact index of comparable participant-specific codes, categories, and themes (JSON):",
+                    JSON.stringify(comparableAnalysisIndex),
                     "Latest uploaded researcher workbook metadata and rows for the selected participants (JSON):",
                     JSON.stringify({
                         id: workbookImport?.id || null,
@@ -419,7 +419,7 @@ export async function discussAutomaticCaseAnalysisReview(
         ]
     });
     const value = parsedStructuredResponse(response);
-    const knownSources = new Map(comparableThemeIndex.map(source => [
+    const knownSources = new Map(comparableAnalysisIndex.map(source => [
         `${source.caseNumber}:${source.position}`,
         source
     ]));
