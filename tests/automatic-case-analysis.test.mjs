@@ -214,7 +214,7 @@ test("a substantive interview cannot pass as a one-code thin proposal", () => {
 test("model underscore formatting is normalized before hierarchy validation", () => {
     const text = "Night shifts delay sleep, naps reduce sleepiness, television fills silence, and the phone stays muted.";
     const result = validateAutomaticCaseAnalysis({
-        codes: ["night_shift", "short_naps", "background_tv", "phone_restraint"].map(label => ({
+        codes: ["onset_with_living_alone", "short_naps", "background_tv", "phone_restraint"].map(label => ({
             label,
             rationale: "Transcript-supported sleep behavior.",
             meaning_unit_evidence: [{
@@ -241,7 +241,7 @@ test("model underscore formatting is normalized before hierarchy validation", ()
     }, [{ id: "message-1", originalText: text }]);
 
     assert.equal(result.complete, true);
-    assert.equal(result.codes[0].label, "night shift");
+    assert.equal(result.codes[0].label, "onset living alone");
     assert.equal(result.categories[0].label, "schedule disruption");
     assert.equal(result.themes[0].label, "active management of sleep disruption");
 });

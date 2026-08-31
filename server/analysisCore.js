@@ -27,6 +27,19 @@ function normalizedModelAnalyticLabel(value) {
         : null;
 }
 
+function normalizedModelCodeLabel(value) {
+    const label = normalizedModelAnalyticLabel(value);
+    if (!label) return null;
+    const words = label.split(" ").filter(Boolean);
+    if (words.length <= 3) return label;
+    const withoutConnectors = words.filter(word => !new Set([
+        "a", "an", "the", "of", "with", "to", "for", "from", "in", "on"
+    ]).has(word.toLocaleLowerCase()));
+    return withoutConnectors.length > 0 && withoutConnectors.length <= 3
+        ? withoutConnectors.join(" ")
+        : label;
+}
+
 export function isNaturalAnalyticLabelShape(value) {
     const label = normalizedText(value)?.replace(/\s+/gu, " ");
 
@@ -849,7 +862,7 @@ export function validateAutomaticCaseAnalysis(value, availableMessages) {
     let droppedCodes = 0;
 
     (Array.isArray(value?.codes) ? value.codes : []).forEach(rawCode => {
-        const label = normalizedModelAnalyticLabel(rawCode?.label);
+        const label = normalizedModelCodeLabel(rawCode?.label);
         const rationale = normalizedText(rawCode?.rationale);
         const meaningUnits = [];
 
@@ -1256,6 +1269,7 @@ async function auditAutomaticLabelQuality(
                 "Set coherent_concept true only when the whole label names one meaningful concept rather than a finding, sentence, list, or bag of words.",
                 "Set conceptually_distinct true only when the label is not duplicative or confusingly overlapping with another label at the same level.",
                 "Set evidence_supported true only when a code is supportable by its exact meaning units, a category is supported by its assigned codes, or a theme is supported by its assigned categories.",
+                "Judge code support from the complete exact meaning unit. Anchor expressions are optional navigation pointers and are not exhaustive; never reject an otherwise supported code merely because an optional anchor omits part of the supporting idea.",
                 "Set topic_relevant true only when the label satisfies the named project's topic, scope, inclusion, and exclusion rules.",
                 "Set comparison_useful true only when another researcher could understand and compare the concept across cases without reading its rationale.",
                 "For a code, set has_multiple_children, semantic_coverage, higher_level_abstraction, and patterned_meaning true because those hierarchy checks do not apply.",
@@ -2084,6 +2098,7 @@ async function auditAutomaticCaseRelevance(
         input: [{
             role: "system",
             content: "Act as a strict independent evidence auditor for one completed qualitative case. Return exactly one check for every proposed meaning unit and no others. Exact transcript grounding is necessary but insufficient. Set supports_code true only when the meaning unit supports its code without importing an unsupported explanation. Set supports_category true only when that code validly contributes to an assigned descriptive category; when no category is assigned, set it false. Set supports_theme true only when the code's category validly contributes to an assigned patterned-meaning theme; when no theme is assigned, set it false. An unassigned lower unit is a completed unsynthesized finding, not a request for approval. Set research_scope_relevant true only when the evidence satisfies the project scope. Explain each judgment briefly.\n\n"
+                + "Judge the complete exact meaning unit. Anchor expressions are optional navigation pointers, not exhaustive evidence, and omission from an anchor must not cause rejection when the exact meaning unit itself supplies the support.\n\n"
                 + analysisFrameworkInstruction(analysisFramework)
         }, {
             role: "user",
