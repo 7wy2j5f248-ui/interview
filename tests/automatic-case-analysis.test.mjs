@@ -475,6 +475,68 @@ test("a familiar natural code is not rejected merely for being broad or informal
     assert.equal(audit.checks[0].coherentConcept, false);
 });
 
+test("category wording style is advisory while hierarchy quality stays mandatory", () => {
+    const analysis = {
+        codes: [
+            { label: "bedtime", rationale: "Timing.", highlights: [] },
+            { label: "sleep onset", rationale: "Onset.", highlights: [] }
+        ],
+        categories: [{
+            label: "presleep routine",
+            rationale: "Groups related bedtime behaviours.",
+            codeNumbers: [1, 2]
+        }],
+        themes: [],
+        unassignedCodeNumbers: [],
+        unassignedCategoryNumbers: [1]
+    };
+    const checks = analysis.codes.map((code, index) => ({
+        kind: "code",
+        number: index + 1,
+        label: code.label,
+        natural_language: true,
+        coherent_concept: true,
+        conceptually_distinct: true,
+        evidence_supported: true,
+        topic_relevant: true,
+        comparison_useful: true,
+        has_multiple_children: true,
+        semantic_coverage: true,
+        higher_level_abstraction: true,
+        patterned_meaning: true,
+        explanation: "Accepted code."
+    }));
+    checks.push({
+        kind: "category",
+        number: 1,
+        label: "presleep routine",
+        natural_language: false,
+        coherent_concept: true,
+        conceptually_distinct: true,
+        evidence_supported: true,
+        topic_relevant: true,
+        comparison_useful: true,
+        has_multiple_children: true,
+        semantic_coverage: true,
+        higher_level_abstraction: true,
+        patterned_meaning: true,
+        explanation: "Technical wording, but a complete category."
+    });
+    const audit = validateAutomaticLabelQualityAudit(analysis, {
+        checks,
+        unsynthesized_checks: [{
+            kind: "category",
+            number: 1,
+            label: "presleep routine",
+            reason: "No second category supports a theme."
+        }],
+        overall_summary: "Style remains visible without blocking completion."
+    });
+
+    assert.equal(audit.complete, true);
+    assert.equal(audit.checks[2].naturalLanguage, false);
+});
+
 test("one-code categories are rejected while the code remains a completed finding", () => {
     const analysis = validateAutomaticCaseAnalysis({
         codes: [{

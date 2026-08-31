@@ -1144,8 +1144,10 @@ export function validateAutomaticLabelQualityAudit(analysis, value) {
         // Keep that judgement visible for review, but do not let subjective
         // stylistic caution discard an otherwise valid code. Code shape,
         // coherence, exact evidence, and topic relevance remain hard gates.
-        const naturalLanguageAccepted = item.kind === "code"
-            || Boolean(audit?.naturalLanguage);
+        // Natural-language style is always exposed for researcher review, but
+        // it is too subjective to be a completion gate. Evidence, coherence,
+        // hierarchy coverage, distinctness, and topic fit remain mandatory.
+        const naturalLanguageAccepted = true;
         const coherenceAccepted = item.kind === "code"
             ? Boolean(audit?.coherentConcept || audit?.naturalLanguage)
             : Boolean(audit?.coherentConcept);
