@@ -1080,11 +1080,18 @@ export function validateAutomaticLabelQualityAudit(analysis, value) {
             audit?.conceptuallyDistinct
             && audit?.comparisonUseful
         );
+        // A model can flag a concise, familiar code such as “racing mind” as
+        // mildly idiomatic even though the label is clear and evidence-bound.
+        // Keep that judgement visible for review, but do not let subjective
+        // stylistic caution discard an otherwise valid code. Code shape,
+        // coherence, exact evidence, and topic relevance remain hard gates.
+        const naturalLanguageAccepted = item.kind === "code"
+            || Boolean(audit?.naturalLanguage);
         const accepted = Boolean(
             exactLabel
             && structurallyValid
             && uniqueAtLevel
-            && audit?.naturalLanguage
+            && naturalLanguageAccepted
             && audit?.coherentConcept
             && audit?.evidenceSupported
             && audit?.topicRelevant

@@ -356,7 +356,7 @@ test("global label audit rejects short but incoherent labels", () => {
     assert.match(audit.rejectedLabels[0].explanation, /concatenated/);
 });
 
-test("code comparison utility is advisory while evidence and coherence stay mandatory", () => {
+test("code style and comparison flags are advisory while evidence and coherence stay mandatory", () => {
     const analysis = {
         codes: [{
             label: "evening activity",
@@ -373,7 +373,7 @@ test("code comparison utility is advisory while evidence and coherence stay mand
             kind: "code",
             number: 1,
             label: "evening activity",
-            natural_language: true,
+            natural_language: false,
             coherent_concept: true,
             conceptually_distinct: false,
             evidence_supported: true,
@@ -395,6 +395,7 @@ test("code comparison utility is advisory while evidence and coherence stay mand
     });
 
     assert.equal(audit.complete, true);
+    assert.equal(audit.checks[0].naturalLanguage, false);
     assert.equal(audit.checks[0].evidenceSupported, true);
     assert.equal(audit.checks[0].conceptuallyDistinct, false);
     assert.equal(audit.checks[0].comparisonUseful, false);
