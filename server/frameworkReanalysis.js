@@ -14,6 +14,44 @@ const REQUESTS = "automatic_case_reanalysis_requests";
 const PROPOSALS = "automatic_case_reanalysis_proposals";
 const EVENTS = "automatic_case_reanalysis_events";
 
+function uniqueProposalLabels(values) {
+    return [...new Set((Array.isArray(values) ? values : [])
+        .map(value => typeof value === "string" ? value.trim() : "")
+        .filter(Boolean))]
+        .slice(0, 250);
+}
+
+async function loadBatchProposalVocabulary(supabase, batchId) {
+    if (!batchId) return { codes: [], categories: [], themes: [] };
+    const { data: requests, error: requestError } = await supabase
+        .from(REQUESTS)
+        .select("id")
+        .eq("project_reanalysis_batch_id", batchId)
+        .eq("status", "proposal_ready")
+        .order("proposal_ready_at", { ascending: false })
+        .limit(250);
+    const requestIds = requestError
+        ? [] : (requests || []).map(request => request.id);
+    if (!requestIds.length) return { codes: [], categories: [], themes: [] };
+    const { data: proposals, error: proposalError } = await supabase
+        .from(PROPOSALS)
+        .select("proposed_report")
+        .in("request_id", requestIds);
+    if (proposalError) return { codes: [], categories: [], themes: [] };
+    const reports = (proposals || []).map(row => row.proposed_report || {});
+    return {
+        codes: uniqueProposalLabels(reports.flatMap(report =>
+            (report.codes || []).map(code => code?.label)
+        )),
+        categories: uniqueProposalLabels(reports.flatMap(report =>
+            (report.categories || []).map(category => category?.label)
+        )),
+        themes: uniqueProposalLabels(reports.flatMap(report =>
+            (report.themes || []).map(theme => theme?.label)
+        ))
+    };
+}
+
 function model() {
     return normalizeOpenAIModel(
         process.env.AUTOMATIC_ANALYSIS_MODEL
@@ -137,11 +175,16 @@ export async function processCaseReanalysisRequest(
         if (!prepared.messages.length) {
             throw new Error("The preserved transcript has no participant evidence.");
         }
-        const sharedVocabulary = await loadSharedAnalysisVocabulary(
-            supabase,
-            analysisFramework.projectId,
-            { excludeReportId: sourceReport.id }
-        );
+        const sharedVocabulary = request.project_reanalysis_batch_id
+            ? await loadBatchProposalVocabulary(
+                supabase,
+                request.project_reanalysis_batch_id
+            )
+            : await loadSharedAnalysisVocabulary(
+                supabase,
+                analysisFramework.projectId,
+                { excludeReportId: sourceReport.id }
+            );
         const analysis = await generateAutomaticCaseReanalysis(
             openaiClient,
             prepared.messages,
