@@ -1127,12 +1127,15 @@ export function validateAutomaticLabelQualityAudit(analysis, value) {
         // coherence, exact evidence, and topic relevance remain hard gates.
         const naturalLanguageAccepted = item.kind === "code"
             || Boolean(audit?.naturalLanguage);
+        const coherenceAccepted = item.kind === "code"
+            ? Boolean(audit?.coherentConcept || audit?.naturalLanguage)
+            : Boolean(audit?.coherentConcept);
         const accepted = Boolean(
             exactLabel
             && structurallyValid
             && uniqueAtLevel
             && naturalLanguageAccepted
-            && audit?.coherentConcept
+            && coherenceAccepted
             && audit?.evidenceSupported
             && audit?.topicRelevant
             && comparisonAccepted

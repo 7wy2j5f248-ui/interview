@@ -401,6 +401,48 @@ test("code style and comparison flags are advisory while evidence and coherence 
     assert.equal(audit.checks[0].comparisonUseful, false);
 });
 
+test("a familiar natural code is not rejected merely for being broad or informal", () => {
+    const analysis = {
+        codes: [{
+            label: "social media",
+            rationale: "A concise common term for the supported media behaviour.",
+            highlights: [{ messageId: "message-1", exactText: "Instagram" }]
+        }],
+        categories: [],
+        themes: [],
+        unassignedCodeNumbers: [1],
+        unassignedCategoryNumbers: []
+    };
+    const audit = validateAutomaticLabelQualityAudit(analysis, {
+        checks: [{
+            kind: "code",
+            number: 1,
+            label: "social media",
+            natural_language: true,
+            coherent_concept: false,
+            conceptually_distinct: false,
+            evidence_supported: true,
+            topic_relevant: true,
+            comparison_useful: false,
+            has_multiple_children: true,
+            semantic_coverage: true,
+            higher_level_abstraction: true,
+            patterned_meaning: true,
+            explanation: "Familiar and supported, but broad."
+        }],
+        unsynthesized_checks: [{
+            kind: "code",
+            number: 1,
+            label: "social media",
+            reason: "No second related code is available."
+        }],
+        overall_summary: "The natural code remains valid with advisory flags."
+    });
+
+    assert.equal(audit.complete, true);
+    assert.equal(audit.checks[0].coherentConcept, false);
+});
+
 test("one-code categories are rejected while the code remains a completed finding", () => {
     const analysis = validateAutomaticCaseAnalysis({
         codes: [{
