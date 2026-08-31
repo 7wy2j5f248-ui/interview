@@ -1249,6 +1249,13 @@ async function auditAutomaticLabelQuality(
     analysisFramework
 ) {
     const analysisForAudit = automaticAnalysisDraftForModel(analysis);
+    analysisForAudit.codes = analysisForAudit.codes.map(code => ({
+        ...code,
+        meaning_unit_evidence: code.meaning_unit_evidence.map(unit => ({
+            message_id: unit.message_id,
+            exact_text: unit.exact_text
+        }))
+    }));
     const response = await openaiClient.responses.create({
         model,
         store: false,
