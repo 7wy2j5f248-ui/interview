@@ -795,6 +795,10 @@ test("Forms 2 to 4 open transcript evidence and return to the same record", asyn
 
     assert.match(html, /Return to analysis form/);
     assert.match(html, /Global label standard for every project/);
+    assert.match(
+        html,
+        /<div class="tableScroll">[\s\S]*?<tbody id="languageSummaryBody">/
+    );
     assert.match(script, /function firstEvidenceMessageId/);
     assert.match(script, /function rememberTranscriptOrigin/);
     assert.match(script, /function returnFromTranscript/);
