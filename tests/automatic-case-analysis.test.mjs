@@ -895,7 +895,7 @@ test("future reports preserve MU to CO to CA to TH lineage and unsynthesized fin
     assert.match(review, /Codes retained without a defensible category/);
 });
 
-test("researcher dashboard uses separate case, meaning-unit, code, category, and theme forms", async () => {
+test("researcher dashboard uses four separate case, keyword, code, and theme forms", async () => {
     const html = await readFile(new URL("../researcher.html", import.meta.url), "utf8");
     const script = await readFile(
         new URL("../researcher-automatic-analysis-legacy.js", import.meta.url),
@@ -907,17 +907,22 @@ test("researcher dashboard uses separate case, meaning-unit, code, category, and
     );
 
     assert.match(html, /Form 1 · Cases/);
-    assert.match(html, /Form 2 · Meaning Units/);
+    assert.match(html, /Form 2 · Keywords/);
     assert.match(html, /Form 3 · Codes/);
-    assert.match(html, /Form 4 · Categories/);
-    assert.match(html, /Form 5 · Themes/);
-    assert.match(html, /TH = Theme · CA = Category ·\s*CO = Code · MU = Meaning Unit/);
+    assert.match(html, /Form 4 · Themes/);
+    assert.doesNotMatch(html, /data-automatic-analysis-view="categories"/);
+    assert.match(html, /TH = Theme · CA = Category ·\s*CO = Code · K = Keyword · MU = Meaning Unit/);
     assert.match(html, /data-automatic-analysis-view="incomplete"[^>]*>Needs attention/);
     assert.match(html, /data-automatic-analysis-view="archive"/);
     assert.match(html, /Download complete Excel analysis/);
     assert.match(html, /automaticCaseReportDialog/);
     assert.match(html, /automaticCaseArchiveButton/);
-    assert.match(script, /Array\.from\(\{ length: maximum \}[^\n]*`\$\{prefix\}\$\{index \+ 1\}`/);
+    assert.match(script, /function renderKeywords/);
+    assert.match(script, /function renderCodes/);
+    assert.match(script, /function renderThemes/);
+    assert.match(script, /Linked category path/);
+    assert.match(script, /Linked keyword\(s\)/);
+    assert.match(script, /Exact transcript evidence/);
     assert.match(script, /Participant code:/);
     assert.match(script, /start_offset/);
     assert.match(script, /FORM_ONE_DEMOGRAPHIC_COLUMNS/);
@@ -966,7 +971,7 @@ test("researcher dashboard uses separate case, meaning-unit, code, category, and
     assert.doesNotMatch(script, /"Demographic data",\s*"Case report"/);
 });
 
-test("Needs attention keeps incomplete transcripts separate from the five analysis forms", async () => {
+test("Needs attention keeps incomplete transcripts separate from the four analysis forms", async () => {
     const html = await readFile(new URL("../researcher.html", import.meta.url), "utf8");
     const script = await readFile(
         new URL("../researcher-automatic-analysis-legacy.js", import.meta.url),
@@ -987,7 +992,7 @@ test("Needs attention keeps incomplete transcripts separate from the five analys
     assert.match(script, /function renderIncomplete/);
     assert.match(script, /Why it needs attention/);
     assert.match(script, /Brief partial-case summary/);
-    assert.match(script, /No meaning units, codes, categories, or themes are assigned before formal completion/);
+    assert.match(script, /No keywords, codes, categories, or themes are assigned before formal completion/);
     assert.match(script, /requestedScope === "incomplete"/);
     assert.match(dashboard, /function incompleteCompletionRemark/);
     assert.match(dashboard, /function incompleteCaseSummary/);
@@ -1260,7 +1265,7 @@ test("automatic dashboard exposes every transcript independently of analysis com
     assert.match(script, /Verified match/);
 });
 
-test("separate Cases and Meaning Units forms load every case and stored unit", async () => {
+test("separate Cases and Keywords forms load every case and stored unit", async () => {
     const dashboard = await readFile(
         new URL("../server/caseAnalysisDashboard.js", import.meta.url),
         "utf8"
@@ -1287,11 +1292,12 @@ test("separate Cases and Meaning Units forms load every case and stored unit", a
     assert.match(script, /async function fetchDashboardPage/);
     assert.match(script, /const remainingPages = await fetchRemainingDashboardPages/);
     assert.match(script, /DASHBOARD_PAGE_CONCURRENCY = 4/);
-    assert.match(script, /casesWithMeaningUnits/);
-    assert.match(script, /function renderMeaningUnits/);
+    assert.match(script, /casesWithKeywords/);
+    assert.match(script, /function renderKeywords/);
+    assert.match(script, /function keywordExpressions/);
     assert.match(script, /Open exact evidence/);
     assert.match(script, /Framework \/ report provenance/);
-    assert.match(html, /researcher-automatic-analysis\.js\?version=20260831-meaning-unit-category-v1/);
+    assert.match(html, /researcher-automatic-analysis\.js\?version=20260831-four-analysis-forms-v1/);
     assert.match(html, /automaticAnalysisGateStatus/);
     assert.match(script, /cache: "no-store"/);
     assert.match(script, /searchParams\.set\("fresh"/);
@@ -1330,7 +1336,7 @@ test("automatic dashboard has compact cases, traceable meaning units, and a fini
     assert.match(script, /dashboard request timed out\. Please try unlocking again/);
 });
 
-test("Forms 2 to 5 open transcript evidence and return to the same record", async () => {
+test("Forms 2 to 4 open transcript evidence and return to the same record", async () => {
     const [html, script, review] = await Promise.all([
         readFile(new URL("../researcher.html", import.meta.url), "utf8"),
         readFile(

@@ -375,6 +375,34 @@
             width: 4.25rem;
         }
 
+        .automaticAnalysisTable thead th {
+            inset-block-start: 0;
+            position: sticky;
+            z-index: 2;
+        }
+
+        .automaticAnalysisTable th:first-child,
+        .automaticAnalysisTable td:first-child {
+            background: #ffffff;
+            inset-inline-start: 0;
+            position: sticky;
+            z-index: 1;
+        }
+
+        .automaticAnalysisTable th:nth-child(2),
+        .automaticAnalysisTable td:nth-child(2) {
+            background: #ffffff;
+            inset-inline-start: 4.25rem;
+            position: sticky;
+            z-index: 1;
+        }
+
+        .automaticAnalysisTable thead th:first-child,
+        .automaticAnalysisTable thead th:nth-child(2) {
+            background: #e5edf8;
+            z-index: 3;
+        }
+
         .automaticAnalysisTable .analysisKeywordColumn {
             min-width: 24rem;
             width: 24rem;
@@ -406,6 +434,12 @@
             font-size: 0.78rem;
             line-height: 1.35;
             margin-block-start: 0.3rem;
+        }
+
+        .analysisCompactList {
+            line-height: 1.35;
+            max-width: 22rem;
+            white-space: normal;
         }
 
         .analysisDiscussionSelectButton {
@@ -818,7 +852,7 @@
             .analysisViewTabs {
                 display: grid;
                 gap: 0;
-                grid-template-columns: repeat(3, minmax(0, 1fr));
+                grid-template-columns: repeat(2, minmax(0, 1fr));
             }
 
             .analysisViewTabs button {
@@ -919,15 +953,15 @@
         not start or control the analysis.
     </p>
     <p>
-        The sequence is evidence first: complete meaning units are highlighted
-        in the transcript with their code above; related codes form categories,
-        and categories support interpretive themes. Every result is completed
-        for one case before cross-case comparison, while code, category, and
-        theme terms use the common project vocabulary.
+        The sequence is evidence first: exact keywords remain linked to their
+        complete transcript meaning units; related keywords support codes,
+        codes form categories, and categories support interpretive themes.
+        Every case is completed independently before any researcher-controlled
+        cross-case comparison; a processing batch never pools case findings.
     </p>
     <p class="automaticPipelineNote">
         <strong>Analytical abbreviations:</strong> TH = Theme · CA = Category ·
-        CO = Code · MU = Meaning Unit.
+        CO = Code · K = Keyword · MU = Meaning Unit.
         Meaning units, codes, and categories are firm evidence-grounded units.
         A category answers “What is being described?” A theme states the
         patterned meaning linking categories. PLI publishes the completed
@@ -962,10 +996,9 @@
         </div>
         <nav class="analysisViewTabs" aria-label="Automatic analysis forms">
             <button type="button" data-automatic-analysis-view="cases" aria-pressed="true">Form 1 · Cases</button>
-            <button type="button" data-automatic-analysis-view="meaningUnits" aria-pressed="false">Form 2 · Meaning Units</button>
+            <button type="button" data-automatic-analysis-view="keywords" aria-pressed="false">Form 2 · Keywords</button>
             <button type="button" data-automatic-analysis-view="codes" aria-pressed="false">Form 3 · Codes</button>
-            <button type="button" data-automatic-analysis-view="categories" aria-pressed="false">Form 4 · Categories</button>
-            <button type="button" data-automatic-analysis-view="themes" aria-pressed="false">Form 5 · Themes</button>
+            <button type="button" data-automatic-analysis-view="themes" aria-pressed="false">Form 4 · Themes</button>
             <button type="button" data-automatic-analysis-view="incomplete" aria-pressed="false">Needs attention</button>
             <button type="button" data-automatic-analysis-view="archive" aria-pressed="false">Archive</button>
         </nav>
@@ -975,7 +1008,7 @@
         <section id="automaticAnalysisReview" class="analysisDiscussion" aria-labelledby="automaticAnalysisReviewHeading">
             <h3 id="automaticAnalysisReviewHeading">Second-layer analysis discussion</h3>
             <p class="muted">
-                Select one or more case, theme, category, or code cells above. The AI
+                Select one or more case, theme, category link, or code above. The AI
                 discussion receives those exact case numbers and source
                 positions, their stored reports and evidence, and the latest
                 uploaded researcher workbook. Original automatic case reports
@@ -1994,7 +2027,7 @@ document.getElementById("periodResetButton").addEventListener("click", () => {
 loadStatistics();
 
 </script>
-<script src="researcher-automatic-analysis.js?version=20260831-meaning-unit-category-v1"></script>
+<script src="researcher-automatic-analysis.js?version=20260831-four-analysis-forms-v1"></script>
     
 </body>
 </html>

@@ -285,7 +285,7 @@ test("Vercel function entries remain within the Hobby deployment limit", async (
     assert.ok(!apiFiles.includes("automatic-analysis-export.js"));
 });
 
-test("separate meaning-unit records are rebuilt from each fully loaded page set", async () => {
+test("separate keyword records are rebuilt from each fully loaded page set", async () => {
     const dashboard = await readFile(
         new URL("../researcher-automatic-analysis-legacy.js", import.meta.url),
         "utf8"
@@ -298,7 +298,8 @@ test("separate meaning-unit records are rebuilt from each fully loaded page set"
     assert.match(dashboard, /const remainingPages = await fetchRemainingDashboardPages/);
     assert.match(dashboard, /DASHBOARD_PAGE_CONCURRENCY = 4/);
     assert.match(dashboard, /payload = \{ \.\.\.firstPage, cases \};[\s\S]*render\(\)/);
-    assert.match(dashboard, /function renderMeaningUnits[\s\S]*caseRecord\.meaningUnits/);
+    assert.match(dashboard, /function renderKeywords[\s\S]*analysisUnits\(caseRecord\)/);
+    assert.match(dashboard, /keywordExpressions\(unit\)/);
     assert.match(dashboard, /Framework \/ report provenance/);
     assert.match(dashboard, /Open exact evidence/);
     assert.match(dashboard, /tableHost\.replaceChildren\(scroll\)/);

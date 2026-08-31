@@ -33,10 +33,9 @@
 
     const ANALYSIS_VIEW_LABELS = Object.freeze({
         cases: "Form 1 · Cases",
-        meaningUnits: "Form 2 · Meaning Units",
+        keywords: "Form 2 · Keywords",
         codes: "Form 3 · Codes",
-        categories: "Form 4 · Categories",
-        themes: "Form 5 · Themes",
+        themes: "Form 4 · Themes",
         incomplete: "Needs attention",
         archive: "Archive"
     });
@@ -368,7 +367,7 @@
         button.title = highlight.message_id
             ? `Open source message ${highlight.message_id} in the preserved transcript`
             : "Open the preserved transcript";
-        const keywordPosition = Number.isFinite(Number(
+        const evidencePosition = Number.isFinite(Number(
             highlight.unit_number ?? highlight.keyword_number
         ))
             ? `MU${highlight.unit_number ?? highlight.keyword_number}`
@@ -376,14 +375,14 @@
         button.dataset.transcriptOrigin = transcriptOriginKey(
             caseRecord,
             "meaning-unit",
-            highlight.id || keywordPosition
+            highlight.id || evidencePosition
         );
         button.addEventListener("click", event => openTranscript(
             caseRecord,
             highlight.message_id,
             {
                 trigger: event.currentTarget,
-                label: `Form 2 · Meaning Units · ${caseRecord.caseNumber} · ${keywordPosition}`
+                label: `Form 2 · Keywords · ${caseRecord.caseNumber} · ${evidencePosition}`
             }
         ));
         return button;
@@ -455,214 +454,216 @@
         return button;
     }
 
-    function renderMeaningUnits() {
+    function analysisUnits(caseRecord) {
+        return (caseRecord.meaningUnits || []).length
+            ? caseRecord.meaningUnits
+            : (caseRecord.highlights || []).map(highlight => ({
+                ...highlight,
+                unit_number: highlight.keyword_number,
+                anchor_expressions: [highlight.exact_text],
+                legacy_code_id: highlight.code_id
+            }));
+    }
+
+    function keywordExpressions(unit) {
+        const anchors = (unit.anchor_expressions || [])
+            .map(value => String(value || "").trim())
+            .filter(Boolean);
+        return [...new Set(anchors.length ? anchors : [unit.exact_text].filter(Boolean))];
+    }
+
+    function analysisRelations(caseRecord) {
+        const groupMappings = (mappings, sourceKey, targetKey) => mappings.reduce(
+            (groups, mapping) => {
+                const values = groups.get(mapping[sourceKey]) || [];
+                values.push(mapping[targetKey]);
+                groups.set(mapping[sourceKey], values);
+                return groups;
+            },
+            new Map()
+        );
+        return {
+            codeById: new Map((caseRecord.codes || []).map(record => [record.id, record])),
+            categoryById: new Map((caseRecord.categories || []).map(record => [record.id, record])),
+            themeById: new Map((caseRecord.themes || []).map(record => [record.id, record])),
+            unitById: new Map(analysisUnits(caseRecord).map(record => [record.id, record])),
+            codeIdsByUnit: groupMappings(
+                caseRecord.codeMeaningUnits || [],
+                "meaning_unit_id",
+                "code_id"
+            ),
+            unitIdsByCode: groupMappings(
+                caseRecord.codeMeaningUnits || [],
+                "code_id",
+                "meaning_unit_id"
+            ),
+            categoryIdsByCode: groupMappings(
+                caseRecord.categoryCodes || [],
+                "code_id",
+                "category_id"
+            ),
+            codeIdsByCategory: groupMappings(
+                caseRecord.categoryCodes || [],
+                "category_id",
+                "code_id"
+            ),
+            themeIdsByCategory: groupMappings(
+                caseRecord.themeCategories || [],
+                "category_id",
+                "theme_id"
+            ),
+            categoryIdsByTheme: groupMappings(
+                caseRecord.themeCategories || [],
+                "theme_id",
+                "category_id"
+            )
+        };
+    }
+
+    function uniqueRecords(ids, recordsById) {
+        return [...new Set(ids || [])].map(id => recordsById.get(id)).filter(Boolean);
+    }
+
+    function appendRecordLinks(cell, caseRecord, kind, records, emptyText) {
+        if (!records.length) {
+            cell.textContent = emptyText;
+            cell.classList.add("analysisEmptyCell");
+            return;
+        }
+        records.forEach(record => {
+            const line = document.createElement("div");
+            line.appendChild(linkedRecordButton(caseRecord, kind, record));
+            cell.appendChild(line);
+        });
+    }
+
+    function projectTopicText(caseRecord) {
+        const project = caseRecord.researchProject;
+        return project
+            ? `${project.project_name} · ${project.research_topic}`
+            : "Legacy project/topic not recorded";
+    }
+
+    function reportProvenanceText(caseRecord) {
+        const framework = caseRecord.analysisFramework;
+        const globalRules = caseRecord.globalAnalysisRules;
+        return `${globalRules ? `Global rules v${globalRules.version_number}` : "Legacy global rules"} · ${framework ? `Project rules v${framework.version_number}` : "Legacy project rules"} · Report ${caseRecord.reportLineage?.reportId || "—"}`;
+    }
+
+    function evidenceCell(caseRecord, unit, buttonText = "Open exact evidence") {
+        const cell = document.createElement("td");
+        cell.appendChild(keywordEvidenceButton(caseRecord, unit, buttonText));
+        if (unit?.message_id) {
+            const reference = document.createElement("small");
+            reference.className = "analysisLinkedContext";
+            reference.textContent = `Message ${unit.message_id}`;
+            cell.appendChild(reference);
+        }
+        return cell;
+    }
+
+    function renderKeywords() {
         const completed = casesForAnalysisForms().filter(item => item.hasReport);
         const { scroll, table } = createTable([
             ...COMPACT_IDENTIFIER_HEADERS,
-            "Case report",
-            "Meaning unit",
-            "Highlighted passage",
-            "Anchor expression(s)",
-            "English transcript text",
+            "K#",
+            "Exact keyword",
+            "Evidence unit",
+            "Exact transcript evidence",
             "Linked code(s)",
-            "Linked category(s)",
+            "Linked category path",
             "Linked theme(s)",
-            "Transcript evidence",
+            "Open evidence",
+            "Case report",
             "Analysis status",
             "Project / topic",
             "Framework / report provenance"
         ]);
         scroll.classList.add("keywordRecordsScroll");
         const body = document.createElement("tbody");
-        let meaningUnitCount = 0;
+        let keywordCount = 0;
 
         completed.forEach(caseRecord => {
-            const codeById = new Map((caseRecord.codes || []).map(code => [
-                code.id,
-                code
-            ]));
-            const categoryById = new Map((caseRecord.categories || []).map(
-                category => [category.id, category]
-            ));
-            const themeById = new Map((caseRecord.themes || []).map(theme => [
-                theme.id,
-                theme
-            ]));
-            const codeIdsByUnit = (caseRecord.codeMeaningUnits || []).reduce(
-                (groups, mapping) => {
-                    const values = groups.get(mapping.meaning_unit_id) || [];
-                    values.push(mapping.code_id);
-                    groups.set(mapping.meaning_unit_id, values);
-                    return groups;
-                },
-                new Map()
-            );
-            const categoryIdsByCode = (caseRecord.categoryCodes || []).reduce(
-                (groups, mapping) => {
-                    const values = groups.get(mapping.code_id) || [];
-                    values.push(mapping.category_id);
-                    groups.set(mapping.code_id, values);
-                    return groups;
-                },
-                new Map()
-            );
-            const themeIdsByCategory = (caseRecord.themeCategories || []).reduce(
-                (groups, mapping) => {
-                    const values = groups.get(mapping.category_id) || [];
-                    values.push(mapping.theme_id);
-                    groups.set(mapping.category_id, values);
-                    return groups;
-                },
-                new Map()
-            );
-            const units = (caseRecord.meaningUnits || []).length
-                ? caseRecord.meaningUnits
-                : (caseRecord.highlights || []).map(highlight => ({
-                    ...highlight,
-                    unit_number: highlight.keyword_number,
-                    anchor_expressions: [highlight.exact_text],
-                    legacy_code_id: highlight.code_id
-                }));
+            const relations = analysisRelations(caseRecord);
+            let caseKeywordNumber = 0;
+            analysisUnits(caseRecord).forEach((unit, unitIndex) => {
+                keywordExpressions(unit).forEach(keyword => {
+                    keywordCount += 1;
+                    caseKeywordNumber += 1;
+                    const row = document.createElement("tr");
+                    createIdentifierCells(row, caseRecord);
+                    createCell(row, `K${caseKeywordNumber}`, "analysisIdentifierCell");
+                    const keywordCell = document.createElement("td");
+                    keywordCell.className = "analysisExactKeywordCell";
+                    keywordCell.appendChild(keywordEvidenceButton(caseRecord, unit, keyword));
+                    row.appendChild(keywordCell);
+                    createCell(
+                        row,
+                        Number.isFinite(Number(unit.unit_number))
+                            ? `MU${unit.unit_number}`
+                            : `MU${unitIndex + 1}`,
+                        "analysisIdentifierCell"
+                    );
+                    createCell(
+                        row,
+                        unit.exact_text || unit.english_translation || "—",
+                        "analysisEvidenceTextCell"
+                    );
 
-            units.forEach((unit, index) => {
-                meaningUnitCount += 1;
-                const row = document.createElement("tr");
-                createIdentifierCells(row, caseRecord);
-                const caseCell = document.createElement("td");
-                caseCell.appendChild(caseReportButton(caseRecord));
-                row.appendChild(caseCell);
-                createCell(
-                    row,
-                    Number.isFinite(Number(unit.unit_number))
-                        ? `MU${unit.unit_number}`
-                        : `MU${index + 1}`,
-                    "analysisIdentifierCell"
-                );
-                const keywordCell = document.createElement("td");
-                keywordCell.className = "analysisExactKeywordCell";
-                keywordCell.appendChild(keywordEvidenceButton(
-                    caseRecord,
-                    unit,
-                    unit.exact_text || "Open meaning unit"
-                ));
-                row.appendChild(keywordCell);
-                createCell(
-                    row,
-                    (unit.anchor_expressions || []).join("; ") || "—",
-                    "analysisEvidenceTextCell"
-                );
-                createCell(
-                    row,
-                    unit.english_translation || "—",
-                    "analysisEvidenceTextCell"
-                );
+                    const codeIds = unit.legacy_code_id
+                        ? [unit.legacy_code_id]
+                        : relations.codeIdsByUnit.get(unit.id) || [];
+                    const codes = uniqueRecords(codeIds, relations.codeById);
+                    const categoryIds = [...new Set(codeIds.flatMap(
+                        codeId => relations.categoryIdsByCode.get(codeId) || []
+                    ))];
+                    const categories = uniqueRecords(categoryIds, relations.categoryById);
+                    const themeIds = [...new Set(categoryIds.flatMap(
+                        categoryId => relations.themeIdsByCategory.get(categoryId) || []
+                    ))];
+                    const themes = uniqueRecords(themeIds, relations.themeById);
 
-                const codeIds = unit.legacy_code_id
-                    ? [unit.legacy_code_id]
-                    : [...new Set(codeIdsByUnit.get(unit.id) || [])];
-                const codes = codeIds.map(codeId => codeById.get(codeId))
-                    .filter(Boolean);
-                const codeCell = document.createElement("td");
-                if (codes.length) {
-                    codes.forEach(code => {
-                        const line = document.createElement("div");
-                        line.appendChild(linkedRecordButton(caseRecord, "code", code));
-                        codeCell.appendChild(line);
-                    });
-                } else {
-                    codeCell.textContent = "Unlinked";
-                    codeCell.className = "analysisEmptyCell";
-                }
-                row.appendChild(codeCell);
-
-                const categoryIds = [...new Set(codeIds.flatMap(
-                    codeId => categoryIdsByCode.get(codeId) || []
-                ))];
-                const categories = categoryIds.map(categoryId =>
-                    categoryById.get(categoryId)
-                ).filter(Boolean);
-                const categoryCell = document.createElement("td");
-                if (categories.length) {
-                    categories.forEach(category => {
-                        const line = document.createElement("div");
-                        line.appendChild(linkedRecordButton(
-                            caseRecord,
-                            "category",
-                            category
-                        ));
-                        categoryCell.appendChild(line);
-                    });
-                } else {
-                    categoryCell.textContent = "Unsynthesized";
-                    categoryCell.className = "analysisEmptyCell";
-                }
-                row.appendChild(categoryCell);
-
-                const themeCell = document.createElement("td");
-                const themes = [...new Set(categoryIds.flatMap(
-                    categoryId => themeIdsByCategory.get(categoryId) || []
-                ))]
-                    .map(themeId => themeById.get(themeId))
-                    .filter(Boolean);
-                if (themes.length) {
-                    themes.forEach(theme => {
-                        const line = document.createElement("div");
-                        line.appendChild(linkedRecordButton(
-                            caseRecord,
-                            "theme",
-                            theme
-                        ));
-                        line.appendChild(discussionSelectButton(
-                            caseRecord,
-                            "theme",
-                            theme
-                        ));
-                        themeCell.appendChild(line);
-                    });
-                } else {
-                    themeCell.textContent = "No higher-level theme";
-                    themeCell.className = "analysisEmptyCell";
-                }
-                row.appendChild(themeCell);
-
-                const evidenceCell = document.createElement("td");
-                evidenceCell.appendChild(keywordEvidenceButton(caseRecord, unit));
-                if (unit.message_id) {
-                    const messageReference = document.createElement("small");
-                    messageReference.className = "analysisLinkedContext";
-                    messageReference.textContent = `Message ${unit.message_id}`;
-                    evidenceCell.appendChild(messageReference);
-                }
-                row.appendChild(evidenceCell);
-                createCell(row, caseRecord.status || "—");
-
-                const project = caseRecord.researchProject;
-                createCell(
-                    row,
-                    project
-                        ? `${project.project_name} · ${project.research_topic}`
-                        : "Legacy project/topic not recorded",
-                    "analysisProvenanceCell"
-                );
-                const framework = caseRecord.analysisFramework;
-                const globalRules = caseRecord.globalAnalysisRules;
-                createCell(
-                    row,
-                    `${globalRules ? `Global rules v${globalRules.version_number}` : "Legacy global rules"} · ${framework ? `Project rules v${framework.version_number}` : "Legacy project rules"} · Report ${caseRecord.reportLineage?.reportId || "—"}`,
-                    "analysisProvenanceCell"
-                );
-                body.appendChild(row);
+                    const codeCell = document.createElement("td");
+                    appendRecordLinks(codeCell, caseRecord, "code", codes, "Unlinked");
+                    row.appendChild(codeCell);
+                    const categoryCell = document.createElement("td");
+                    appendRecordLinks(
+                        categoryCell,
+                        caseRecord,
+                        "category",
+                        categories,
+                        "No category"
+                    );
+                    row.appendChild(categoryCell);
+                    const themeCell = document.createElement("td");
+                    appendRecordLinks(
+                        themeCell,
+                        caseRecord,
+                        "theme",
+                        themes,
+                        "No higher-level theme"
+                    );
+                    row.appendChild(themeCell);
+                    row.appendChild(evidenceCell(caseRecord, unit));
+                    const caseCell = document.createElement("td");
+                    caseCell.appendChild(caseReportButton(caseRecord));
+                    row.appendChild(caseCell);
+                    createCell(row, caseRecord.status || "—");
+                    createCell(row, projectTopicText(caseRecord), "analysisProvenanceCell");
+                    createCell(row, reportProvenanceText(caseRecord), "analysisProvenanceCell");
+                    body.appendChild(row);
+                });
             });
         });
 
-        if (!meaningUnitCount) {
+        if (!keywordCount) {
             const row = document.createElement("tr");
             const cell = createCell(
                 row,
-                "No validated meaning units are available in the active completed reports.",
+                "No exact keywords are available in the active completed reports.",
                 "analysisEmptyRow"
             );
-            cell.colSpan = 14;
+            cell.colSpan = 13;
             body.appendChild(row);
         }
 
@@ -703,72 +704,191 @@
         tableHost.replaceChildren(scroll);
     }
 
-    function renderMatrix(kind) {
-        const completed = casesForAnalysisForms().filter(
-            item => item.hasReport
-        );
-        const recordsKey = kind === "codes" ? "codes"
-            : kind === "categories" ? "categories" : "themes";
-        const prefix = kind === "codes" ? "CO"
-            : kind === "categories" ? "CA" : "TH";
-        const numberKey = kind === "codes" ? "code_number"
-            : kind === "categories" ? "category_number" : "theme_number";
-        const maximum = Math.max(0, ...completed.map(item =>
-            Math.max(0, ...(item[recordsKey] || []).map(record => record[numberKey]))
-        ));
+    function compactKeywords(units) {
+        return [...new Set(units.flatMap(keywordExpressions))].join("; ") || "—";
+    }
+
+    function renderCodes() {
+        const completed = casesForAnalysisForms().filter(item => item.hasReport);
         const { scroll, table } = createTable([
             ...COMPACT_IDENTIFIER_HEADERS,
-            ...Array.from({ length: maximum }, (_, index) => `${prefix}${index + 1}`)
+            "CO#",
+            "Code",
+            "Linked keyword(s)",
+            "Linked category path",
+            "Linked theme(s)",
+            "Exact transcript evidence",
+            "Rationale",
+            "AI discussion",
+            "Analysis status",
+            "Project / topic",
+            "Framework / report provenance"
         ]);
         const body = document.createElement("tbody");
+        let codeCount = 0;
 
         completed.forEach(caseRecord => {
-            const row = document.createElement("tr");
-            createIdentifierCells(row, caseRecord);
-            const byNumber = (caseRecord[recordsKey] || []).reduce(
-                (groups, record) => {
-                    const values = groups.get(record[numberKey]) || [];
-                    values.push(record);
-                    groups.set(record[numberKey], values);
-                    return groups;
-                },
-                new Map()
-            );
+            const relations = analysisRelations(caseRecord);
+            (caseRecord.codes || []).forEach(code => {
+                codeCount += 1;
+                const row = document.createElement("tr");
+                createIdentifierCells(row, caseRecord);
+                createCell(row, `CO${code.code_number}`, "analysisIdentifierCell");
+                const codeCell = document.createElement("td");
+                codeCell.appendChild(linkedRecordButton(caseRecord, "code", code));
+                row.appendChild(codeCell);
 
-            for (let number = 1; number <= maximum; number += 1) {
-                const records = byNumber.get(number) || [];
-                const cell = document.createElement("td");
-
-                if (records.length) {
-                    records.forEach(record => {
-                        const line = document.createElement("div");
-                        const recordKind = kind === "themes" ? "theme"
-                            : kind === "categories" ? "category" : "code";
-                        const button = linkedRecordButton(
-                            caseRecord,
-                            recordKind,
-                            record
-                        );
-                        button.title = `${record.rationale}\n\nOpen the preserved annotated transcript at this record's evidence.`;
-                        line.appendChild(button);
-                        line.appendChild(discussionSelectButton(
-                            caseRecord,
-                            recordKind,
-                            record
-                        ));
-                        cell.appendChild(line);
-                    });
-                } else {
-                    cell.textContent = "—";
-                    cell.className = "analysisEmptyCell";
-                }
-
-                row.appendChild(cell);
-            }
-
-            body.appendChild(row);
+                const units = uniqueRecords(
+                    relations.unitIdsByCode.get(code.id) || [],
+                    relations.unitById
+                );
+                const legacyUnits = units.length ? units : analysisUnits(caseRecord).filter(
+                    unit => unit.legacy_code_id === code.id
+                );
+                createCell(
+                    row,
+                    compactKeywords(legacyUnits),
+                    "analysisCompactList"
+                );
+                const categories = uniqueRecords(
+                    relations.categoryIdsByCode.get(code.id) || [],
+                    relations.categoryById
+                );
+                const categoryCell = document.createElement("td");
+                appendRecordLinks(
+                    categoryCell,
+                    caseRecord,
+                    "category",
+                    categories,
+                    "No category"
+                );
+                row.appendChild(categoryCell);
+                const themeIds = categories.flatMap(category =>
+                    relations.themeIdsByCategory.get(category.id) || []
+                );
+                const themes = uniqueRecords(themeIds, relations.themeById);
+                const themeCell = document.createElement("td");
+                appendRecordLinks(
+                    themeCell,
+                    caseRecord,
+                    "theme",
+                    themes,
+                    "No higher-level theme"
+                );
+                row.appendChild(themeCell);
+                row.appendChild(legacyUnits.length
+                    ? evidenceCell(caseRecord, legacyUnits[0])
+                    : evidenceCell(caseRecord, {
+                        message_id: firstEvidenceMessageId(caseRecord, "code", code)
+                    }));
+                createCell(row, code.rationale || "—", "analysisCompactList");
+                const discussionCell = document.createElement("td");
+                discussionCell.appendChild(discussionSelectButton(
+                    caseRecord,
+                    "code",
+                    code
+                ));
+                row.appendChild(discussionCell);
+                createCell(row, caseRecord.status || "—");
+                createCell(row, projectTopicText(caseRecord), "analysisProvenanceCell");
+                createCell(row, reportProvenanceText(caseRecord), "analysisProvenanceCell");
+                body.appendChild(row);
+            });
         });
 
+        if (!codeCount) {
+            const row = document.createElement("tr");
+            const cell = createCell(row, "No codes are available.", "analysisEmptyRow");
+            cell.colSpan = 12;
+            body.appendChild(row);
+        }
+        table.appendChild(body);
+        tableHost.replaceChildren(scroll);
+    }
+
+    function renderThemes() {
+        const completed = casesForAnalysisForms().filter(item => item.hasReport);
+        const { scroll, table } = createTable([
+            ...COMPACT_IDENTIFIER_HEADERS,
+            "TH#",
+            "Theme",
+            "Linked category path",
+            "Linked codes",
+            "Linked keyword(s)",
+            "Exact transcript evidence",
+            "Rationale",
+            "AI discussion",
+            "Analysis status",
+            "Project / topic",
+            "Framework / report provenance"
+        ]);
+        const body = document.createElement("tbody");
+        let themeCount = 0;
+
+        completed.forEach(caseRecord => {
+            const relations = analysisRelations(caseRecord);
+            (caseRecord.themes || []).forEach(theme => {
+                themeCount += 1;
+                const row = document.createElement("tr");
+                createIdentifierCells(row, caseRecord);
+                createCell(row, `TH${theme.theme_number}`, "analysisIdentifierCell");
+                const themeCell = document.createElement("td");
+                themeCell.appendChild(linkedRecordButton(caseRecord, "theme", theme));
+                row.appendChild(themeCell);
+
+                const categories = uniqueRecords(
+                    relations.categoryIdsByTheme.get(theme.id) || [],
+                    relations.categoryById
+                );
+                const categoryCell = document.createElement("td");
+                appendRecordLinks(
+                    categoryCell,
+                    caseRecord,
+                    "category",
+                    categories,
+                    "No category"
+                );
+                row.appendChild(categoryCell);
+                const codes = uniqueRecords(
+                    categories.flatMap(category =>
+                        relations.codeIdsByCategory.get(category.id) || []
+                    ),
+                    relations.codeById
+                );
+                const codeCell = document.createElement("td");
+                appendRecordLinks(codeCell, caseRecord, "code", codes, "No linked codes");
+                row.appendChild(codeCell);
+                const units = uniqueRecords(
+                    codes.flatMap(code => relations.unitIdsByCode.get(code.id) || []),
+                    relations.unitById
+                );
+                createCell(row, compactKeywords(units), "analysisCompactList");
+                row.appendChild(units.length
+                    ? evidenceCell(caseRecord, units[0])
+                    : evidenceCell(caseRecord, {
+                        message_id: firstEvidenceMessageId(caseRecord, "theme", theme)
+                    }));
+                createCell(row, theme.rationale || "—", "analysisCompactList");
+                const discussionCell = document.createElement("td");
+                discussionCell.appendChild(discussionSelectButton(
+                    caseRecord,
+                    "theme",
+                    theme
+                ));
+                row.appendChild(discussionCell);
+                createCell(row, caseRecord.status || "—");
+                createCell(row, projectTopicText(caseRecord), "analysisProvenanceCell");
+                createCell(row, reportProvenanceText(caseRecord), "analysisProvenanceCell");
+                body.appendChild(row);
+            });
+        });
+
+        if (!themeCount) {
+            const row = document.createElement("tr");
+            const cell = createCell(row, "No themes are available.", "analysisEmptyRow");
+            cell.colSpan = 12;
+            body.appendChild(row);
+        }
         table.appendChild(body);
         tableHost.replaceChildren(scroll);
     }
@@ -882,7 +1002,7 @@
         const completedCases = casesForAnalysisForms().filter(
             caseRecord => caseRecord.hasReport
         );
-        const casesWithMeaningUnits = completedCases.filter(
+        const casesWithKeywords = completedCases.filter(
             caseRecord => (caseRecord.meaningUnits || []).length > 0
                 || (caseRecord.highlights || []).length > 0
         ).length;
@@ -902,10 +1022,12 @@
             renderIncomplete();
         } else if (activeView === "cases") {
             renderCases();
-        } else if (activeView === "meaningUnits") {
-            renderMeaningUnits();
-        } else {
-            renderMatrix(activeView);
+        } else if (activeView === "keywords") {
+            renderKeywords();
+        } else if (activeView === "codes") {
+            renderCodes();
+        } else if (activeView === "themes") {
+            renderThemes();
         }
 
         document.querySelectorAll("[data-automatic-analysis-view]")
@@ -918,16 +1040,14 @@
         document.getElementById("automaticAnalysisDescription").textContent =
             activeView === "cases"
                 ? `Form 1 · Cases: ${completedCases.length} completed case reports are shown in participant-code order. PLI finishes the analysis without waiting for researcher approval; feedback starts a new version afterward.`
-                : activeView === "meaningUnits"
-                    ? `Form 2 · Meaning Units: ${casesWithMeaningUnits} cases contain validated coherent transcript passages. The full meaning unit is highlighted; optional anchors remain inside it. Each row shows its code → category → theme path.`
+                : activeView === "keywords"
+                    ? `Form 2 · Keywords: ${casesWithKeywords} cases contain exact keyword expressions. Every keyword remains linked to its full transcript evidence, code, category path, theme, framework, and report provenance.`
                     : activeView === "codes"
-                        ? "Form 3 · Codes: each code is supportable by this case’s meaning units and uses common terminology suitable across cases."
-                        : activeView === "categories"
-                            ? "Form 4 · Categories: each firm descriptive category answers what is being described and groups related codes."
+                        ? "Form 3 · Codes: one row per case-specific code, with its linked keywords, category path, themes, exact evidence, rationale, status, and provenance."
                         : activeView === "themes"
-                            ? "Form 5 · Themes: each completed interpretive theme states the patterned meaning linking two or more categories."
+                            ? "Form 4 · Themes: one row per case-specific theme, with its linked categories, codes, keywords, exact evidence, rationale, status, and provenance."
                         : activeView === "incomplete"
-                            ? "Needs attention: unfinished interviews are separate from Forms 1–5. No meaning units, codes, categories, or themes are assigned before formal completion."
+                            ? "Needs attention: unfinished interviews are separate from Forms 1–4. No keywords, codes, categories, or themes are assigned before formal completion."
                             : "Archived cases are excluded from every active analysis form and from future automatic reanalysis. Each archived row preserves its transcript, report, language, demographic columns, and its MU/CO/CA/TH hierarchy.";
         window.dispatchEvent(new CustomEvent("automatic-analysis-review-ready"));
     }
@@ -1417,14 +1537,14 @@
                     ),
                     item.hasReport ? "Available" : item.status
                 ])];
-        } else if (activeView === "meaningUnits") {
+        } else if (activeView === "keywords") {
             rows = [[
                 "P#",
                 "S#",
-                "MU",
-                "Meaning unit passage",
-                "Anchor expression(s)",
-                "English transcript text",
+                "K#",
+                "Exact keyword",
+                "Evidence unit",
+                "Exact transcript evidence",
                 "CO",
                 "CA",
                 "TH",
@@ -1437,80 +1557,65 @@
                 "Report ID"
             ]];
             completed.forEach(item => {
-                const codeById = new Map((item.codes || []).map(code => [
-                    code.id,
-                    code
-                ]));
-                const categoryById = new Map((item.categories || []).map(
-                    category => [category.id, category]
-                ));
-                const themeById = new Map((item.themes || []).map(theme => [
-                    theme.id,
-                    theme
-                ]));
-                const codeIdsByUnit = (item.codeMeaningUnits || []).reduce(
-                    (groups, mapping) => {
-                        const values = groups.get(mapping.meaning_unit_id) || [];
-                        values.push(mapping.code_id);
-                        groups.set(mapping.meaning_unit_id, values);
-                        return groups;
-                    },
-                    new Map()
-                );
-                const categoryIdsByCode = (item.categoryCodes || []).reduce(
-                    (groups, mapping) => {
-                        const values = groups.get(mapping.code_id) || [];
-                        values.push(mapping.category_id);
-                        groups.set(mapping.code_id, values);
-                        return groups;
-                    },
-                    new Map()
-                );
-                const themeIdsByCategory = (item.themeCategories || []).reduce(
-                    (groups, mapping) => {
-                        const values = groups.get(mapping.category_id) || [];
-                        values.push(mapping.theme_id);
-                        groups.set(mapping.category_id, values);
-                        return groups;
-                    },
-                    new Map()
-                );
-                const units = (item.meaningUnits || []).length
-                    ? item.meaningUnits
-                    : (item.highlights || []).map(highlight => ({
-                        ...highlight,
-                        unit_number: highlight.keyword_number,
-                        anchor_expressions: [highlight.exact_text],
-                        legacy_code_id: highlight.code_id
-                    }));
-                units.forEach(unit => {
+                const relations = analysisRelations(item);
+                let keywordNumber = 0;
+                analysisUnits(item).forEach((unit, unitIndex) => {
                     const codeIds = unit.legacy_code_id
                         ? [unit.legacy_code_id]
-                        : [...new Set(codeIdsByUnit.get(unit.id) || [])];
-                    const codes = codeIds.map(codeId => codeById.get(codeId))
-                        .filter(Boolean);
+                        : relations.codeIdsByUnit.get(unit.id) || [];
+                    const codes = uniqueRecords(codeIds, relations.codeById);
                     const categoryIds = [...new Set(codeIds.flatMap(
-                        codeId => categoryIdsByCode.get(codeId) || []
+                        codeId => relations.categoryIdsByCode.get(codeId) || []
                     ))];
-                    const categories = categoryIds.map(categoryId =>
-                        categoryById.get(categoryId)
-                    ).filter(Boolean);
-                    const themes = [...new Set(categoryIds.flatMap(
-                        categoryId => themeIdsByCategory.get(categoryId) || []
-                    ))].map(themeId => themeById.get(themeId)).filter(Boolean);
+                    const categories = uniqueRecords(categoryIds, relations.categoryById);
+                    const themes = uniqueRecords(categoryIds.flatMap(
+                        categoryId => relations.themeIdsByCategory.get(categoryId) || []
+                    ), relations.themeById);
+                    keywordExpressions(unit).forEach(keyword => {
+                        keywordNumber += 1;
+                        rows.push([
+                            participantCode(item),
+                            sessionNumber(item),
+                            `K${keywordNumber}`,
+                            keyword,
+                            unit.unit_number ? `MU${unit.unit_number}` : `MU${unitIndex + 1}`,
+                            unit.exact_text || unit.english_translation || "",
+                            codes.map(code => recordLabel(code, "code")).join(" | "),
+                            categories.map(category => recordLabel(category, "category")).join(" | "),
+                            themes.map(theme => recordLabel(theme, "theme")).join(" | "),
+                            unit.message_id || "",
+                            transcriptUrl(item),
+                            item.status || "",
+                            item.researchProject?.project_name || "",
+                            item.researchProject?.research_topic || "",
+                            item.analysisFramework?.version_number || "",
+                            item.reportLineage?.reportId || ""
+                        ]);
+                    });
+                });
+            });
+        } else if (activeView === "codes") {
+            rows = [["P#", "S#", "CO#", "Code", "Keywords", "Categories", "Themes", "Rationale", "Transcript link", "Analysis status", "Project", "Topic", "Framework version", "Report ID"]];
+            completed.forEach(item => {
+                const relations = analysisRelations(item);
+                (item.codes || []).forEach(code => {
+                    const units = uniqueRecords(
+                        relations.unitIdsByCode.get(code.id) || [],
+                        relations.unitById
+                    );
+                    const categories = uniqueRecords(
+                        relations.categoryIdsByCode.get(code.id) || [],
+                        relations.categoryById
+                    );
+                    const themes = uniqueRecords(categories.flatMap(category =>
+                        relations.themeIdsByCategory.get(category.id) || []
+                    ), relations.themeById);
                     rows.push([
-                        participantCode(item),
-                        sessionNumber(item),
-                        unit.unit_number ? `MU${unit.unit_number}` : "",
-                        unit.exact_text || "",
-                        (unit.anchor_expressions || []).join("; "),
-                        unit.english_translation || "",
-                        codes.map(code => recordLabel(code, "code")).join(" | "),
+                        participantCode(item), sessionNumber(item), `CO${code.code_number}`,
+                        recordLabel(code, "code"), compactKeywords(units),
                         categories.map(category => recordLabel(category, "category")).join(" | "),
                         themes.map(theme => recordLabel(theme, "theme")).join(" | "),
-                        unit.message_id || "",
-                        transcriptUrl(item),
-                        item.status || "",
+                        code.rationale || "", transcriptUrl(item), item.status || "",
                         item.researchProject?.project_name || "",
                         item.researchProject?.research_topic || "",
                         item.analysisFramework?.version_number || "",
@@ -1518,32 +1623,34 @@
                     ]);
                 });
             });
-        } else {
-            const recordsKey = activeView;
-            const [prefix, numberKey, labelKey] = {
-                codes: ["CO", "code_number", "code_label"],
-                categories: ["CA", "category_number", "category_label"],
-                themes: ["TH", "theme_number", "theme_label"]
-            }[activeView];
-            const maximum = Math.max(0, ...completed.map(item =>
-                Math.max(0, ...(item[recordsKey] || []).map(record => record[numberKey]))
-            ));
-            rows = [["P#", "S#", ...Array.from({ length: maximum }, (_, index) => `${prefix}${index + 1}`)],
-                ...completed.map(item => {
-                    const records = (item[recordsKey] || []).reduce(
-                        (groups, record) => {
-                            const values = groups.get(record[numberKey]) || [];
-                            values.push(record[labelKey]);
-                            groups.set(record[numberKey], values);
-                            return groups;
-                        },
-                        new Map()
+        } else if (activeView === "themes") {
+            rows = [["P#", "S#", "TH#", "Theme", "Categories", "Codes", "Keywords", "Rationale", "Transcript link", "Analysis status", "Project", "Topic", "Framework version", "Report ID"]];
+            completed.forEach(item => {
+                const relations = analysisRelations(item);
+                (item.themes || []).forEach(theme => {
+                    const categories = uniqueRecords(
+                        relations.categoryIdsByTheme.get(theme.id) || [],
+                        relations.categoryById
                     );
-                    return [participantCode(item), sessionNumber(item), ...Array.from(
-                        { length: maximum },
-                        (_, index) => (records.get(index + 1) || []).join(" | ")
-                    )];
-                })];
+                    const codes = uniqueRecords(categories.flatMap(category =>
+                        relations.codeIdsByCategory.get(category.id) || []
+                    ), relations.codeById);
+                    const units = uniqueRecords(codes.flatMap(code =>
+                        relations.unitIdsByCode.get(code.id) || []
+                    ), relations.unitById);
+                    rows.push([
+                        participantCode(item), sessionNumber(item), `TH${theme.theme_number}`,
+                        recordLabel(theme, "theme"),
+                        categories.map(category => recordLabel(category, "category")).join(" | "),
+                        codes.map(code => recordLabel(code, "code")).join(" | "),
+                        compactKeywords(units), theme.rationale || "", transcriptUrl(item),
+                        item.status || "", item.researchProject?.project_name || "",
+                        item.researchProject?.research_topic || "",
+                        item.analysisFramework?.version_number || "",
+                        item.reportLineage?.reportId || ""
+                    ]);
+                });
+            });
         }
 
         const csv = rows.map(row => row.map(csvValue).join(",")).join("\r\n");
