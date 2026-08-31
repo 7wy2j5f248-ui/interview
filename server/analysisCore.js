@@ -1867,11 +1867,15 @@ export async function generateAutomaticCaseAnalysis(
         inputTokenCount = (inputTokenCount || 0)
             + (auditedLabels.inputTokenCount || 0);
 
-        if (!auditedLabels.audit.complete) {
+        for (
+            let labelRepairAttempt = 1;
+            labelRepairAttempt <= 2 && !auditedLabels.audit.complete;
+            labelRepairAttempt += 1
+        ) {
             const labelRepairResponse = await createResponse([{
                 role: "system",
                 content: systemInstruction
-                    + " Return one complete corrected report. Repair every rejected code, category, or theme label. EVERY code label must contain no more than three space-separated words. Re-label a supported analytic finding; never delete it merely to simplify the report or pass the audit. Codes and categories must use coherent common terms suitable across cases while remaining supportable by this case alone. Categories descriptively group related codes. Themes state the patterned meaning linking categories and may use a clear interpretive phrase. Retain unsynthesized lower units instead of forcing a hierarchy. Preserve exact meaning-unit evidence, anchors, and demographic provenance."
+                    + " Return one complete corrected report. Repair every rejected code, category, or theme label. EVERY code label must contain no more than three space-separated words. Re-label a supported analytic finding; never delete it merely to simplify the report or pass the audit. If a rejected code contaminates a category or theme, repair the code first and then rebuild every dependent category and theme so the whole hierarchy remains coherent. Do not reuse a rejected label or assignment unless the auditor's stated substantive problem has been resolved. Codes and categories must use coherent common terms suitable across cases while remaining supportable by this case alone. Categories descriptively group related codes. Themes state the patterned meaning linking categories and may use a clear interpretive phrase. Retain unsynthesized lower units instead of forcing a hierarchy. Preserve exact meaning-unit evidence, anchors, and demographic provenance."
             }, {
                 role: "user",
                 content: [
