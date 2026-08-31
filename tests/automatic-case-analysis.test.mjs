@@ -911,6 +911,9 @@ test("researcher dashboard uses four separate case, keyword, code, and theme for
     assert.match(html, /Form 3 · Codes/);
     assert.match(html, /Form 4 · Themes/);
     assert.doesNotMatch(html, /data-automatic-analysis-view="categories"/);
+    assert.match(html, /Meaning units are first\s*completed within every individual case/);
+    assert.match(html, /codes compared and harmonized across cases/);
+    assert.match(html, /code layer\s*is then frozen before category abstraction begins/);
     assert.match(html, /TH = Theme · CA = Category ·\s*CO = Code · K = Keyword · MU = Meaning Unit/);
     assert.match(html, /data-automatic-analysis-view="incomplete"[^>]*>Needs attention/);
     assert.match(html, /data-automatic-analysis-view="archive"/);
