@@ -80,7 +80,7 @@ export async function processCaseReanalysisRequest(
     const selectedModel = model();
     const { data: request, error: requestError } = await supabase
         .from(REQUESTS)
-        .select("id, session_id, source_report_id, request_number, reason_code, researcher_notes, requested_by, status, attempt_count, project_id, analysis_framework_id, global_analysis_rule_id, project_reanalysis_batch_id")
+        .select("id, session_id, source_report_id, request_number, reason_code, researcher_notes, requested_by, status, attempt_count, last_error, project_id, analysis_framework_id, global_analysis_rule_id, project_reanalysis_batch_id")
         .eq("id", requestId)
         .single();
     if (requestError || !request) {
@@ -107,7 +107,7 @@ export async function processCaseReanalysisRequest(
     } else {
         const { error: modelError } = await supabase
             .from(REQUESTS)
-            .update({ model: selectedModel, last_error: null })
+            .update({ model: selectedModel })
             .eq("id", requestId)
             .eq("status", "processing");
         if (modelError) {
@@ -195,6 +195,7 @@ export async function processCaseReanalysisRequest(
                 researcherNotes: request.researcher_notes,
                 sourceReportId: sourceReport.id,
                 sourceAnalysisVersion: sourceReport.analysis_version,
+                priorAttemptFailure: request.last_error || null,
                 researchProjectId: analysisFramework.projectId,
                 researchProjectName: analysisFramework.projectName,
                 researchTopic: analysisFramework.researchTopic,

@@ -32,7 +32,7 @@ const proposalOnlyMigrationUrl = new URL(
     import.meta.url
 );
 const serialReanalysisMigrationUrl = new URL(
-    "../supabase/migrations/20260831203000_enforce_serial_framework_reanalysis.sql",
+    "../supabase/migrations/20260831215500_preserve_reanalysis_retry_feedback.sql",
     import.meta.url
 );
 
@@ -96,8 +96,10 @@ test("global semantic label standards are audited and repaired before completion
     assert.match(core, /unsynthesized_checks/);
     assert.match(core, /Rejected label audit/);
     assert.match(core, /Label-corrected automatic individual case analysis/);
-    assert.match(core, /structuralRepairAttempt <= 2/);
-    assert.match(core, /labelRepairAttempt <= 2/);
+    assert.match(core, /structuralRepairAttempt <= structuralRepairPassLimit/);
+    assert.match(core, /labelRepairAttempt <= labelRepairPassLimit/);
+    assert.match(core, /structuralRepairPassLimit: 0/);
+    assert.match(core, /labelRepairPassLimit: 0/);
     assert.match(core, /rebuild every dependent category and theme/);
     assert.match(core, /rejectedLabelCheckNames/);
     assert.match(automaticProcessor, /labelQualityAudit/);
@@ -209,6 +211,7 @@ test("global framework queue creates one auditable proposal per case", async () 
     assert.match(processor, /status: "proposal_ready"/);
     assert.match(processor, /loadBatchProposalVocabulary/);
     assert.match(processor, /project_reanalysis_batch_id/);
+    assert.match(processor, /priorAttemptFailure/);
     assert.match(processor, /\.eq\("status", "proposal_ready"\)/);
     assert.doesNotMatch(processor, /rpc\("complete_automatic_case_reanalysis"/);
     assert.match(migration, /'researcherApprovalRequired', false/);
@@ -248,7 +251,8 @@ test("framework re-analysis claims remain strictly one case at a time", async ()
     const migration = await readFile(serialReanalysisMigrationUrl, "utf8");
     assert.match(migration, /pg_advisory_xact_lock/);
     assert.match(migration, /active_request\.status = 'processing'/);
-    assert.match(migration, /processing_started_at[\s\S]*>= now\(\) - interval '15 minutes'/);
+    assert.match(migration, /processing_started_at[\s\S]*>= now\(\) - interval '6 minutes'/);
+    assert.doesNotMatch(migration, /last_error\s*=\s*null/);
     assert.match(migration, /return;/);
     assert.match(migration, /order by request\.requested_at, request\.id/);
 });

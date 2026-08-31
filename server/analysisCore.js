@@ -1782,7 +1782,9 @@ export async function generateAutomaticCaseAnalysis(
         model = QUALITATIVE_ANALYSIS_MODEL,
         reanalysisContext = null,
         analysisFramework = null,
-        sharedVocabulary = null
+        sharedVocabulary = null,
+        structuralRepairPassLimit = 2,
+        labelRepairPassLimit = 2
     } = {}
 ) {
     const frameworkInstruction = analysisFrameworkInstruction(
@@ -1851,7 +1853,8 @@ export async function generateAutomaticCaseAnalysis(
     );
     for (
         let structuralRepairAttempt = 1;
-        structuralRepairAttempt <= 2 && needsStructuralRepair();
+        structuralRepairAttempt <= structuralRepairPassLimit
+            && needsStructuralRepair();
         structuralRepairAttempt += 1
     ) {
         const repairResponse = await createResponse([
@@ -1916,7 +1919,8 @@ export async function generateAutomaticCaseAnalysis(
 
         for (
             let labelRepairAttempt = 1;
-            labelRepairAttempt <= 2 && !auditedLabels.audit.complete;
+            labelRepairAttempt <= labelRepairPassLimit
+                && !auditedLabels.audit.complete;
             labelRepairAttempt += 1
         ) {
             const labelRepairResponse = await createResponse([{
@@ -2205,7 +2209,9 @@ export async function generateAutomaticCaseReanalysis(
             model,
             reanalysisContext: researcherRequest,
             analysisFramework,
-            sharedVocabulary
+            sharedVocabulary,
+            structuralRepairPassLimit: 0,
+            labelRepairPassLimit: 0
         }
     );
     totalInputTokens += analysis.inputTokenCount || 0;
@@ -2246,53 +2252,11 @@ export async function generateAutomaticCaseReanalysis(
             exactText: item.exactText,
             explanation: item.explanation
         }));
-        analysis = await generateAutomaticCaseAnalysis(
-            openaiClient,
-            messages,
-            {
-                model,
-                analysisFramework,
-                sharedVocabulary,
-                reanalysisContext: {
-                    ...researcherRequest,
-                    rejectedEvidenceFromIndependentAudit: rejected,
-                    correctionInstruction:
-                        "Return a new complete report that excludes every rejected evidence item and any unsupported code, category, or theme."
-                }
-            }
-        );
-        totalInputTokens += analysis.inputTokenCount || 0;
-        if (!analysis.complete) {
-            const rejectedLabels = analysis.labelQualityAudit?.rejectedLabels || [];
-            throw new Error([
-                "The corrected re-analysis did not produce a complete evidence hierarchy.",
-                `Validated ${analysis.codes?.length || 0} codes, ${analysis.categories?.length || 0} categories, and ${analysis.themes?.length || 0} themes.`,
-                `${analysis.droppedCodes || 0} codes were dropped; ${analysis.invalidEvidence || 0} evidence or hierarchy records were invalid.`,
-                (analysis.invalidLabels || []).length
-                    ? `Structurally invalid labels: ${analysis.invalidLabels.slice(0, 12).map(item => `${item.kind} “${item.label}”`).join(" | ")}`
-                    : "No structurally invalid labels were recorded.",
-                analysis.fullHierarchyExpected
-                    ? `This ${analysis.substantiveMessageCount}-turn substantive transcript required at least 4 codes, 2 categories, and 1 theme; hierarchy coverage complete: ${Boolean(analysis.hierarchyCoverageComplete)}.`
-                    : "A full multi-level hierarchy was not structurally required for this short transcript.",
-                rejectedLabels.length
-                    ? `Label audit rejected ${rejectedLabels.length}: ${rejectedLabels.slice(0, 8).map(item => `${item.kind} ${item.number} “${item.label}” [${rejectedLabelCheckNames(item)}] — ${item.explanation}`).join(" | ")}`
-                    : "The label audit did not reject a label."
-            ].join(" "));
-        }
-        audited = await auditAutomaticCaseRelevance(
-            openaiClient,
-            messages,
-            analysis,
-            model,
-            analysisFramework
-        );
-        totalInputTokens += audited.inputTokenCount || 0;
-    }
-
-    if (!audited.audit.complete) {
-        throw new Error(
-            "The proposed re-analysis still contained evidence that failed semantic or research-scope relevance checks. No proposal was stored."
-        );
+        throw new Error([
+            "The proposed re-analysis contained evidence that failed semantic or research-scope relevance checks.",
+            `Rejected ${rejected.length}: ${rejected.slice(0, 6).map(item => `code ${item.codeNumber} “${item.codeLabel}” at ${item.messageId} — ${item.explanation}`).join(" | ")}`,
+            "The durable queue must use this failure as correction context on its next attempt; no proposal was stored."
+        ].join(" "));
     }
 
     return {
