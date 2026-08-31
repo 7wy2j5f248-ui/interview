@@ -31,6 +31,10 @@ const proposalOnlyMigrationUrl = new URL(
     "../supabase/migrations/20260831192536_create_proposal_only_category_revision.sql",
     import.meta.url
 );
+const serialReanalysisMigrationUrl = new URL(
+    "../supabase/migrations/20260831203000_enforce_serial_framework_reanalysis.sql",
+    import.meta.url
+);
 
 const sample = {
     id: "11111111-1111-4111-8111-111111111111",
@@ -231,4 +235,13 @@ test("project-wide re-analysis is previewed, batched, and inspectable without ap
     assert.match(migration, /researcherApprovalRequiredPerCaseToInspect', false/);
     assert.match(migration, /research_project_case_memberships/);
     assert.match(migration, /S1783783759083/);
+});
+
+test("framework re-analysis claims remain strictly one case at a time", async () => {
+    const migration = await readFile(serialReanalysisMigrationUrl, "utf8");
+    assert.match(migration, /pg_advisory_xact_lock/);
+    assert.match(migration, /active_request\.status = 'processing'/);
+    assert.match(migration, /processing_started_at[\s\S]*>= now\(\) - interval '15 minutes'/);
+    assert.match(migration, /return;/);
+    assert.match(migration, /order by request\.requested_at, request\.id/);
 });
