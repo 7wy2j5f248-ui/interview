@@ -21,6 +21,10 @@ const migrationUrl = new URL(
     "../supabase/migrations/20260831033507_add_automatic_analysis_review_workspace.sql",
     import.meta.url
 );
+const reanalysisMigrationUrl = new URL(
+    "../supabase/migrations/20260831042540_researcher_case_reanalysis.sql",
+    import.meta.url
+);
 
 test("researcher workbook import preserves row order and hidden structure", async () => {
     const workbook = new ExcelJS.Workbook();
@@ -121,4 +125,35 @@ test("visible automatic-analysis workspace restores discussion and upload contro
     assert.match(migration, /enable row level security/g);
     assert.match(migration, /selected_sources jsonb not null/);
     assert.match(migration, /file_sha256 text not null/);
+});
+
+test("researcher-controlled re-analysis preserves versions until explicit approval", async () => {
+    const [html, client, api, migration] = await Promise.all([
+        readFile(htmlUrl, "utf8"),
+        readFile(clientUrl, "utf8"),
+        readFile(
+            new URL("../api/automatic-analysis-review.js", import.meta.url),
+            "utf8"
+        ),
+        readFile(reanalysisMigrationUrl, "utf8")
+    ]);
+
+    assert.match(html, /Request re-analysis for this case/);
+    assert.match(html, /id="automaticReanalysisNotes"/);
+    assert.match(client, /Approve proposed report/);
+    assert.match(client, /action: "request_case_reanalysis"/);
+    assert.match(client, /action: "review_case_reanalysis"/);
+    assert.match(client, /Historical interview-protocol issue/);
+    assert.match(api, /generateAutomaticCaseReanalysis/);
+    assert.match(api, /detectCompoundQuestionTurns/);
+    assert.match(migration, /automatic_case_reanalysis_requests/);
+    assert.match(migration, /automatic_case_reanalysis_proposals/);
+    assert.match(migration, /automatic_case_reanalysis_reviews/);
+    assert.match(migration, /automatic_case_reanalysis_events/);
+    assert.match(migration, /source_report_id uuid/);
+    assert.match(migration, /reanalysis_request_id uuid unique/);
+    assert.match(migration, /review_automatic_case_reanalysis/);
+    assert.match(migration, /p_decision = 'rejected'/);
+    assert.match(migration, /enable row level security/g);
+    assert.match(migration, /substring\([\s\S]*message\."Message"/);
 });

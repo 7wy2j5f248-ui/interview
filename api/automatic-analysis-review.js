@@ -9,6 +9,13 @@ import {
     normalizeAutomaticReviewSelection,
     parseAutomaticReviewWorkbook
 } from "../server/automaticAnalysisReview.js";
+import {
+    AUTOMATIC_CASE_REANALYSIS_VERSION,
+    detectCompoundQuestionTurns,
+    generateAutomaticCaseReanalysis,
+    prepareParticipantMessages
+} from "../server/analysisCore.js";
+import { normalizeOpenAIModel } from "../server/modelConfiguration.js";
 import { authorizeResearcher } from "../server/researcherAuth.js";
 
 export const config = { maxDuration: 300 };
@@ -16,7 +23,11 @@ export const config = { maxDuration: 300 };
 const TABLES = Object.freeze({
     workbookImports: "automatic_analysis_review_workbook_imports",
     threads: "automatic_analysis_review_threads",
-    messages: "automatic_analysis_review_messages"
+    messages: "automatic_analysis_review_messages",
+    reanalysisRequests: "automatic_case_reanalysis_requests",
+    reanalysisProposals: "automatic_case_reanalysis_proposals",
+    reanalysisReviews: "automatic_case_reanalysis_reviews",
+    reanalysisEvents: "automatic_case_reanalysis_events"
 });
 
 class ReviewRequestError extends Error {
@@ -49,6 +60,41 @@ function safeMessage(value) {
     return message;
 }
 
+function safeSessionId(value) {
+    const sessionId = typeof value === "string"
+        ? value.trim().slice(0, 120)
+        : "";
+    if (!sessionId || !/^[A-Za-z0-9_-]+$/u.test(sessionId)) {
+        throw new ReviewRequestError(400, "Choose one valid completed case.");
+    }
+    return sessionId;
+}
+
+function safeReanalysisReason(value) {
+    const allowed = new Set([
+        "keywords_unrelated_to_theme",
+        "evidence_theme_mismatch",
+        "other"
+    ]);
+    if (!allowed.has(value)) {
+        throw new ReviewRequestError(400, "Choose a re-analysis reason.");
+    }
+    return value;
+}
+
+function safeResearcherNotes(value, { required = true } = {}) {
+    const notes = typeof value === "string"
+        ? value.trim().slice(0, 2_000)
+        : "";
+    if (required && !notes) {
+        throw new ReviewRequestError(
+            400,
+            "Explain what should be checked in this case."
+        );
+    }
+    return notes || null;
+}
+
 async function requireData(query, message) {
     const { data, error } = await query;
     if (error) throw new ReviewRequestError(500, message);
@@ -75,9 +121,101 @@ async function latestWorkbookImport(supabase, requestedId = null) {
     return data || null;
 }
 
+async function loadReanalysisWorkspace(supabase) {
+    const requests = await requireData(
+        supabase
+            .from(TABLES.reanalysisRequests)
+            .select("id, session_id, source_report_id, request_number, reason_code, researcher_notes, requested_by, status, analysis_version, model, attempt_count, requested_at, processing_started_at, proposal_ready_at, reviewed_at, last_error")
+            .order("requested_at", { ascending: false })
+            .limit(60),
+        "Case re-analysis requests could not be loaded."
+    );
+    const requestIds = requests.map(item => item.id);
+    const sourceReportIds = [...new Set(requests.map(
+        item => item.source_report_id
+    ))];
+    const [proposals, reviews, events, sourceReports] = await Promise.all([
+        requestIds.length ? requireData(
+            supabase
+                .from(TABLES.reanalysisProposals)
+                .select("id, request_id, source_report_id, proposal_version, model, proposed_report, relevance_audit, source_quality_flags, input_token_count, created_at")
+                .in("request_id", requestIds),
+            "Case re-analysis proposals could not be loaded."
+        ) : [],
+        requestIds.length ? requireData(
+            supabase
+                .from(TABLES.reanalysisReviews)
+                .select("id, request_id, proposal_id, decision, reviewer_notes, reviewed_by, new_report_id, reviewed_at")
+                .in("request_id", requestIds),
+            "Case re-analysis decisions could not be loaded."
+        ) : [],
+        requestIds.length ? requireData(
+            supabase
+                .from(TABLES.reanalysisEvents)
+                .select("id, request_id, event_type, actor, details, created_at")
+                .in("request_id", requestIds)
+                .order("created_at", { ascending: true }),
+            "Case re-analysis history could not be loaded."
+        ) : [],
+        sourceReportIds.length ? requireData(
+            supabase
+                .from("qualitative_case_reports")
+                .select("id, session_id, case_number, participant_code, language, demographics, case_interpretation, analysis_version, model, created_at, completed_at, superseded_at, superseded_reason, source_report_id, reanalysis_request_id")
+                .in("id", sourceReportIds),
+            "Source report versions could not be loaded."
+        ) : []
+    ]);
+    const [sourceCodes, sourceThemes, sourceHighlights, sourceThemeCodes] =
+        sourceReportIds.length ? await Promise.all([
+            requireData(
+                supabase
+                    .from("qualitative_case_codes")
+                    .select("id, report_id, code_number, code_label, rationale, color_slot")
+                    .in("report_id", sourceReportIds)
+                    .order("code_number", { ascending: true }),
+                "Source report codes could not be loaded."
+            ),
+            requireData(
+                supabase
+                    .from("qualitative_case_themes")
+                    .select("id, report_id, theme_number, theme_label, rationale")
+                    .in("report_id", sourceReportIds)
+                    .order("theme_number", { ascending: true }),
+                "Source report themes could not be loaded."
+            ),
+            requireData(
+                supabase
+                    .from("qualitative_case_keyword_highlights")
+                    .select("id, report_id, code_id, keyword_number, message_id, exact_text, start_offset, end_offset")
+                    .in("report_id", sourceReportIds)
+                    .order("keyword_number", { ascending: true }),
+                "Source report keyword evidence could not be loaded."
+            ),
+            requireData(
+                supabase
+                    .from("qualitative_case_theme_codes")
+                    .select("report_id, theme_id, code_id")
+                    .in("report_id", sourceReportIds),
+                "Source theme-to-code links could not be loaded."
+            )
+        ]) : [[], [], [], []];
+
+    return {
+        requests,
+        proposals,
+        reviews,
+        events,
+        sourceReports,
+        sourceCodes,
+        sourceThemes,
+        sourceHighlights,
+        sourceThemeCodes
+    };
+}
+
 async function listWorkspace(req, res, supabase) {
     const threadId = safeId(req.query?.threadId);
-    const [imports, threads, messages] = await Promise.all([
+    const [imports, threads, messages, reanalysis] = await Promise.all([
         requireData(
             supabase
                 .from(TABLES.workbookImports)
@@ -102,13 +240,15 @@ async function listWorkspace(req, res, supabase) {
                 .order("created_at", { ascending: true })
                 .limit(200),
             "The selected researcher discussion could not be loaded."
-        ) : []
+        ) : [],
+        loadReanalysisWorkspace(supabase)
     ]);
     return res.status(200).json({
         workbookImports: imports,
         threads,
         activeThreadId: threadId,
-        messages
+        messages,
+        reanalysis
     });
 }
 
@@ -545,6 +685,226 @@ async function discuss(req, res, supabase, openaiClient) {
     });
 }
 
+async function requestCaseReanalysis(req, res, supabase, openaiClient) {
+    const sessionId = safeSessionId(req.body?.sessionId);
+    const reasonCode = safeReanalysisReason(req.body?.reasonCode);
+    const researcherNotes = safeResearcherNotes(req.body?.researcherNotes);
+    const model = normalizeOpenAIModel(
+        process.env.AUTOMATIC_ANALYSIS_MODEL
+            || process.env.QUALITATIVE_ANALYSIS_MODEL
+    );
+    const { data: requestId, error: requestError } = await supabase.rpc(
+        "create_automatic_case_reanalysis_request",
+        {
+            p_session_id: sessionId,
+            p_reason_code: reasonCode,
+            p_researcher_notes: researcherNotes,
+            p_analysis_version: AUTOMATIC_CASE_REANALYSIS_VERSION
+        }
+    );
+    if (requestError?.code === "23505") {
+        throw new ReviewRequestError(
+            409,
+            "This case already has a re-analysis request awaiting review. Review or reject that proposal before starting another."
+        );
+    }
+    if (requestError || !requestId) {
+        throw new ReviewRequestError(
+            409,
+            "A re-analysis request could not be opened for this case. It must be completed, active, and unarchived."
+        );
+    }
+
+    const markProcessing = await supabase
+        .from(TABLES.reanalysisRequests)
+        .update({
+            status: "processing",
+            processing_started_at: new Date().toISOString(),
+            attempt_count: 1,
+            model,
+            last_error: null
+        })
+        .eq("id", requestId)
+        .eq("status", "queued");
+    if (markProcessing.error) {
+        throw new ReviewRequestError(
+            500,
+            "The re-analysis request could not enter processing."
+        );
+    }
+    await supabase.from(TABLES.reanalysisEvents).insert({
+        request_id: requestId,
+        event_type: "processing_started",
+        actor: "system",
+        details: { model, analysisVersion: AUTOMATIC_CASE_REANALYSIS_VERSION }
+    });
+
+    try {
+        const { data: requestRecord, error: requestLoadError } = await supabase
+            .from(TABLES.reanalysisRequests)
+            .select("id, session_id, source_report_id, request_number, reason_code, researcher_notes")
+            .eq("id", requestId)
+            .single();
+        if (requestLoadError || !requestRecord) {
+            throw new Error("The stored re-analysis request could not be loaded.");
+        }
+        const [{ data: sourceReport, error: sourceError }, messageResult] =
+            await Promise.all([
+                supabase
+                    .from("qualitative_case_reports")
+                    .select("id, session_id, case_number, participant_code, language, demographics, case_interpretation, analysis_version, model, completed_at")
+                    .eq("id", requestRecord.source_report_id)
+                    .single(),
+                supabase
+                    .from("interview_messages")
+                    .select("id, Participant, Session, Language, Speaker, Message, EnglishTranslation, Timestamp")
+                    .eq("Session", sessionId)
+                    .order("Timestamp", { ascending: true })
+                    .order("id", { ascending: true })
+            ]);
+        if (sourceError || !sourceReport) {
+            throw new Error("The preserved source report could not be loaded.");
+        }
+        if (messageResult.error) {
+            throw new Error("The preserved transcript could not be loaded.");
+        }
+        const transcriptRows = messageResult.data || [];
+        const prepared = prepareParticipantMessages(transcriptRows);
+        if (!prepared.messages.length) {
+            throw new Error("The preserved transcript has no participant evidence.");
+        }
+        const analysis = await generateAutomaticCaseReanalysis(
+            openaiClient,
+            prepared.messages,
+            {
+                requestId,
+                requestNumber: requestRecord.request_number,
+                reasonCode,
+                researcherNotes,
+                sourceReportId: sourceReport.id,
+                sourceAnalysisVersion: sourceReport.analysis_version
+            },
+            { model }
+        );
+        const proposedReport = {
+            participantCode: sourceReport.participant_code,
+            language: sourceReport.language,
+            demographics: sourceReport.demographics,
+            caseInterpretation: analysis.caseInterpretation,
+            codes: analysis.codes,
+            themes: analysis.themes
+        };
+        const sourceQualityFlags = detectCompoundQuestionTurns(transcriptRows);
+        const { data: proposal, error: proposalError } = await supabase
+            .from(TABLES.reanalysisProposals)
+            .insert({
+                request_id: requestId,
+                source_report_id: sourceReport.id,
+                proposal_version: AUTOMATIC_CASE_REANALYSIS_VERSION,
+                model,
+                proposed_report: proposedReport,
+                relevance_audit: analysis.relevanceAudit,
+                source_quality_flags: sourceQualityFlags,
+                input_token_count: analysis.inputTokenCount
+            })
+            .select("id, created_at")
+            .single();
+        if (proposalError || !proposal) {
+            throw new Error("The proposed report version could not be stored.");
+        }
+        const proposalReadyAt = new Date().toISOString();
+        const { error: readyError } = await supabase
+            .from(TABLES.reanalysisRequests)
+            .update({
+                status: "proposal_ready",
+                proposal_ready_at: proposalReadyAt,
+                last_error: null
+            })
+            .eq("id", requestId)
+            .eq("status", "processing");
+        if (readyError) {
+            throw new Error("The proposal-ready status could not be stored.");
+        }
+        await supabase.from(TABLES.reanalysisEvents).insert({
+            request_id: requestId,
+            event_type: "proposal_ready",
+            actor: "system",
+            details: {
+                proposalId: proposal.id,
+                sourceReportId: sourceReport.id,
+                sourceQualityFlagCount: sourceQualityFlags.length,
+                relevanceCheckCount: analysis.relevanceAudit.checks.length
+            }
+        });
+        return res.status(200).json({
+            requestId,
+            proposalId: proposal.id,
+            status: "proposal_ready",
+            caseNumber: sourceReport.case_number,
+            sourceQualityFlagCount: sourceQualityFlags.length
+        });
+    } catch (error) {
+        const failure = (error instanceof Error ? error.message : String(error))
+            .slice(0, 2_000);
+        await supabase
+            .from(TABLES.reanalysisRequests)
+            .update({ status: "failed", last_error: failure })
+            .eq("id", requestId);
+        await supabase.from(TABLES.reanalysisEvents).insert({
+            request_id: requestId,
+            event_type: "failed",
+            actor: "system",
+            details: { error: failure }
+        });
+        throw new ReviewRequestError(
+            422,
+            `Re-analysis stopped without changing the current report: ${failure}`
+        );
+    }
+}
+
+async function reviewCaseReanalysis(req, res, supabase) {
+    const requestId = safeId(req.body?.requestId);
+    if (!requestId) {
+        throw new ReviewRequestError(400, "Choose a re-analysis proposal.");
+    }
+    const decision = req.body?.decision === "approved"
+        ? "approved"
+        : req.body?.decision === "rejected"
+            ? "rejected"
+            : null;
+    if (!decision) {
+        throw new ReviewRequestError(
+            400,
+            "Choose whether to approve or reject the proposed report."
+        );
+    }
+    const reviewerNotes = safeResearcherNotes(
+        req.body?.reviewerNotes,
+        { required: false }
+    );
+    const { data: newReportId, error } = await supabase.rpc(
+        "review_automatic_case_reanalysis",
+        {
+            p_request_id: requestId,
+            p_decision: decision,
+            p_reviewer_notes: reviewerNotes
+        }
+    );
+    if (error) {
+        throw new ReviewRequestError(
+            409,
+            "This proposal could not be reviewed. Refresh the workspace; its source report may no longer be current or it may already have a decision."
+        );
+    }
+    return res.status(200).json({
+        requestId,
+        decision,
+        newReportId: newReportId || null,
+        currentReportChanged: decision === "approved"
+    });
+}
+
 export default async function handler(req, res) {
     const configuredToken = process.env.RESEARCHER_DASHBOARD_TOKEN;
     const secretKey = process.env.SUPABASE_SECRET_KEY;
@@ -586,6 +946,23 @@ export default async function handler(req, res) {
                 supabase,
                 new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
             );
+        }
+        if (req.body?.action === "request_case_reanalysis") {
+            if (!process.env.OPENAI_API_KEY) {
+                throw new ReviewRequestError(
+                    500,
+                    "AI re-analysis configuration is incomplete."
+                );
+            }
+            return await requestCaseReanalysis(
+                req,
+                res,
+                supabase,
+                new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+            );
+        }
+        if (req.body?.action === "review_case_reanalysis") {
+            return await reviewCaseReanalysis(req, res, supabase);
         }
         throw new ReviewRequestError(400, "Unknown review action.");
     } catch (error) {

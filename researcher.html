@@ -581,6 +581,59 @@
             margin-block-start: 0.5rem;
         }
 
+        .automaticReanalysisPanel {
+            background: #ffffff;
+            border: 1px solid #9db3d1;
+            border-radius: 0.5rem;
+            margin-block: 1rem;
+            padding: 0.9rem;
+        }
+
+        .automaticReanalysisPanel h4 {
+            margin-block: 0 0.35rem;
+        }
+
+        .automaticReanalysisPanel textarea {
+            box-sizing: border-box;
+            min-height: 5rem;
+            width: 100%;
+        }
+
+        .automaticReanalysisHistory {
+            display: grid;
+            gap: 0.85rem;
+            margin-block-start: 1rem;
+        }
+
+        .automaticReanalysisRecord {
+            border-block-start: 1px solid #d7dfeb;
+            padding-block-start: 0.85rem;
+        }
+
+        .automaticReanalysisComparison {
+            display: grid;
+            gap: 0.75rem;
+            grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+            margin-block: 0.75rem;
+        }
+
+        .automaticReanalysisVersion {
+            background: #f8fafc;
+            border: 1px solid #d7dfeb;
+            border-radius: 0.4rem;
+            padding: 0.75rem;
+        }
+
+        .automaticReanalysisVersion ul {
+            padding-inline-start: 1.25rem;
+        }
+
+        .automaticReanalysisWarning {
+            background: #fff5e6;
+            border-inline-start: 4px solid #b56a00;
+            padding: 0.65rem;
+        }
+
         .analysisProposal {
             background: #fff8e8;
             border: 1px solid #d9b66f;
@@ -865,6 +918,41 @@
                     Clear selection
                 </button>
             </div>
+
+            <section class="automaticReanalysisPanel" aria-labelledby="automaticReanalysisHeading">
+                <h4 id="automaticReanalysisHeading">Request re-analysis for this case</h4>
+                <p class="muted">
+                    Select exactly one case above. The preserved transcript and
+                    every earlier report remain unchanged. AI creates a new
+                    proposal with exact-evidence and semantic relevance checks;
+                    it becomes current only after your explicit approval.
+                </p>
+                <p id="automaticReanalysisSelectedCase" class="muted">
+                    Select one case, theme, or code from a single case.
+                </p>
+                <label>
+                    Reason
+                    <select id="automaticReanalysisReason">
+                        <option value="keywords_unrelated_to_theme">Keywords unrelated to theme</option>
+                        <option value="evidence_theme_mismatch">Evidence-to-theme mismatch</option>
+                        <option value="other">Other analytical concern</option>
+                    </select>
+                </label>
+                <label>
+                    Researcher notes
+                    <textarea
+                        id="automaticReanalysisNotes"
+                        placeholder="For example: The exact keyword is about AI-chatbot use, but it does not support a sleep-related theme."
+                    ></textarea>
+                </label>
+                <div class="actionRow">
+                    <button id="automaticReanalysisRequestButton" type="button" disabled>
+                        Create proposed re-analysis
+                    </button>
+                </div>
+                <p id="automaticReanalysisStatus" class="muted" role="status"></p>
+                <div id="automaticReanalysisHistory" class="automaticReanalysisHistory"></div>
+            </section>
 
             <div class="actionRow">
                 <label>

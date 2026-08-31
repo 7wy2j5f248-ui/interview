@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
+    detectCompoundQuestionTurns,
     isConversationalCourtesy,
-    validateAutomaticCaseAnalysis
+    validateAutomaticCaseAnalysis,
+    validateAutomaticCaseRelevanceAudit
 } from "../server/analysisCore.js";
 
 const migrationUrl = new URL(
@@ -104,6 +106,61 @@ test("automatic case analysis rejects paraphrased evidence and unassigned codes"
     assert.equal(result.complete, false);
     assert.equal(result.codes.length, 0);
     assert.ok(result.invalidEvidence > 0);
+});
+
+test("case re-analysis requires transcript, code, theme, and research-scope relevance", () => {
+    const analysis = {
+        codes: [{
+            label: "AI non-use",
+            rationale: "The participant does not use chatbots.",
+            highlights: [{
+                messageId: "message-1",
+                exactText: "don't really mess with those",
+                startOffset: 5,
+                endOffset: 34
+            }]
+        }],
+        themes: [{
+            label: "Technology",
+            rationale: "Technology adoption.",
+            codeNumbers: [1]
+        }]
+    };
+    const result = validateAutomaticCaseRelevanceAudit(analysis, {
+        checks: [{
+            code_number: 1,
+            message_id: "message-1",
+            exact_text: "don't really mess with those",
+            transcript_grounded: true,
+            supports_code: true,
+            supports_theme: true,
+            research_scope_relevant: false,
+            explanation: "The participant did not connect chatbot use to sleep."
+        }],
+        overall_summary: "Exact but outside the sleep-analysis scope."
+    });
+
+    assert.equal(result.complete, false);
+    assert.equal(result.rejectedEvidence.length, 1);
+    assert.equal(result.checks[0].transcriptGrounded, true);
+    assert.equal(result.checks[0].researchScopeRelevant, false);
+});
+
+test("compound interviewer questions remain visible as source-quality flags", () => {
+    const flags = detectCompoundQuestionTurns([{
+        id: "question-1",
+        Speaker: "ai",
+        Message: "Do you use social media? If so, how before bed?"
+    }, {
+        id: "answer-1",
+        Speaker: "user",
+        Message: "Not much."
+    }]);
+
+    assert.equal(flags.length, 1);
+    assert.equal(flags[0].messageId, "question-1");
+    assert.equal(flags[0].issueType, "compound_question");
+    assert.match(flags[0].explanation, /does not rewrite the transcript/);
 });
 
 test("invalid extra evidence is omitted without discarding an otherwise exact case", () => {

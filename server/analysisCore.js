@@ -5,6 +5,8 @@ export const QUALITATIVE_ANALYSIS_MODEL = DEFAULT_OPENAI_MODEL;
 export const QUALITATIVE_ANALYSIS_VERSION = "task-014-v7-complete-cases-before-summary";
 export const AUTOMATIC_CASE_ANALYSIS_VERSION =
     "case-analysis-v3-evidence-backed-demographics";
+export const AUTOMATIC_CASE_REANALYSIS_VERSION =
+    "case-reanalysis-v1-semantic-relevance";
 export const DEFAULT_ANALYSIS_BATCH_SIZE = 40;
 export const MAX_THEME_SUBJECT_WORDS = 2;
 export const MAX_THEME_SUBJECT_LENGTH = 60;
@@ -376,6 +378,42 @@ const automaticThemeSchema = {
         themes: automaticCaseSchema.properties.themes
     },
     required: ["themes"],
+    additionalProperties: false
+};
+
+const automaticCaseRelevanceAuditSchema = {
+    type: "object",
+    properties: {
+        checks: {
+            type: "array",
+            items: {
+                type: "object",
+                properties: {
+                    code_number: { type: "integer" },
+                    message_id: { type: "string" },
+                    exact_text: { type: "string" },
+                    transcript_grounded: { type: "boolean" },
+                    supports_code: { type: "boolean" },
+                    supports_theme: { type: "boolean" },
+                    research_scope_relevant: { type: "boolean" },
+                    explanation: { type: "string" }
+                },
+                required: [
+                    "code_number",
+                    "message_id",
+                    "exact_text",
+                    "transcript_grounded",
+                    "supports_code",
+                    "supports_theme",
+                    "research_scope_relevant",
+                    "explanation"
+                ],
+                additionalProperties: false
+            }
+        },
+        overall_summary: { type: "string" }
+    },
+    required: ["checks", "overall_summary"],
     additionalProperties: false
 };
 
@@ -1095,9 +1133,17 @@ export async function generateSuggestionsForBatch(
 export async function generateAutomaticCaseAnalysis(
     openaiClient,
     messages,
-    { model = QUALITATIVE_ANALYSIS_MODEL } = {}
+    {
+        model = QUALITATIVE_ANALYSIS_MODEL,
+        reanalysisContext = null
+    } = {}
 ) {
-    const systemInstruction = "Read this single completed participant transcript line by line. The entire analytical report must be written in English, regardless of the interview language. This includes every demographic value, additional descriptor, code label, code rationale, theme label, theme rationale, and the case interpretation. Only exact_text keyword evidence remains verbatim in the participant's original language because it identifies the precise highlighted source text. First extract the fixed demographic fields. Every non-null demographic value must cite one exact participant original_text phrase and its message_id. Use null when the participant did not provide the information; never guess. Birth year must be explicitly stated. Birth cohort may be derived only from an explicitly stated birth year. Diaspora status may be derived from explicit residence and origin evidence. Mark each supported value as stated or derived. Then work strictly from evidence upward. Identify analytically meaningful words or short phrases in the participant's original_text and return them verbatim as keyword evidence with their exact message_id. Keywords are research evidence, not every word in the conversation. Never select greetings, introductions, thanks, farewells, politeness formulas, interviewer-directed courtesies, or other phatic conversational language as keywords or codes. Examples to exclude include hello, hi, good morning, thank you, and their equivalents in every interview language. Never return translated wording as exact_text. Then categorize the substantive keyword occurrences into participant-specific codes. Codes are concise English category names and may be abstractions such as 'Work patterns' or 'Media use'; they do not need to repeat transcript wording. Finally group related code numbers into broad one- or two-word English themes. Every code must belong to at least one theme. Do not compare this case with any participant. Do not invent or paraphrase evidence. Return the substantive keyword occurrences needed to make the code system inspectable without flooding it with routine conversation. Codes, themes, and demographic values are proposals with exact provenance for researcher review, not confirmed findings.";
+    const relevanceInstruction = reanalysisContext
+        ? " This is a researcher-requested re-analysis of a sleep-interview case. Apply a stricter relevance boundary: retain evidence only when it materially informs sleep, sleep behaviour, sleep habits, sleep conditions, sleep determinants, sleep outcomes, or a contextual factor that the participant connects to sleep. A general answer to a protocol question about technology, AI chatbots, media, work, family, or any other topic is not analytically relevant merely because the interviewer asked it. Exclude it unless the participant links it to sleep or it directly supports a sleep-relevant code and theme. Exact quotation is necessary but not sufficient: each keyword must semantically support its code and that code's assigned theme. Reject unrelated cross-topic evidence. Researcher request context (JSON): "
+            + JSON.stringify(reanalysisContext)
+        : "";
+    const systemInstruction = "Read this single completed participant transcript line by line. The entire analytical report must be written in English, regardless of the interview language. This includes every demographic value, additional descriptor, code label, code rationale, theme label, theme rationale, and the case interpretation. Only exact_text keyword evidence remains verbatim in the participant's original language because it identifies the precise highlighted source text. First extract the fixed demographic fields. Every non-null demographic value must cite one exact participant original_text phrase and its message_id. Use null when the participant did not provide the information; never guess. Birth year must be explicitly stated. Birth cohort may be derived only from an explicitly stated birth year. Diaspora status may be derived from explicit residence and origin evidence. Mark each supported value as stated or derived. Then work strictly from evidence upward. Identify analytically meaningful words or short phrases in the participant's original_text and return them verbatim as keyword evidence with their exact message_id. Keywords are research evidence, not every word in the conversation. Never select greetings, introductions, thanks, farewells, politeness formulas, interviewer-directed courtesies, or other phatic conversational language as keywords or codes. Examples to exclude include hello, hi, good morning, thank you, and their equivalents in every interview language. Never return translated wording as exact_text. Then categorize the substantive keyword occurrences into participant-specific codes. Codes are concise English category names and may be abstractions such as 'Work patterns' or 'Media use'; they do not need to repeat transcript wording. Finally group related code numbers into broad one- or two-word English themes. Every code must belong to at least one theme. Do not compare this case with any participant. Do not invent or paraphrase evidence. Return the substantive keyword occurrences needed to make the code system inspectable without flooding it with routine conversation. Codes, themes, and demographic values are proposals with exact provenance for researcher review, not confirmed findings."
+        + relevanceInstruction;
     const createResponse = input => openaiClient.responses.create({
         model,
         store: false,
@@ -1290,6 +1336,270 @@ export async function generateAutomaticCaseAnalysis(
         ...validated,
         inputTokenCount
     };
+}
+
+function relevanceEvidenceKey(codeNumber, messageId, exactText) {
+    return `${codeNumber}:${messageId}:${exactText}`;
+}
+
+export function validateAutomaticCaseRelevanceAudit(analysis, value) {
+    const expected = [];
+    const themesByCode = new Map();
+
+    (analysis?.themes || []).forEach((theme, themeIndex) => {
+        (theme.codeNumbers || []).forEach(codeNumber => {
+            const labels = themesByCode.get(codeNumber) || [];
+            labels.push(`T${themeIndex + 1} ${theme.label}`);
+            themesByCode.set(codeNumber, labels);
+        });
+    });
+    (analysis?.codes || []).forEach((code, codeIndex) => {
+        (code.highlights || []).forEach(highlight => {
+            expected.push({
+                codeNumber: codeIndex + 1,
+                codeLabel: code.label,
+                themeLabels: themesByCode.get(codeIndex + 1) || [],
+                messageId: highlight.messageId,
+                exactText: highlight.exactText
+            });
+        });
+    });
+
+    const auditByKey = new Map();
+    let duplicateChecks = 0;
+    (Array.isArray(value?.checks) ? value.checks : []).forEach(check => {
+        const codeNumber = Number.isInteger(check?.code_number)
+            ? check.code_number
+            : null;
+        const messageId = normalizedText(check?.message_id);
+        const exactText = normalizedText(check?.exact_text);
+        if (!codeNumber || !messageId || !exactText) return;
+        const key = relevanceEvidenceKey(codeNumber, messageId, exactText);
+        if (auditByKey.has(key)) duplicateChecks += 1;
+        auditByKey.set(key, {
+            codeNumber,
+            messageId,
+            exactText,
+            transcriptGrounded: check.transcript_grounded === true,
+            supportsCode: check.supports_code === true,
+            supportsTheme: check.supports_theme === true,
+            researchScopeRelevant: check.research_scope_relevant === true,
+            explanation: normalizedText(check.explanation) ||
+                "No relevance explanation was supplied."
+        });
+    });
+
+    const checks = expected.map(evidence => {
+        const key = relevanceEvidenceKey(
+            evidence.codeNumber,
+            evidence.messageId,
+            evidence.exactText
+        );
+        const audit = auditByKey.get(key);
+        const accepted = Boolean(
+            audit?.transcriptGrounded
+            && audit.supportsCode
+            && audit.supportsTheme
+            && audit.researchScopeRelevant
+        );
+        return {
+            ...evidence,
+            transcriptGrounded: Boolean(audit?.transcriptGrounded),
+            supportsCode: Boolean(audit?.supportsCode),
+            supportsTheme: Boolean(audit?.supportsTheme),
+            researchScopeRelevant: Boolean(audit?.researchScopeRelevant),
+            accepted,
+            explanation: audit?.explanation ||
+                "The independent relevance audit did not return this evidence item."
+        };
+    });
+    const expectedKeys = new Set(expected.map(item => relevanceEvidenceKey(
+        item.codeNumber,
+        item.messageId,
+        item.exactText
+    )));
+    const unexpectedCheckCount = [...auditByKey.keys()].filter(
+        key => !expectedKeys.has(key)
+    ).length;
+    const rejectedEvidence = checks.filter(check => !check.accepted);
+
+    return {
+        checks,
+        overallSummary: normalizedText(value?.overall_summary) ||
+            "No overall relevance summary was supplied.",
+        rejectedEvidence,
+        duplicateChecks,
+        unexpectedCheckCount,
+        complete: Boolean(
+            expected.length
+            && !rejectedEvidence.length
+            && !duplicateChecks
+            && !unexpectedCheckCount
+            && auditByKey.size === expected.length
+        )
+    };
+}
+
+async function auditAutomaticCaseRelevance(
+    openaiClient,
+    messages,
+    analysis,
+    model
+) {
+    const themesByCode = new Map();
+    analysis.themes.forEach((theme, themeIndex) => {
+        theme.codeNumbers.forEach(codeNumber => {
+            const themes = themesByCode.get(codeNumber) || [];
+            themes.push({
+                theme_number: themeIndex + 1,
+                label: theme.label,
+                rationale: theme.rationale
+            });
+            themesByCode.set(codeNumber, themes);
+        });
+    });
+    const proposedEvidence = analysis.codes.flatMap((code, codeIndex) =>
+        code.highlights.map(highlight => ({
+            code_number: codeIndex + 1,
+            code_label: code.label,
+            code_rationale: code.rationale,
+            assigned_themes: themesByCode.get(codeIndex + 1) || [],
+            message_id: highlight.messageId,
+            exact_text: highlight.exactText
+        }))
+    );
+    const response = await openaiClient.responses.create({
+        model,
+        store: false,
+        text: {
+            format: {
+                type: "json_schema",
+                name: "automatic_case_reanalysis_relevance_audit",
+                strict: true,
+                schema: automaticCaseRelevanceAuditSchema
+            }
+        },
+        input: [{
+            role: "system",
+            content: "Act as a strict independent evidence auditor for a qualitative sleep-interview case. Return exactly one check for every proposed evidence item and no others. Exact transcript grounding is necessary but insufficient. Set supports_code true only when the exact phrase semantically supports the assigned code. Set supports_theme true only when that code and phrase support at least one assigned theme. Set research_scope_relevant true only when the participant evidence materially informs sleep, sleep behaviour, sleep habits, sleep conditions, sleep determinants, sleep outcomes, or a contextual factor the participant connects to sleep. General answers about AI chatbots, media, work, family, technology, or other protocol topics are false unless the participant connects them to sleep. Reject unrelated cross-topic evidence even when the quotation is exact. Explain each judgment briefly."
+        }, {
+            role: "user",
+            content: [
+                `Preserved participant transcript (JSON):\n${messagesForModel(messages)}`,
+                `Proposed evidence hierarchy (JSON):\n${JSON.stringify(proposedEvidence)}`
+            ].join("\n\n")
+        }]
+    });
+    return {
+        audit: validateAutomaticCaseRelevanceAudit(
+            analysis,
+            parseStructuredResponse(
+                response,
+                "Automatic case re-analysis relevance audit"
+            )
+        ),
+        inputTokenCount: Number.isInteger(response?.usage?.input_tokens)
+            ? response.usage.input_tokens
+            : null
+    };
+}
+
+export async function generateAutomaticCaseReanalysis(
+    openaiClient,
+    messages,
+    researcherRequest,
+    { model = QUALITATIVE_ANALYSIS_MODEL } = {}
+) {
+    let totalInputTokens = 0;
+    let analysis = await generateAutomaticCaseAnalysis(
+        openaiClient,
+        messages,
+        { model, reanalysisContext: researcherRequest }
+    );
+    totalInputTokens += analysis.inputTokenCount || 0;
+
+    if (!analysis.complete) {
+        throw new Error(
+            "The proposed re-analysis did not produce a complete evidence hierarchy."
+        );
+    }
+
+    let audited = await auditAutomaticCaseRelevance(
+        openaiClient,
+        messages,
+        analysis,
+        model
+    );
+    totalInputTokens += audited.inputTokenCount || 0;
+
+    if (!audited.audit.complete) {
+        const rejected = audited.audit.rejectedEvidence.map(item => ({
+            codeNumber: item.codeNumber,
+            codeLabel: item.codeLabel,
+            themes: item.themeLabels,
+            messageId: item.messageId,
+            exactText: item.exactText,
+            explanation: item.explanation
+        }));
+        analysis = await generateAutomaticCaseAnalysis(
+            openaiClient,
+            messages,
+            {
+                model,
+                reanalysisContext: {
+                    ...researcherRequest,
+                    rejectedEvidenceFromIndependentAudit: rejected,
+                    correctionInstruction:
+                        "Return a new complete report that excludes every rejected evidence item and any unsupported code or theme."
+                }
+            }
+        );
+        totalInputTokens += analysis.inputTokenCount || 0;
+        if (!analysis.complete) {
+            throw new Error(
+                "The corrected re-analysis did not produce a complete evidence hierarchy."
+            );
+        }
+        audited = await auditAutomaticCaseRelevance(
+            openaiClient,
+            messages,
+            analysis,
+            model
+        );
+        totalInputTokens += audited.inputTokenCount || 0;
+    }
+
+    if (!audited.audit.complete) {
+        throw new Error(
+            "The proposed re-analysis still contained evidence that failed semantic or research-scope relevance checks. No proposal was stored."
+        );
+    }
+
+    return {
+        ...analysis,
+        relevanceAudit: audited.audit,
+        inputTokenCount: totalInputTokens || null
+    };
+}
+
+export function detectCompoundQuestionTurns(rows) {
+    return (Array.isArray(rows) ? rows : []).flatMap(row => {
+        const speaker = normalizedText(row?.Speaker)?.toLowerCase();
+        const text = normalizedText(row?.Message);
+        if (!["ai", "assistant", "interviewer"].includes(speaker) || !text) {
+            return [];
+        }
+        const questionCount = (text.match(/[?？؟]/gu) || []).length;
+        if (questionCount < 2) return [];
+        return [{
+            messageId: storedIdentifier(row.id),
+            issueType: "compound_question",
+            exactText: text.slice(0, 1_000),
+            questionCount,
+            explanation:
+                "This historical interviewer turn contains multiple questions. Re-analysis may improve coding, but it does not rewrite the transcript or remove this protocol-quality issue."
+        }];
+    });
 }
 
 export async function collectEvidenceForBatch(

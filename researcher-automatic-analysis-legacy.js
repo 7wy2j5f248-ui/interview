@@ -1157,6 +1157,9 @@
             );
             if (caseRecord?.hasReport) openCaseReport(caseRecord);
         },
+        refresh() {
+            return load();
+        },
         setStatus
     });
 

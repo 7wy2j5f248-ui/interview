@@ -6,7 +6,16 @@
     const bridge = window.automaticAnalysisReviewBridge;
     if (!bridge) return;
 
-    let workspace = { workbookImports: [], threads: [], messages: [] };
+    let workspace = {
+        workbookImports: [],
+        threads: [],
+        messages: [],
+        reanalysis: {
+            requests: [], proposals: [], reviews: [], events: [],
+            sourceReports: [], sourceCodes: [], sourceThemes: [],
+            sourceHighlights: [], sourceThemeCodes: []
+        }
+    };
     let activeThreadId = null;
     let activeWorkbookId = null;
     let loadingPromise = null;
@@ -19,6 +28,15 @@
     const input = document.getElementById("automaticReviewDiscussionInput");
     const sendButton = document.getElementById(
         "automaticReviewDiscussionSendButton"
+    );
+    const reanalysisButton = document.getElementById(
+        "automaticReanalysisRequestButton"
+    );
+    const reanalysisStatus = document.getElementById(
+        "automaticReanalysisStatus"
+    );
+    const reanalysisHistory = document.getElementById(
+        "automaticReanalysisHistory"
     );
 
     function token() {
@@ -39,6 +57,13 @@
         return bridge.cases().find(caseRecord =>
             caseRecord.transcriptIdentity?.sessionId === source?.sessionId
         ) || null;
+    }
+
+    function selectedSessionId() {
+        const sessionIds = [...new Set(
+            [...selection.values()].map(source => source.sessionId)
+        )];
+        return sessionIds.length === 1 ? sessionIds[0] : null;
     }
 
     function renderSelection() {
@@ -75,6 +100,266 @@
         document.getElementById("automaticReviewClearSelectionButton").disabled =
             !sources.length;
         sendButton.disabled = !sources.length;
+        const reanalysisSessionId = selectedSessionId();
+        reanalysisButton.disabled = !reanalysisSessionId;
+        document.getElementById("automaticReanalysisSelectedCase").textContent =
+            reanalysisSessionId
+                ? `Selected case: ${sources[0].caseNumber}. Only this case will be re-analysed.`
+                : "Select one case, theme, or code from a single case.";
+        renderReanalysisHistory();
+    }
+
+    function appendHierarchy(container, report, source = false) {
+        const themes = source
+            ? workspace.reanalysis.sourceThemes.filter(
+                item => item.report_id === report.id
+            ).map(item => ({
+                label: item.theme_label,
+                rationale: item.rationale,
+                codeNumbers: workspace.reanalysis.sourceThemeCodes
+                    .filter(link => link.theme_id === item.id)
+                    .map(link => workspace.reanalysis.sourceCodes.find(
+                        code => code.id === link.code_id
+                            && code.report_id === report.id
+                    )?.code_number)
+                    .filter(number => number > 0)
+            }))
+            : report?.themes || [];
+        const codes = source
+            ? workspace.reanalysis.sourceCodes.filter(
+                item => item.report_id === report.id
+            ).map(item => ({
+                label: item.code_label,
+                rationale: item.rationale,
+                highlights: workspace.reanalysis.sourceHighlights.filter(
+                    highlight => highlight.code_id === item.id
+                ).map(highlight => ({ exactText: highlight.exact_text }))
+            }))
+            : report?.codes || [];
+        const themeHeading = document.createElement("strong");
+        themeHeading.textContent = "Themes";
+        const themeList = document.createElement("ul");
+        themes.forEach((theme, index) => {
+            const item = document.createElement("li");
+            item.textContent = `T${index + 1} ${theme.label} — ${theme.rationale}`;
+            themeList.appendChild(item);
+        });
+        const codeHeading = document.createElement("strong");
+        codeHeading.textContent = "Codes and exact keyword evidence";
+        const codeList = document.createElement("ul");
+        codes.forEach((code, index) => {
+            const item = document.createElement("li");
+            const evidence = (code.highlights || []).map(
+                highlight => `“${highlight.exactText}”`
+            ).join("; ");
+            item.textContent = `C${index + 1} ${code.label} — ${evidence}`;
+            codeList.appendChild(item);
+        });
+        container.append(themeHeading, themeList, codeHeading, codeList);
+    }
+
+    function reasonLabel(value) {
+        return ({
+            keywords_unrelated_to_theme: "Keywords unrelated to theme",
+            evidence_theme_mismatch: "Evidence-to-theme mismatch",
+            other: "Other analytical concern"
+        })[value] || value;
+    }
+
+    async function reviewReanalysis(requestId, decision, reviewerNotes) {
+        if (decision === "approved" && !window.confirm(
+            "Approve this proposed report as current? The prior report will remain preserved in version history."
+        )) return;
+        reanalysisStatus.textContent = decision === "approved"
+            ? "Approving the proposed version and preserving the prior report…"
+            : "Rejecting the proposal and keeping the current report…";
+        const response = await fetch("/api/automatic-analysis-review", {
+            method: "POST",
+            headers: {
+                Authorization: `Bearer ${token()}`,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                action: "review_case_reanalysis",
+                requestId,
+                decision,
+                reviewerNotes
+            })
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            throw new Error(data.error || "The proposal decision could not be saved.");
+        }
+        await loadWorkspace(activeThreadId);
+        if (data.currentReportChanged && bridge.refresh) {
+            await bridge.refresh();
+        }
+        reanalysisStatus.textContent = decision === "approved"
+            ? "Approved. The proposed version is now current; the earlier report, request, proposal, decision, timestamps, and lineage remain preserved."
+            : "Rejected. The current report is unchanged and the rejected proposal remains in the audit history.";
+    }
+
+    function renderReanalysisHistory() {
+        if (!reanalysisHistory) return;
+        reanalysisHistory.replaceChildren();
+        const sessionId = selectedSessionId();
+        if (!sessionId) return;
+        const layer = workspace.reanalysis || {};
+        const requests = (layer.requests || []).filter(
+            item => item.session_id === sessionId
+        );
+        if (!requests.length) {
+            const empty = document.createElement("p");
+            empty.className = "muted";
+            empty.textContent = "No re-analysis request has been made for this case.";
+            reanalysisHistory.appendChild(empty);
+            return;
+        }
+        requests.forEach(request => {
+            const record = document.createElement("article");
+            record.className = "automaticReanalysisRecord";
+            const heading = document.createElement("h5");
+            heading.textContent = `Request ${request.request_number} · ${String(
+                request.status
+            ).replaceAll("_", " ")}`;
+            const requestInfo = document.createElement("p");
+            requestInfo.textContent = `${reasonLabel(request.reason_code)} — ${
+                request.researcher_notes
+            } · Requested ${new Date(request.requested_at).toLocaleString()}`;
+            record.append(heading, requestInfo);
+            if (request.last_error) {
+                const error = document.createElement("p");
+                error.className = "automaticReanalysisWarning";
+                error.textContent = `Stopped without changing the current report: ${request.last_error}`;
+                record.appendChild(error);
+            }
+            const proposal = (layer.proposals || []).find(
+                item => item.request_id === request.id
+            );
+            const sourceReport = (layer.sourceReports || []).find(
+                item => item.id === request.source_report_id
+            );
+            if (proposal && sourceReport) {
+                const comparison = document.createElement("div");
+                comparison.className = "automaticReanalysisComparison";
+                const source = document.createElement("section");
+                source.className = "automaticReanalysisVersion";
+                const sourceHeading = document.createElement("h5");
+                sourceHeading.textContent = `Preserved source · ${sourceReport.analysis_version}`;
+                source.appendChild(sourceHeading);
+                appendHierarchy(source, sourceReport, true);
+                const proposed = document.createElement("section");
+                proposed.className = "automaticReanalysisVersion";
+                const proposedHeading = document.createElement("h5");
+                proposedHeading.textContent = `AI proposal · ${proposal.proposal_version}`;
+                proposed.appendChild(proposedHeading);
+                appendHierarchy(proposed, proposal.proposed_report, false);
+                comparison.append(source, proposed);
+                record.appendChild(comparison);
+
+                const audit = document.createElement("p");
+                const checks = proposal.relevance_audit?.checks || [];
+                audit.textContent = `Relevance audit: ${checks.filter(
+                    item => item.accepted
+                ).length}/${checks.length} exact evidence items passed transcript grounding, code support, theme support, and sleep-research scope checks. ${
+                    proposal.relevance_audit?.overallSummary || ""
+                }`;
+                record.appendChild(audit);
+                const flags = proposal.source_quality_flags || [];
+                if (flags.length) {
+                    const warning = document.createElement("div");
+                    warning.className = "automaticReanalysisWarning";
+                    const title = document.createElement("strong");
+                    title.textContent = "Historical interview-protocol issue";
+                    const list = document.createElement("ul");
+                    flags.forEach(flag => {
+                        const item = document.createElement("li");
+                        item.textContent = `${flag.explanation} Source turn: “${flag.exactText}”`;
+                        list.appendChild(item);
+                    });
+                    warning.append(title, list);
+                    record.appendChild(warning);
+                }
+                if (request.status === "proposal_ready") {
+                    const reviewNotes = document.createElement("textarea");
+                    reviewNotes.placeholder = "Optional approval or rejection note";
+                    reviewNotes.setAttribute("aria-label", "Researcher review note");
+                    const actions = document.createElement("div");
+                    actions.className = "actionRow";
+                    const approve = document.createElement("button");
+                    approve.type = "button";
+                    approve.textContent = "Approve proposed report";
+                    approve.addEventListener("click", () => {
+                        reviewReanalysis(request.id, "approved", reviewNotes.value)
+                            .catch(error => {
+                                reanalysisStatus.textContent = error.message;
+                            });
+                    });
+                    const reject = document.createElement("button");
+                    reject.type = "button";
+                    reject.textContent = "Reject and keep current report";
+                    reject.addEventListener("click", () => {
+                        reviewReanalysis(request.id, "rejected", reviewNotes.value)
+                            .catch(error => {
+                                reanalysisStatus.textContent = error.message;
+                            });
+                    });
+                    actions.append(approve, reject);
+                    record.append(reviewNotes, actions);
+                }
+                const review = (layer.reviews || []).find(
+                    item => item.request_id === request.id
+                );
+                if (review) {
+                    const decision = document.createElement("p");
+                    decision.textContent = `Researcher decision: ${review.decision} · ${
+                        new Date(review.reviewed_at).toLocaleString()
+                    }${review.reviewer_notes ? ` — ${review.reviewer_notes}` : ""}`;
+                    record.appendChild(decision);
+                }
+            }
+            reanalysisHistory.appendChild(record);
+        });
+    }
+
+    async function requestReanalysis() {
+        const sessionId = selectedSessionId();
+        if (!sessionId) return;
+        const notes = document.getElementById("automaticReanalysisNotes")
+            .value.trim();
+        if (!notes) {
+            throw new Error("Explain what should be checked in this case.");
+        }
+        reanalysisButton.disabled = true;
+        reanalysisStatus.textContent =
+            "Re-analysing this preserved transcript and independently checking every exact keyword against its code, theme, and sleep-research scope…";
+        try {
+            const response = await fetch("/api/automatic-analysis-review", {
+                method: "POST",
+                headers: {
+                    Authorization: `Bearer ${token()}`,
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    action: "request_case_reanalysis",
+                    sessionId,
+                    reasonCode: document.getElementById(
+                        "automaticReanalysisReason"
+                    ).value,
+                    researcherNotes: notes
+                })
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(data.error || "The case could not be re-analysed.");
+            }
+            document.getElementById("automaticReanalysisNotes").value = "";
+            await loadWorkspace(activeThreadId);
+            reanalysisStatus.textContent =
+                "A proposed report is ready below. The current report has not changed; compare both versions and explicitly approve or reject the proposal.";
+        } finally {
+            reanalysisButton.disabled = !selectedSessionId();
+        }
     }
 
     function appendMessage(message) {
@@ -365,6 +650,12 @@
             sendMessage(input.value)
                 .catch(error => bridge.setStatus(error.message, true));
         });
+    reanalysisButton.addEventListener("click", () => {
+        requestReanalysis().catch(error => {
+            reanalysisStatus.textContent = error.message;
+            bridge.setStatus(error.message, true);
+        });
+    });
 
     renderWorkspace();
     loadWorkspace().catch(error => bridge.setStatus(error.message, true));
