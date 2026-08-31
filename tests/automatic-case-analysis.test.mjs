@@ -54,6 +54,10 @@ const incompleteSessionTimeoutMigrationUrl = new URL(
     "../supabase/migrations/20260827212500_mark_stale_sessions_incomplete.sql",
     import.meta.url
 );
+const hierarchyAuditMigrationUrl = new URL(
+    "../supabase/migrations/20260831143424_theme_hierarchy_audit_provenance.sql",
+    import.meta.url
+);
 
 test("automatic case analysis retains exact keyword offsets and local hierarchy", () => {
     const result = validateAutomaticCaseAnalysis({
@@ -64,11 +68,18 @@ test("automatic case analysis retains exact keyword offsets and local hierarchy"
                 message_id: "message-1",
                 exact_text: "work on weekends"
             }]
+        }, {
+            label: "Late sleep",
+            rationale: "Sleep timing evidence.",
+            keyword_evidence: [{
+                message_id: "message-1",
+                exact_text: "sleep later"
+            }]
         }],
         themes: [{
             label: "Work",
             rationale: "The code concerns work.",
-            code_numbers: [1]
+            code_numbers: [1, 2]
         }],
         case_interpretation: "Weekend work affects this case."
     }, [{
@@ -84,7 +95,7 @@ test("automatic case analysis retains exact keyword offsets and local hierarchy"
         startOffset: 8,
         endOffset: 24
     });
-    assert.deepEqual(result.themes[0].codeNumbers, [1]);
+    assert.deepEqual(result.themes[0].codeNumbers, [1, 2]);
 });
 
 test("automatic case analysis rejects paraphrased evidence and unassigned codes", () => {
@@ -154,11 +165,15 @@ test("global label audit rejects short but incoherent labels", () => {
             label: "Routine Stable Longstanding",
             rationale: "A descriptor bundle rather than one natural concept.",
             highlights: [{ messageId: "message-1", exactText: "same routine" }]
+        }, {
+            label: "Rest pattern",
+            rationale: "A second coherent code for theme support.",
+            highlights: [{ messageId: "message-2", exactText: "same bedtime" }]
         }],
         themes: [{
             label: "Sleep routine",
             rationale: "A coherent higher-level concept.",
-            codeNumbers: [1]
+            codeNumbers: [1, 2]
         }]
     };
     const audit = validateAutomaticLabelQualityAudit(analysis, {
@@ -172,7 +187,28 @@ test("global label audit rejects short but incoherent labels", () => {
             evidence_supported: true,
             topic_relevant: true,
             comparison_useful: false,
+            theme_has_multiple_codes: true,
+            theme_semantic_coverage: true,
+            theme_higher_level_abstraction: true,
+            theme_not_one_to_one_paraphrase: true,
+            theme_coherent_story: true,
             explanation: "Three descriptors were concatenated without naming one concept."
+        }, {
+            kind: "code",
+            number: 2,
+            label: "Rest pattern",
+            natural_language: true,
+            coherent_concept: true,
+            conceptually_distinct: true,
+            evidence_supported: true,
+            topic_relevant: true,
+            comparison_useful: true,
+            theme_has_multiple_codes: true,
+            theme_semantic_coverage: true,
+            theme_higher_level_abstraction: true,
+            theme_not_one_to_one_paraphrase: true,
+            theme_coherent_story: true,
+            explanation: "A coherent code label."
         }, {
             kind: "theme",
             number: 1,
@@ -183,8 +219,14 @@ test("global label audit rejects short but incoherent labels", () => {
             evidence_supported: true,
             topic_relevant: true,
             comparison_useful: true,
+            theme_has_multiple_codes: true,
+            theme_semantic_coverage: true,
+            theme_higher_level_abstraction: true,
+            theme_not_one_to_one_paraphrase: true,
+            theme_coherent_story: true,
             explanation: "A clear concept suitable for cross-case comparison."
         }],
+        ungrouped_code_checks: [],
         overall_summary: "Repair the code label."
     });
 
@@ -193,6 +235,122 @@ test("global label audit rejects short but incoherent labels", () => {
     assert.equal(audit.complete, false);
     assert.equal(audit.rejectedLabels.length, 1);
     assert.match(audit.rejectedLabels[0].explanation, /concatenated/);
+});
+
+test("one-code themes are rejected while the code remains reviewable", () => {
+    const analysis = validateAutomaticCaseAnalysis({
+        codes: [{
+            label: "Sleep anxiety",
+            rationale: "An evidence-supported code.",
+            keyword_evidence: [{
+                message_id: "message-1",
+                exact_text: "worried about sleeping"
+            }]
+        }],
+        themes: [{
+            label: "Sleep anxiety",
+            rationale: "A one-to-one paraphrase of the only code.",
+            code_numbers: [1]
+        }],
+        case_interpretation: "The participant expressed sleep anxiety."
+    }, [{
+        id: "message-1",
+        originalText: "I am worried about sleeping tonight."
+    }]);
+
+    assert.equal(analysis.complete, true);
+    assert.equal(analysis.themes.length, 0);
+    assert.deepEqual(analysis.unassignedCodeNumbers, [1]);
+    assert.equal(analysis.rejectedThemeAssignments.length, 1);
+
+    const audit = validateAutomaticLabelQualityAudit(analysis, {
+        checks: [{
+            kind: "code",
+            number: 1,
+            label: "Sleep anxiety",
+            natural_language: true,
+            coherent_concept: true,
+            conceptually_distinct: true,
+            evidence_supported: true,
+            topic_relevant: true,
+            comparison_useful: true,
+            theme_has_multiple_codes: true,
+            theme_semantic_coverage: true,
+            theme_higher_level_abstraction: true,
+            theme_not_one_to_one_paraphrase: true,
+            theme_coherent_story: true,
+            explanation: "The code is a coherent evidence-supported concept."
+        }],
+        ungrouped_code_checks: [{
+            code_number: 1,
+            label: "Sleep anxiety",
+            review_needed: true,
+            reason: "No second semantically related code is available."
+        }],
+        overall_summary: "The code remains ungrouped for review."
+    });
+
+    assert.equal(audit.complete, true);
+    assert.equal(audit.themeHierarchy.complete, true);
+    assert.equal(audit.themeHierarchy.ungroupedCodes.length, 1);
+});
+
+test("multi-code themes fail when they do not form a coherent participant story", () => {
+    const analysis = {
+        codes: [
+            { label: "Online browsing", rationale: "Online evidence.", highlights: [] },
+            { label: "Work schedule", rationale: "Work evidence.", highlights: [] }
+        ],
+        themes: [{
+            label: "Daily life",
+            rationale: "Two unrelated codes were grouped superficially.",
+            codeNumbers: [1, 2]
+        }],
+        unassignedCodeNumbers: []
+    };
+    const checks = analysis.codes.map((code, index) => ({
+        kind: "code",
+        number: index + 1,
+        label: code.label,
+        natural_language: true,
+        coherent_concept: true,
+        conceptually_distinct: true,
+        evidence_supported: true,
+        topic_relevant: true,
+        comparison_useful: true,
+        theme_has_multiple_codes: true,
+        theme_semantic_coverage: true,
+        theme_higher_level_abstraction: true,
+        theme_not_one_to_one_paraphrase: true,
+        theme_coherent_story: true,
+        explanation: "Code label accepted."
+    }));
+    checks.push({
+        kind: "theme",
+        number: 1,
+        label: "Daily life",
+        natural_language: true,
+        coherent_concept: true,
+        conceptually_distinct: true,
+        evidence_supported: true,
+        topic_relevant: false,
+        comparison_useful: false,
+        theme_has_multiple_codes: true,
+        theme_semantic_coverage: false,
+        theme_higher_level_abstraction: false,
+        theme_not_one_to_one_paraphrase: true,
+        theme_coherent_story: false,
+        explanation: "The codes do not form one project-relevant narrative."
+    });
+    const audit = validateAutomaticLabelQualityAudit(analysis, {
+        checks,
+        ungrouped_code_checks: [],
+        overall_summary: "The theme must be regrouped or removed."
+    });
+
+    assert.equal(audit.complete, false);
+    assert.equal(audit.themeHierarchy.complete, false);
+    assert.equal(audit.themeHierarchy.checks[0].themeCoherentStory, false);
 });
 
 test("compound interviewer questions remain visible as source-quality flags", () => {
@@ -221,11 +379,17 @@ test("invalid extra evidence is omitted without discarding an otherwise exact ca
                 { message_id: "message-1", exact_text: "work on weekends" },
                 { message_id: "message-1", exact_text: "unpaid overtime" }
             ]
+        }, {
+            label: "Sleep timing",
+            rationale: "Sleep timing evidence.",
+            keyword_evidence: [
+                { message_id: "message-1", exact_text: "weekends" }
+            ]
         }],
         themes: [{
             label: "Work",
             rationale: "The code concerns work.",
-            code_numbers: [1]
+            code_numbers: [1, 2]
         }],
         case_interpretation: "Weekend work affects this case."
     }, [{
@@ -344,6 +508,27 @@ test("formal completion enqueues a strict FIFO atomic case pipeline", async () =
     assert.match(migration, /for update/);
     assert.match(migration, /enable row level security/);
     assert.match(chat, /if \(finalQuestionAnswered\)[\s\S]*scheduleAutomaticCaseAnalysis\(req\)/);
+});
+
+test("future reports preserve multi-code theme audits and ungrouped codes", async () => {
+    const migration = await readFile(hierarchyAuditMigrationUrl, "utf8");
+    const dashboard = await readFile(
+        new URL("../server/caseAnalysisDashboard.js", import.meta.url),
+        "utf8"
+    );
+    const review = await readFile(
+        new URL("../researcher-automatic-review.js", import.meta.url),
+        "utf8"
+    );
+
+    assert.match(migration, /analysis_hierarchy_audit jsonb/);
+    assert.match(migration, /jsonb_array_length[\s\S]*codeNumbers[\s\S]*< 2/);
+    assert.match(migration, /hierarchy_audit ->> 'complete' <> 'true'/);
+    assert.match(migration, /job\.project_id/);
+    assert.match(migration, /job\.analysis_framework_id/);
+    assert.match(dashboard, /analysis_hierarchy_audit/);
+    assert.match(review, /Theme hierarchy provenance/);
+    assert.match(review, /Ungrouped codes — insufficient multi-code theme support/);
 });
 
 test("researcher dashboard uses separate case, keyword, code, and theme forms", async () => {
@@ -741,7 +926,7 @@ test("separate Cases and Keywords forms load every case and stored highlight", a
     assert.match(script, /function renderKeywords/);
     assert.match(script, /Open exact evidence/);
     assert.match(script, /Framework \/ report provenance/);
-    assert.match(html, /researcher-automatic-analysis\.js\?version=20260831-global-label-nav-v1/);
+    assert.match(html, /researcher-automatic-analysis\.js\?version=20260831-theme-hierarchy-v1/);
     assert.match(html, /automaticAnalysisGateStatus/);
     assert.match(script, /cache: "no-store"/);
     assert.match(script, /searchParams\.set\("fresh"/);

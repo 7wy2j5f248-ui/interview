@@ -147,6 +147,9 @@ export async function processCaseReanalysisRequest(
             caseInterpretation: analysis.caseInterpretation,
             codes: analysis.codes,
             themes: analysis.themes,
+            ungroupedCodeNumbers: analysis.unassignedCodeNumbers,
+            analysisHierarchyAudit:
+                analysis.labelQualityAudit?.themeHierarchy || null,
             researchProjectId: analysisFramework.projectId,
             researchProjectName: analysisFramework.projectName,
             researchTopic: analysisFramework.researchTopic,
@@ -219,6 +222,12 @@ export async function processCaseReanalysisRequest(
                 analysis.relevanceAudit.labelQualityAudit?.checks?.length || 0,
             rejectedLabelCount:
                 analysis.relevanceAudit.labelQualityAudit?.rejectedLabels?.length || 0,
+            ungroupedCodeCount:
+                analysis.relevanceAudit.labelQualityAudit?.themeHierarchy
+                    ?.ungroupedCodes?.length || 0,
+            rejectedThemeAssignmentCount:
+                analysis.relevanceAudit.labelQualityAudit?.themeHierarchy
+                    ?.rejectedThemeAssignments?.length || 0,
             projectId: analysisFramework.projectId,
             projectName: analysisFramework.projectName,
             researchTopic: analysisFramework.researchTopic,

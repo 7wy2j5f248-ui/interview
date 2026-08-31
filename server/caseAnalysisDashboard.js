@@ -370,7 +370,7 @@ export async function handleCaseAnalysisDashboard(req, res) {
                 requireData(
                     supabase
                         .from("qualitative_case_reports")
-                        .select("id, session_id, case_number, participant_id, participant_code, language, demographics, case_interpretation, analysis_version, model, source_completed_at, completed_at, project_id, analysis_framework_id, source_report_id, reanalysis_request_id")
+                        .select("id, session_id, case_number, participant_id, participant_code, language, demographics, case_interpretation, analysis_version, model, source_completed_at, completed_at, project_id, analysis_framework_id, source_report_id, reanalysis_request_id, analysis_hierarchy_audit")
                         .is("superseded_at", null)
                         .in("session_id", sessionIds),
                     "Individual case reports could not be loaded."
@@ -525,6 +525,8 @@ export async function handleCaseAnalysisDashboard(req, res) {
                 caseInterpretation: report.case_interpretation,
                 analysisVersion: report.analysis_version,
                 model: report.model,
+                analysisHierarchyAudit:
+                    report.analysis_hierarchy_audit || null,
                 researchProject: projectById.get(report.project_id) || null,
                 analysisFramework: frameworkById.get(
                     report.analysis_framework_id

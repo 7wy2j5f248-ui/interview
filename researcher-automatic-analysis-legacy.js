@@ -1094,6 +1094,41 @@
             section.append(heading, rationale, list);
             content.appendChild(section);
         });
+        const assignedCodeIds = new Set((caseRecord.themeCodes || []).map(
+            mapping => mapping.code_id
+        ));
+        const ungroupedCodes = (caseRecord.codes || []).filter(
+            code => !assignedCodeIds.has(code.id)
+        );
+        if (ungroupedCodes.length) {
+            const heading = document.createElement("h3");
+            heading.textContent =
+                "Ungrouped codes — insufficient multi-code theme support";
+            const explanation = document.createElement("p");
+            explanation.className = "automaticReanalysisWarning";
+            explanation.textContent =
+                "These evidence-supported codes remain visible for researcher review. No one-code or artificial theme was created.";
+            const list = document.createElement("ul");
+            ungroupedCodes.forEach(code => {
+                const item = document.createElement("li");
+                item.textContent = `C${code.code_number}: ${code.code_label} — ${code.rationale}`;
+                list.appendChild(item);
+            });
+            content.append(heading, explanation, list);
+        }
+        const hierarchyAudit = caseRecord.analysisHierarchyAudit;
+        if (hierarchyAudit) {
+            const heading = document.createElement("h3");
+            heading.textContent = "Theme hierarchy audit";
+            const summary = document.createElement("p");
+            summary.className = hierarchyAudit.complete
+                ? "automaticReanalysisAudit"
+                : "automaticReanalysisWarning";
+            summary.textContent = `${(hierarchyAudit.checks || []).filter(
+                check => check.accepted
+            ).length}/${(hierarchyAudit.checks || []).length} themes passed multi-code support, semantic coverage, higher-level abstraction, anti-paraphrase, coherent-story, and project-topic checks. ${(hierarchyAudit.ungroupedCodes || []).length} codes were retained as ungrouped review-needed findings.`;
+            content.append(heading, summary);
+        }
         archiveButton.textContent = caseRecord.archivedAt
             ? "Restore to active analysis"
             : "Archive completed case";

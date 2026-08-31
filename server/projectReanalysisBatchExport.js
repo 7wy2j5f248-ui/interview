@@ -328,6 +328,7 @@ function addComparisonSheet(workbook, data, maps) {
         { header: "Proposed themes", key: "proposedThemes", width: 55 },
         { header: "Proposed codes", key: "proposedCodes", width: 55 },
         { header: "Relevance audit", key: "audit", width: 42 },
+        { header: "Theme hierarchy audit", key: "hierarchyAudit", width: 55 },
         { header: "Source-quality flags", key: "flags", width: 20 },
         { header: "Failure / exclusion", key: "failure", width: 45 },
         { header: "Researcher reason", key: "reason", width: 30 },
@@ -366,6 +367,15 @@ function addComparisonSheet(workbook, data, maps) {
             proposedCodes: cellText(summarizeCodes(proposal?.proposed_report)),
             audit: proposal
                 ? `${checks.filter(check => check.accepted).length}/${checks.length} accepted · ${proposal.relevance_audit?.overallSummary || ""}`
+                : "",
+            hierarchyAudit: proposal
+                ? (() => {
+                    const hierarchy = proposal.relevance_audit
+                        ?.labelQualityAudit?.themeHierarchy;
+                    return hierarchy
+                        ? `${(hierarchy.checks || []).filter(check => check.accepted).length}/${(hierarchy.checks || []).length} themes accepted · ${(hierarchy.ungroupedCodes || []).length} ungrouped review-needed codes · no automatic promotion`
+                        : "Not audited under the expanded global theme hierarchy standard";
+                })()
                 : "",
             flags: (proposal?.source_quality_flags || []).length,
             failure: request.last_error || request.cancellation_reason || "",
@@ -554,7 +564,7 @@ function addProposedEvidenceSheet(workbook, data, maps) {
                 appendRow(sheet, {
                     case: source.case_number || request.session_id,
                     proposalId: proposal.id,
-                    theme: "Unassigned proposed code",
+                    theme: "Ungrouped review-needed code — no theme invented",
                     codePosition: `C${codeIndex + 1}`,
                     code: code.label,
                     codeRationale: cellText(code.rationale),
@@ -596,8 +606,10 @@ function addAuditSheet(workbook, data, maps) {
         const source = maps.reportById.get(request.source_report_id) || {};
         const proposal = maps.proposalByRequest.get(request.id);
         const checks = proposal?.relevance_audit?.checks || [];
+        const hierarchy = proposal?.relevance_audit
+            ?.labelQualityAudit?.themeHierarchy;
         const flags = proposal?.source_quality_flags || [];
-        if (!checks.length && !flags.length) {
+        if (!checks.length && !flags.length && !hierarchy) {
             appendRow(sheet, {
                 case: source.case_number || request.session_id,
                 status: request.status,
@@ -621,6 +633,30 @@ function addAuditSheet(workbook, data, maps) {
             accepted: check.accepted,
             explanation: cellText(check.explanation)
         }, check.accepted ? "FFE2F0D9" : "FFFCE4D6"));
+        (hierarchy?.checks || []).forEach(check => appendRow(sheet, {
+            case: source.case_number || request.session_id,
+            status: request.status,
+            type: "Theme hierarchy audit",
+            themes: `T${check.number} ${check.label} ← ${(check.codeNumbers || []).map(number => `C${number}`).join(", ")}`,
+            supportsTheme: check.themeHasMultipleCodes
+                && check.themeSemanticCoverage
+                && check.themeHigherLevelAbstraction
+                && check.themeNotOneToOneParaphrase
+                && check.themeCoherentStory,
+            scope: check.topicRelevant,
+            accepted: check.accepted,
+            explanation: cellText(check.explanation)
+        }, check.accepted ? "FFE2F0D9" : "FFFCE4D6"));
+        (hierarchy?.ungroupedCodes || []).forEach(check => appendRow(sheet, {
+            case: source.case_number || request.session_id,
+            status: request.status,
+            type: "Ungrouped review-needed code",
+            codePosition: `C${check.codeNumber}`,
+            code: check.label,
+            supportsTheme: false,
+            accepted: check.accepted,
+            explanation: cellText(`${check.reason} No theme was invented.`)
+        }, "FFFFF2CC"));
         flags.forEach(flag => appendRow(sheet, {
             case: source.case_number || request.session_id,
             status: request.status,

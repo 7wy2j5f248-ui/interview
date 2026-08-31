@@ -9,7 +9,11 @@ export const GLOBAL_ANALYSIS_LABEL_STANDARD = [
     "Prefer one everyday English word. Use two or three words only when they form a familiar, natural phrase.",
     "Never concatenate unrelated descriptors, fragments, findings, causes, or multiple concepts into a bag-of-words label.",
     "A code must concisely summarize the shared meaning of its exact keyword evidence.",
-    "A theme must be a clear higher-level conceptual category supported by its codes and relevant under the named project's topic and scope.",
+    "A theme must synthesize at least two semantically related codes into a clear higher-level abstraction; it cannot be a one-to-one paraphrase or slight word deletion from one code or keyword.",
+    "The codes grouped under a theme must form one coherent human story, behavioral profile, contributing life pattern, or attitude/state—not merely share a superficial term.",
+    "The theme label must cover the shared narrative meaning of all its constituent codes and advance abstraction beyond those codes.",
+    "If a code has no genuinely related second code, do not invent a theme. Preserve it as an ungrouped, insufficiently supported code that needs researcher review.",
+    "Every theme and its entire code/evidence chain must remain relevant under the named project's topic and scope; a generic activity is not sufficient without an explicit project-topic connection.",
     "Labels at the same analytical level must be conceptually distinct and useful for comparison across cases.",
     "Put detail, qualifications, and interpretation in the rationale, never in the label.",
     "This platform standard cannot be weakened or bypassed by project-specific instructions."

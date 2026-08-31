@@ -203,7 +203,12 @@
         const themeList = document.createElement("ul");
         themes.forEach((theme, index) => {
             const item = document.createElement("li");
-            item.textContent = `T${index + 1} ${theme.label} — ${theme.rationale}`;
+            const supportingCodes = (theme.codeNumbers || [])
+                .map(number => `C${number}`)
+                .join(", ");
+            item.textContent = `T${index + 1} ${theme.label} ← ${
+                supportingCodes || "no valid multi-code group"
+            } — ${theme.rationale}`;
             themeList.appendChild(item);
         });
         const codeHeading = document.createElement("strong");
@@ -218,6 +223,25 @@
             codeList.appendChild(item);
         });
         container.append(themeHeading, themeList, codeHeading, codeList);
+        const assignedCodeNumbers = new Set(themes.flatMap(
+            theme => theme.codeNumbers || []
+        ));
+        const ungrouped = codes.map((code, index) => ({
+            number: index + 1,
+            label: code.label
+        })).filter(code => !assignedCodeNumbers.has(code.number));
+        if (ungrouped.length) {
+            const ungroupedHeading = document.createElement("strong");
+            ungroupedHeading.textContent =
+                "Ungrouped codes — insufficient multi-code theme support";
+            const ungroupedList = document.createElement("ul");
+            ungrouped.forEach(code => {
+                const item = document.createElement("li");
+                item.textContent = `C${code.number} ${code.label} · Researcher review needed; no theme was invented.`;
+                ungroupedList.appendChild(item);
+            });
+            container.append(ungroupedHeading, ungroupedList);
+        }
     }
 
     function reasonLabel(value) {
@@ -357,7 +381,7 @@
                     const summary = document.createElement("p");
                     summary.textContent = `${acceptedLabels}/${
                         (labelAudit.checks || []).length
-                    } code/theme labels passed natural-language coherence, one-concept meaning, evidence support, project-topic fit, conceptual distinctness, and cross-case comparison usefulness. ${
+                    } code/theme labels passed natural-language coherence, one-concept meaning, evidence support, project-topic fit, conceptual distinctness, and cross-case comparison usefulness. Themes additionally require at least two semantically related codes, shared narrative coverage, higher-level abstraction, anti-paraphrase, and one coherent participant story. ${
                         labelAudit.overallSummary || ""
                     }`;
                     labelAuditSummary.append(heading, summary);
@@ -372,6 +396,31 @@
                         labelAuditSummary.appendChild(list);
                     }
                     record.appendChild(labelAuditSummary);
+                    const hierarchy = labelAudit.themeHierarchy;
+                    if (hierarchy) {
+                        const hierarchySummary = document.createElement("div");
+                        hierarchySummary.className = hierarchy.complete
+                            ? "automaticReanalysisAudit"
+                            : "automaticReanalysisWarning";
+                        const title = document.createElement("strong");
+                        title.textContent = "Theme hierarchy provenance";
+                        const detail = document.createElement("p");
+                        detail.textContent = `${(hierarchy.checks || []).filter(
+                            item => item.accepted
+                        ).length}/${(hierarchy.checks || []).length} themes passed multi-code support, semantic coverage, higher-level abstraction, anti-paraphrase, coherent-story, and project-topic checks. ${(hierarchy.ungroupedCodes || []).length} codes remain visibly ungrouped for researcher review; no theme was invented.`;
+                        hierarchySummary.append(title, detail);
+                        const ungrouped = hierarchy.ungroupedCodes || [];
+                        if (ungrouped.length) {
+                            const list = document.createElement("ul");
+                            ungrouped.forEach(flag => {
+                                const item = document.createElement("li");
+                                item.textContent = `C${flag.codeNumber} “${flag.label}”: ${flag.reason}`;
+                                list.appendChild(item);
+                            });
+                            hierarchySummary.appendChild(list);
+                        }
+                        record.appendChild(hierarchySummary);
+                    }
                 }
                 const flags = proposal.source_quality_flags || [];
                 if (flags.length) {

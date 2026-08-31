@@ -53,6 +53,9 @@ test("analysis framework instructions are project-bound and complete", () => {
     assert.match(GLOBAL_ANALYSIS_LABEL_STANDARD, /every project/);
     assert.match(instruction, /cannot be weakened or bypassed/);
     assert.match(instruction, /Project-specific Analysis Framework/);
+    assert.match(instruction, /at least two semantically related codes/);
+    assert.match(instruction, /coherent human story/);
+    assert.match(instruction, /ungrouped, insufficiently supported code/);
 });
 
 test("global semantic label standards are audited and repaired before completion", async () => {
@@ -70,6 +73,12 @@ test("global semantic label standards are audited and repaired before completion
     assert.match(core, /natural_language/);
     assert.match(core, /coherent_concept/);
     assert.match(core, /comparison_useful/);
+    assert.match(core, /theme_has_multiple_codes/);
+    assert.match(core, /theme_semantic_coverage/);
+    assert.match(core, /theme_higher_level_abstraction/);
+    assert.match(core, /theme_not_one_to_one_paraphrase/);
+    assert.match(core, /theme_coherent_story/);
+    assert.match(core, /ungrouped_code_checks/);
     assert.match(core, /Rejected label audit/);
     assert.match(core, /Label-corrected automatic individual case analysis/);
     assert.match(automaticProcessor, /labelQualityAudit/);
@@ -79,6 +88,8 @@ test("global semantic label standards are audited and repaired before completion
     assert.match(dashboard, /Global label standard for every project/);
     assert.match(review, /Platform-wide semantic label audit/);
     assert.match(review, /cross-case comparison usefulness/);
+    assert.match(review, /Theme hierarchy provenance/);
+    assert.match(review, /no theme was invented/);
 });
 
 test("researchers can durably stop an older global instruction", async () => {

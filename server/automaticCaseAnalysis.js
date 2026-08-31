@@ -203,7 +203,7 @@ export async function processOldestAutomaticCase(
                 + `${analysis.themes.length} themes, and `
                 + `${analysis.invalidEvidence} invalid evidence records; `
                 + `${analysis.droppedCodes} codes were dropped and `
-                + `${analysis.unassignedCodeNumbers.length} codes were unassigned.`
+                + `${analysis.unassignedCodeNumbers.length} codes were preserved as ungrouped review-needed findings.`
                 + labelProblems
             );
         }
@@ -217,6 +217,9 @@ export async function processOldestAutomaticCase(
             codes: analysis.codes,
             themes: analysis.themes,
             labelQualityAudit: analysis.labelQualityAudit,
+            analysisHierarchyAudit:
+                analysis.labelQualityAudit?.themeHierarchy || null,
+            ungroupedCodeNumbers: analysis.unassignedCodeNumbers,
             analysisFrameworkId: analysisFramework.id,
             analysisFrameworkVersion: analysisFramework.versionNumber,
             researchProjectId: analysisFramework.projectId,

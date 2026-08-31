@@ -180,7 +180,8 @@ test("complete batch export separates current and proposed analysis with provena
     assert.equal(comparison.getCell("A2").value, "P0001-S01");
     assert.equal(comparison.getCell("G2").value, "Current report preserved");
     assert.match(String(comparison.getCell("N2").value), /irregular sleep/);
-    assert.equal(comparison.getCell("Y2").value,
+    assert.match(String(comparison.getCell("R2").value), /Not audited/);
+    assert.equal(comparison.getCell("Z2").value,
         "Not reviewed — proposal only");
 
     const proposed = workbook.getWorksheet("4 Revised proposed evidence");
@@ -204,11 +205,12 @@ test("complete batch workbook contains no legacy comments or VML", async () => {
 });
 
 test("project-wide UI makes consolidated inspection independent of approval", async () => {
-    const [html, client, endpoint, migration] = await Promise.all([
+    const [html, client, endpoint, migration, exporter] = await Promise.all([
         readFile(new URL("../researcher.html", import.meta.url), "utf8"),
         readFile(new URL("../researcher-automatic-review.js", import.meta.url), "utf8"),
         readFile(new URL("../api/automatic-analysis-review.js", import.meta.url), "utf8"),
-        readFile(new URL("../supabase/migrations/20260831074725_complete_project_reanalysis_for_export.sql", import.meta.url), "utf8")
+        readFile(new URL("../supabase/migrations/20260831074725_complete_project_reanalysis_for_export.sql", import.meta.url), "utf8"),
+        readFile(new URL("../server/projectReanalysisBatchExport.js", import.meta.url), "utf8")
     ]);
     assert.match(html, /full batch completes without[\s\S]*case-by-case approval/);
     assert.match(client, /Download complete batch review/);
@@ -218,5 +220,8 @@ test("project-wide UI makes consolidated inspection independent of approval", as
     assert.match(endpoint, /writeProjectReanalysisBatchWorkbook/);
     assert.match(migration, /Unreviewed proposals do not block batch completion/);
     assert.match(migration, /when failed_count > 0 then 'completed_with_failures'/);
+    assert.match(exporter, /Theme hierarchy audit/);
+    assert.match(exporter, /Ungrouped review-needed code/);
+    assert.match(exporter, /No theme was invented/);
     assert.doesNotMatch(migration, /set status\s*=\s*'approved'/);
 });

@@ -5,9 +5,9 @@ import { analysisFrameworkInstruction } from "./analysisFramework.js";
 export const QUALITATIVE_ANALYSIS_MODEL = DEFAULT_OPENAI_MODEL;
 export const QUALITATIVE_ANALYSIS_VERSION = "task-014-v7-complete-cases-before-summary";
 export const AUTOMATIC_CASE_ANALYSIS_VERSION =
-    "case-analysis-v3-evidence-backed-demographics";
+    "case-analysis-v4-theme-hierarchy-audited";
 export const AUTOMATIC_CASE_REANALYSIS_VERSION =
-    "case-reanalysis-v2-framework-governed";
+    "case-reanalysis-v3-theme-hierarchy-audited";
 export const DEFAULT_ANALYSIS_BATCH_SIZE = 40;
 export const MAX_THEME_SUBJECT_WORDS = 3;
 export const MAX_THEME_SUBJECT_LENGTH = 60;
@@ -441,6 +441,11 @@ const automaticLabelQualityAuditSchema = {
                     evidence_supported: { type: "boolean" },
                     topic_relevant: { type: "boolean" },
                     comparison_useful: { type: "boolean" },
+                    theme_has_multiple_codes: { type: "boolean" },
+                    theme_semantic_coverage: { type: "boolean" },
+                    theme_higher_level_abstraction: { type: "boolean" },
+                    theme_not_one_to_one_paraphrase: { type: "boolean" },
+                    theme_coherent_story: { type: "boolean" },
                     explanation: { type: "string" }
                 },
                 required: [
@@ -453,14 +458,38 @@ const automaticLabelQualityAuditSchema = {
                     "evidence_supported",
                     "topic_relevant",
                     "comparison_useful",
+                    "theme_has_multiple_codes",
+                    "theme_semantic_coverage",
+                    "theme_higher_level_abstraction",
+                    "theme_not_one_to_one_paraphrase",
+                    "theme_coherent_story",
                     "explanation"
+                ],
+                additionalProperties: false
+            }
+        },
+        ungrouped_code_checks: {
+            type: "array",
+            items: {
+                type: "object",
+                properties: {
+                    code_number: { type: "integer" },
+                    label: { type: "string" },
+                    review_needed: { type: "boolean" },
+                    reason: { type: "string" }
+                },
+                required: [
+                    "code_number",
+                    "label",
+                    "review_needed",
+                    "reason"
                 ],
                 additionalProperties: false
             }
         },
         overall_summary: { type: "string" }
     },
-    required: ["checks", "overall_summary"],
+    required: ["checks", "ungrouped_code_checks", "overall_summary"],
     additionalProperties: false
 };
 
@@ -538,6 +567,7 @@ function validateAutomaticThemes(rawThemes, codes) {
     const themes = [];
     const assignedCodeNumbers = new Set();
     const invalidLabels = [];
+    const rejectedThemeAssignments = [];
     let invalidThemes = 0;
 
     (Array.isArray(rawThemes) ? rawThemes : []).forEach(rawTheme => {
@@ -556,12 +586,19 @@ function validateAutomaticThemes(rawThemes, codes) {
 
         if (!isShortThemeSubject(label)
             || !rationale
-            || !codeNumbers.length
+            || codeNumbers.length < 2
         ) {
             invalidThemes += 1;
             if (!isShortThemeSubject(label)) {
                 invalidLabels.push({ kind: "theme", label: label || "" });
             }
+            rejectedThemeAssignments.push({
+                label: label || "",
+                codeNumbers,
+                reason: codeNumbers.length < 2
+                    ? "A theme requires at least two semantically related codes; a one-code theme is not permitted."
+                    : "The proposed theme label or rationale failed structural validation."
+            });
             return;
         }
 
@@ -573,7 +610,13 @@ function validateAutomaticThemes(rawThemes, codes) {
         .map((_, index) => index + 1)
         .filter(number => !assignedCodeNumbers.has(number));
 
-    return { themes, invalidThemes, unassignedCodeNumbers, invalidLabels };
+    return {
+        themes,
+        invalidThemes,
+        unassignedCodeNumbers,
+        invalidLabels,
+        rejectedThemeAssignments
+    };
 }
 
 const AUTOMATIC_DEMOGRAPHIC_FIELDS = Object.freeze([
@@ -739,7 +782,11 @@ export function validateAutomaticCaseAnalysis(value, availableMessages) {
     });
 
     const themeValidation = validateAutomaticThemes(value?.themes, codes);
-    const { themes, unassignedCodeNumbers } = themeValidation;
+    const {
+        themes,
+        unassignedCodeNumbers,
+        rejectedThemeAssignments
+    } = themeValidation;
     invalidLabels.push(...themeValidation.invalidLabels);
     invalidEvidence += themeValidation.invalidThemes;
     const demographicValidation = validateAutomaticDemographics(
@@ -748,7 +795,6 @@ export function validateAutomaticCaseAnalysis(value, availableMessages) {
     );
 
     const caseInterpretation = normalizedText(value?.case_interpretation);
-    const allCodesAssigned = unassignedCodeNumbers.length === 0;
 
     return {
         codes,
@@ -758,13 +804,12 @@ export function validateAutomaticCaseAnalysis(value, availableMessages) {
         droppedCodes,
         invalidLabels,
         unassignedCodeNumbers,
+        rejectedThemeAssignments,
         ...demographicValidation,
         complete: Boolean(
             codes.length
-            && themes.length
             && caseInterpretation
             && droppedCodes === 0
-            && allCodesAssigned
         )
     };
 }
@@ -783,7 +828,8 @@ export function validateAutomaticLabelQualityAudit(analysis, value) {
         ...(analysis?.themes || []).map((record, index) => ({
             kind: "theme",
             number: index + 1,
-            label: record.label
+            label: record.label,
+            codeNumbers: record.codeNumbers || []
         }))
     ];
     const labelCounts = expected.reduce((counts, item) => {
@@ -817,6 +863,16 @@ export function validateAutomaticLabelQualityAudit(analysis, value) {
             evidenceSupported: check.evidence_supported === true,
             topicRelevant: check.topic_relevant === true,
             comparisonUseful: check.comparison_useful === true,
+            themeHasMultipleCodes:
+                check.theme_has_multiple_codes === true,
+            themeSemanticCoverage:
+                check.theme_semantic_coverage === true,
+            themeHigherLevelAbstraction:
+                check.theme_higher_level_abstraction === true,
+            themeNotOneToOneParaphrase:
+                check.theme_not_one_to_one_paraphrase === true,
+            themeCoherentStory:
+                check.theme_coherent_story === true,
             explanation: normalizedText(check.explanation)
                 || "No label-quality explanation was supplied."
         });
@@ -831,16 +887,25 @@ export function validateAutomaticLabelQualityAudit(analysis, value) {
                 normalizedText(item.label)?.toLocaleLowerCase() || ""
             }`
         ) === 1;
+        const themeHierarchyAccepted = item.kind !== "theme" || Boolean(
+            item.codeNumbers.length >= 2
+            && audit?.themeHasMultipleCodes
+            && audit?.themeSemanticCoverage
+            && audit?.themeHigherLevelAbstraction
+            && audit?.themeNotOneToOneParaphrase
+            && audit?.themeCoherentStory
+        );
         const accepted = Boolean(
             exactLabel
             && structurallyValid
             && uniqueAtLevel
-            && audit.naturalLanguage
-            && audit.coherentConcept
-            && audit.conceptuallyDistinct
-            && audit.evidenceSupported
-            && audit.topicRelevant
-            && audit.comparisonUseful
+            && audit?.naturalLanguage
+            && audit?.coherentConcept
+            && audit?.conceptuallyDistinct
+            && audit?.evidenceSupported
+            && audit?.topicRelevant
+            && audit?.comparisonUseful
+            && themeHierarchyAccepted
         );
         return {
             ...item,
@@ -851,6 +916,18 @@ export function validateAutomaticLabelQualityAudit(analysis, value) {
             evidenceSupported: Boolean(audit?.evidenceSupported),
             topicRelevant: Boolean(audit?.topicRelevant),
             comparisonUseful: Boolean(audit?.comparisonUseful),
+            codeNumbers: item.codeNumbers || [],
+            themeHasMultipleCodes: item.kind !== "theme"
+                || Boolean(audit?.themeHasMultipleCodes)
+                    && item.codeNumbers.length >= 2,
+            themeSemanticCoverage: item.kind !== "theme"
+                || Boolean(audit?.themeSemanticCoverage),
+            themeHigherLevelAbstraction: item.kind !== "theme"
+                || Boolean(audit?.themeHigherLevelAbstraction),
+            themeNotOneToOneParaphrase: item.kind !== "theme"
+                || Boolean(audit?.themeNotOneToOneParaphrase),
+            themeCoherentStory: item.kind !== "theme"
+                || Boolean(audit?.themeCoherentStory),
             structurallyValid,
             accepted,
             explanation: audit?.explanation
@@ -864,6 +941,60 @@ export function validateAutomaticLabelQualityAudit(analysis, value) {
         key => !expectedKeys.has(key)
     ).length;
     const rejectedLabels = checks.filter(check => !check.accepted);
+    const expectedUngrouped = new Map(
+        (analysis?.unassignedCodeNumbers || []).map(codeNumber => [
+            codeNumber,
+            analysis.codes?.[codeNumber - 1]?.label || ""
+        ])
+    );
+    const ungroupedByNumber = new Map();
+    let duplicateUngroupedChecks = 0;
+    (Array.isArray(value?.ungrouped_code_checks)
+        ? value.ungrouped_code_checks
+        : []
+    ).forEach(check => {
+        const codeNumber = Number.isInteger(check?.code_number)
+            && check.code_number > 0
+            ? check.code_number
+            : null;
+        if (!codeNumber) return;
+        if (ungroupedByNumber.has(codeNumber)) duplicateUngroupedChecks += 1;
+        ungroupedByNumber.set(codeNumber, {
+            codeNumber,
+            label: normalizedText(check?.label) || "",
+            reviewNeeded: check?.review_needed === true,
+            reason: normalizedText(check?.reason)
+                || "No reason was supplied for this ungrouped code."
+        });
+    });
+    const ungroupedCodes = [...expectedUngrouped].map(
+        ([codeNumber, label]) => {
+            const audit = ungroupedByNumber.get(codeNumber);
+            const accepted = Boolean(
+                audit?.label === label
+                && audit?.reviewNeeded
+                && audit?.reason
+            );
+            return {
+                codeNumber,
+                label,
+                reviewNeeded: Boolean(audit?.reviewNeeded),
+                reason: audit?.reason
+                    || "This code has no supported multi-code theme and needs researcher review.",
+                accepted
+            };
+        }
+    );
+    const unexpectedUngroupedChecks = [...ungroupedByNumber.keys()].filter(
+        codeNumber => !expectedUngrouped.has(codeNumber)
+    ).length;
+    const hierarchyChecks = checks.filter(check => check.kind === "theme");
+    const hierarchyComplete = Boolean(
+        !hierarchyChecks.some(check => !check.accepted)
+        && !ungroupedCodes.some(check => !check.accepted)
+        && !duplicateUngroupedChecks
+        && !unexpectedUngroupedChecks
+    );
 
     return {
         checks,
@@ -872,12 +1003,20 @@ export function validateAutomaticLabelQualityAudit(analysis, value) {
         rejectedLabels,
         duplicateChecks,
         unexpectedCheckCount,
+        themeHierarchy: {
+            checks: hierarchyChecks,
+            ungroupedCodes,
+            rejectedThemeAssignments:
+                analysis?.rejectedThemeAssignments || [],
+            complete: hierarchyComplete
+        },
         complete: Boolean(
             expected.length
             && !rejectedLabels.length
             && !duplicateChecks
             && !unexpectedCheckCount
             && auditByKey.size === expected.length
+            && hierarchyComplete
         )
     };
 }
@@ -932,6 +1071,14 @@ async function auditAutomaticLabelQuality(
                 "Set evidence_supported true only when a code summarizes its exact keyword evidence or a theme is supported by its assigned codes.",
                 "Set topic_relevant true only when the label satisfies the named project's topic, scope, inclusion, and exclusion rules.",
                 "Set comparison_useful true only when another researcher could understand and compare the concept across cases without reading its rationale.",
+                "For code checks, set all five theme_* fields true because they are not applicable to a code.",
+                "For a theme, set theme_has_multiple_codes true only when it has at least two distinct supporting codes.",
+                "Set theme_semantic_coverage true only when the theme covers the shared meaning of every assigned code, not just a repeated surface word.",
+                "Set theme_higher_level_abstraction true only when the theme advances beyond its codes into a genuine higher-level concept.",
+                "Set theme_not_one_to_one_paraphrase true only when the theme is not a paraphrase, slight word deletion, or relabeling of one code or keyword.",
+                "Set theme_coherent_story true only when the assigned codes combine into one meaningful participant story, behavioral profile, contributing life pattern, or attitude/state.",
+                "For the named project, reject a generic activity theme unless its entire code/evidence chain establishes explicit relevance to the research topic.",
+                "Return exactly one ungrouped_code_check for every code number that has no assigned valid theme and no others. Mark review_needed true and explain why a second semantically related code was unavailable. Never invent a theme to avoid an ungrouped code.",
                 analysisFrameworkInstruction(analysisFramework)
             ].join("\n\n")
         }, {
@@ -1389,7 +1536,7 @@ export async function generateAutomaticCaseAnalysis(
         ? " This is a researcher-requested re-analysis. Apply the framework's relevance boundary strictly. Exact quotation is necessary but not sufficient: each keyword must semantically support its code and that code's assigned theme. Reject unrelated cross-topic evidence. Researcher request context (JSON): "
             + JSON.stringify(reanalysisContext)
         : "";
-    const systemInstruction = "Read this single completed participant transcript line by line. The entire analytical report must be written in English, regardless of the interview language. This includes every demographic value, additional descriptor, code label, code rationale, theme label, theme rationale, and the case interpretation. Only exact_text keyword evidence remains verbatim in the participant's original language because it identifies the precise highlighted source text. First extract the fixed demographic fields. Every non-null demographic value must cite one exact participant original_text phrase and its message_id. Use null when the participant did not provide the information; never guess. Birth year must be explicitly stated. Birth cohort may be derived only from an explicitly stated birth year. Diaspora status may be derived from explicit residence and origin evidence. Mark each supported value as stated or derived. Then work strictly from evidence upward. Identify analytically meaningful words or short phrases in the participant's original_text and return them verbatim as keyword evidence with their exact message_id. Keywords are research evidence, not every word in the conversation. Never select greetings, introductions, thanks, farewells, politeness formulas, interviewer-directed courtesies, or other phatic conversational language as keywords or codes. Examples to exclude include hello, hi, good morning, thank you, and their equivalents in every interview language. Never return translated wording as exact_text or invent a keyword summary label. Then categorize the substantive keyword occurrences into participant-specific codes. A code label must be a concise, everyday, coherent English concept that summarizes its related exact keyword evidence. Prefer one word; use two or three only as a familiar natural phrase. Never concatenate multiple descriptors. Finally group related code numbers into equally clear higher-level themes. Theme labels follow the same one-word-preferred, two-or-three-word-natural-phrase limit and must be useful for comparison across cases. Every code must belong to at least one theme. Do not compare this case with any participant. Do not invent or paraphrase evidence. Return the substantive keyword occurrences needed to make the code system inspectable without flooding it with routine conversation. Codes, themes, and demographic values are proposals with exact provenance for researcher review, not confirmed findings."
+    const systemInstruction = "Read this single completed participant transcript line by line. The entire analytical report must be written in English, regardless of the interview language. This includes every demographic value, additional descriptor, code label, code rationale, theme label, theme rationale, and the case interpretation. Only exact_text keyword evidence remains verbatim in the participant's original language because it identifies the precise highlighted source text. First extract the fixed demographic fields. Every non-null demographic value must cite one exact participant original_text phrase and its message_id. Use null when the participant did not provide the information; never guess. Birth year must be explicitly stated. Birth cohort may be derived only from an explicitly stated birth year. Diaspora status may be derived from explicit residence and origin evidence. Mark each supported value as stated or derived. Then work strictly from evidence upward. Identify analytically meaningful words or short phrases in the participant's original_text and return them verbatim as keyword evidence with their exact message_id. Keywords are research evidence, not every word in the conversation. Never select greetings, introductions, thanks, farewells, politeness formulas, interviewer-directed courtesies, or other phatic conversational language as keywords or codes. Examples to exclude include hello, hi, good morning, thank you, and their equivalents in every interview language. Never return translated wording as exact_text or invent a keyword summary label. Then categorize the substantive keyword occurrences into participant-specific codes. A code label must be a concise, everyday, coherent English concept that summarizes its related exact keyword evidence. Prefer one word; use two or three only as a familiar natural phrase. Never concatenate multiple descriptors. Finally synthesize two or more semantically related codes into each higher-level theme. A theme must advance abstraction beyond its codes and make them cohere as one meaningful participant story, behavioral profile, contributing life pattern, or attitude/state. Never create a one-code theme, a one-to-one paraphrase, or a theme based only on a shared surface word. A theme and its entire code/evidence chain must be relevant to the named project's topic. Theme labels follow the same one-word-preferred, two-or-three-word-natural-phrase limit and must be useful for comparison across cases. If a code has no genuinely related second code, leave it unassigned; the platform will preserve it as an ungrouped review-needed code. Do not invent a theme merely to assign every code. Do not compare this case with any participant. Do not invent or paraphrase evidence. Return the substantive keyword occurrences needed to make the code system inspectable without flooding it with routine conversation. Codes, themes, and demographic values are proposals with exact provenance for researcher review, not confirmed findings."
         + "\n\n" + frameworkInstruction
         + relevanceInstruction;
     const createResponse = input => openaiClient.responses.create({
@@ -1422,12 +1569,15 @@ export async function generateAutomaticCaseAnalysis(
         ? response.usage.input_tokens
         : null;
 
-    if (!validated.complete || validated.invalidDemographicEvidence > 0) {
+    if (!validated.complete
+        || validated.invalidDemographicEvidence > 0
+        || validated.rejectedThemeAssignments.length > 0
+    ) {
         const repairResponse = await createResponse([
             {
                 role: "system",
                 content: systemInstruction
-                    + " Correct the supplied draft into a complete replacement. Preserve valid exact evidence. Remove or replace non-verbatim evidence, restore any dropped code using exact evidence, and assign every code number to at least one valid theme. Return the entire corrected JSON object."
+                    + " Correct the supplied draft into a complete replacement. Preserve valid exact evidence. Remove or replace non-verbatim evidence and restore any dropped code using exact evidence. Keep a theme only when it synthesizes at least two semantically related codes into a coherent higher-level participant story relevant to the project topic. Remove one-code, paraphrase, superficial-term, or topic-detached themes. Leave a code unassigned when no valid multi-code theme exists; never invent a theme merely to assign it. Return the entire corrected JSON object."
             },
             {
                 role: "user",
@@ -1441,6 +1591,8 @@ export async function generateAutomaticCaseAnalysis(
                             validated.invalidDemographicEvidence,
                         droppedCodes: validated.droppedCodes,
                         invalidLabels: validated.invalidLabels,
+                        rejectedThemeAssignments:
+                            validated.rejectedThemeAssignments,
                         unassignedCodeNumbers:
                             validated.unassignedCodeNumbers
                     })
@@ -1477,7 +1629,7 @@ export async function generateAutomaticCaseAnalysis(
             },
             input: [{
                 role: "system",
-                content: "Group the supplied participant-specific codes into clear higher-level English themes. Prefer one everyday word; use two or three only when they form one familiar natural phrase. Write every label and rationale in English. Use only the numbered codes provided. The union of every code_numbers array must equal the complete integer sequence from 1 through the stated code count; no number may be omitted. Multiple codes may share one theme. Return coherent comparison-useful concepts, never findings, sentences, or concatenated descriptor bundles."
+                content: "Synthesize genuinely related participant-specific codes into clear higher-level English themes. Every theme must contain at least two distinct code numbers, advance abstraction beyond those codes, and make them cohere as one meaningful participant story, behavioral profile, contributing life pattern, or attitude/state relevant to the named research topic. Prefer one everyday word; use two or three only when they form one familiar natural phrase. Write every label and rationale in English. Use only the numbered codes provided. A code may remain unassigned when no genuinely related second code exists. Never invent a one-code theme or group codes merely because they share a surface term. Return coherent comparison-useful concepts, never findings, sentences, or concatenated descriptor bundles."
             }, {
                 role: "user",
                 content: JSON.stringify({
@@ -1504,12 +1656,14 @@ export async function generateAutomaticCaseAnalysis(
             ...validated,
             themes: themeValidation.themes,
             unassignedCodeNumbers: themeValidation.unassignedCodeNumbers,
+            rejectedThemeAssignments:
+                themeValidation.rejectedThemeAssignments,
             invalidEvidence: validated.invalidEvidence
                 + themeValidation.invalidThemes,
             complete: Boolean(
-                themeValidation.themes.length
-                && !themeValidation.unassignedCodeNumbers.length
+                validated.codes.length
                 && validated.caseInterpretation
+                && !themeValidation.invalidThemes
             )
         };
 
@@ -1532,7 +1686,7 @@ export async function generateAutomaticCaseAnalysis(
                 },
                 input: [{
                     role: "system",
-                    content: "Return a complete corrected theme assignment. Every supplied code number must appear in at least one code_numbers array. Pay special attention to the explicitly listed missing numbers. Prefer one everyday word; use two or three only as one familiar natural phrase. Reject bag-of-words labels. Return the entire replacement theme list."
+                    content: "Return a corrected theme assignment containing only defensible multi-code themes. Every theme must synthesize at least two semantically related codes into a coherent higher-level participant story relevant to the project topic. A code may remain unassigned when it lacks a genuinely related second code. Remove one-code, paraphrase, superficial-term, and bag-of-words themes. Prefer one everyday word; use two or three only as one familiar natural phrase. Return the entire replacement theme list."
                 }, {
                     role: "user",
                     content: JSON.stringify({
@@ -1563,12 +1717,14 @@ export async function generateAutomaticCaseAnalysis(
                 themes: repairedThemes.themes,
                 unassignedCodeNumbers:
                     repairedThemes.unassignedCodeNumbers,
+                rejectedThemeAssignments:
+                    repairedThemes.rejectedThemeAssignments,
                 invalidEvidence: validated.invalidEvidence
                     + repairedThemes.invalidThemes,
                 complete: Boolean(
-                    repairedThemes.themes.length
-                    && !repairedThemes.unassignedCodeNumbers.length
+                    validated.codes.length
                     && validated.caseInterpretation
+                    && !repairedThemes.invalidThemes
                 )
             };
 
@@ -1603,7 +1759,7 @@ export async function generateAutomaticCaseAnalysis(
             const labelRepairResponse = await createResponse([{
                 role: "system",
                 content: systemInstruction
-                    + " Return one complete corrected report. Repair every rejected code or theme label so it names one everyday, coherent, evidence-supported, topic-relevant concept that is useful for cross-case comparison. Prefer one word; use two or three only as a genuine natural phrase. Remove duplicate or bag-of-words labels. Preserve exact keyword evidence and all valid demographic provenance. Put descriptive detail in rationales."
+                    + " Return one complete corrected report. Repair every rejected code or theme label so it names one everyday, coherent, evidence-supported, topic-relevant concept that is useful for cross-case comparison. Every theme must synthesize at least two semantically related codes into a coherent higher-level participant story, cover all assigned codes, and avoid one-to-one paraphrase. Remove a theme and leave its code unassigned when no valid multi-code abstraction exists. Prefer one word; use two or three only as a genuine natural phrase. Remove duplicate or bag-of-words labels. Preserve exact keyword evidence and all valid demographic provenance. Put descriptive detail in rationales."
             }, {
                 role: "user",
                 content: [
@@ -1712,10 +1868,14 @@ export function validateAutomaticCaseRelevanceAudit(analysis, value) {
             evidence.exactText
         );
         const audit = auditByKey.get(key);
+        const hasAssignedTheme = evidence.themeLabels.length > 0;
+        const themeAssignmentAccepted = hasAssignedTheme
+            ? audit?.supportsTheme === true
+            : audit?.supportsTheme === false;
         const accepted = Boolean(
             audit?.transcriptGrounded
             && audit.supportsCode
-            && audit.supportsTheme
+            && themeAssignmentAccepted
             && audit.researchScopeRelevant
         );
         return {
@@ -1723,6 +1883,8 @@ export function validateAutomaticCaseRelevanceAudit(analysis, value) {
             transcriptGrounded: Boolean(audit?.transcriptGrounded),
             supportsCode: Boolean(audit?.supportsCode),
             supportsTheme: Boolean(audit?.supportsTheme),
+            hasAssignedTheme,
+            themeAssignmentAccepted,
             researchScopeRelevant: Boolean(audit?.researchScopeRelevant),
             accepted,
             explanation: audit?.explanation ||
@@ -1798,7 +1960,7 @@ async function auditAutomaticCaseRelevance(
         },
         input: [{
             role: "system",
-            content: "Act as a strict independent evidence auditor for one qualitative case. Return exactly one check for every proposed evidence item and no others. Exact transcript grounding is necessary but insufficient. Set supports_code true only when the exact phrase semantically supports the assigned code. Set supports_theme true only when that code and phrase support at least one assigned theme. Set research_scope_relevant true only when the evidence satisfies the supplied project-specific inclusion, exclusion, and study-scope rules. Reject unrelated cross-topic evidence even when the quotation is exact. Explain each judgment briefly.\n\n"
+            content: "Act as a strict independent evidence auditor for one qualitative case. Return exactly one check for every proposed evidence item and no others. Exact transcript grounding is necessary but insufficient. Set supports_code true only when the exact phrase semantically supports the assigned code. Set supports_theme true only when that code and phrase support at least one assigned valid multi-code theme. When assigned_themes is empty because the code is explicitly ungrouped and needs review, set supports_theme false; that is the correct auditable state and must not be repaired by inventing a theme. Set research_scope_relevant true only when the evidence satisfies the supplied project-specific inclusion, exclusion, and study-scope rules. Reject unrelated cross-topic evidence even when the quotation is exact. Explain each judgment briefly.\n\n"
                 + analysisFrameworkInstruction(analysisFramework)
         }, {
             role: "user",
