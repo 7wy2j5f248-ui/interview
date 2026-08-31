@@ -370,7 +370,7 @@ export async function handleCaseAnalysisDashboard(req, res) {
                 requireData(
                     supabase
                         .from("qualitative_case_reports")
-                        .select("id, session_id, case_number, participant_id, participant_code, language, demographics, case_interpretation, analysis_version, model, source_completed_at, completed_at, project_id, analysis_framework_id, source_report_id, reanalysis_request_id, analysis_hierarchy_audit")
+                        .select("id, session_id, case_number, participant_id, participant_code, language, demographics, case_interpretation, analysis_version, model, source_completed_at, completed_at, project_id, analysis_framework_id, global_analysis_rule_id, source_report_id, reanalysis_request_id, analysis_hierarchy_audit")
                         .is("superseded_at", null)
                         .in("session_id", sessionIds),
                     "Individual case reports could not be loaded."
@@ -400,6 +400,9 @@ export async function handleCaseAnalysisDashboard(req, res) {
         const frameworkIds = [...new Set(reports.map(
             report => report.analysis_framework_id
         ).filter(Boolean))];
+        const globalRuleIds = [...new Set(reports.map(
+            report => report.global_analysis_rule_id
+        ).filter(Boolean))];
         const [
             codes,
             categories,
@@ -411,7 +414,8 @@ export async function handleCaseAnalysisDashboard(req, res) {
             highlights,
             themeCodes,
             projects,
-            frameworks
+            frameworks,
+            globalRules
         ] =
             await Promise.all([
                 reportIds.length ? requireAllData(
@@ -503,6 +507,13 @@ export async function handleCaseAnalysisDashboard(req, res) {
                         .select("id, project_id, version_number, predecessor_id, created_at")
                         .in("id", frameworkIds),
                     "Case analysis-framework lineage could not be loaded."
+                ) : [],
+                globalRuleIds.length ? requireData(
+                    supabase
+                        .from("global_analysis_rules")
+                        .select("id, version_number, predecessor_id, created_at")
+                        .in("id", globalRuleIds),
+                    "Case global analysis-rule lineage could not be loaded."
                 ) : []
             ]);
         const enrichedMeaningUnits = await enrichAnalysisHighlightSources(
@@ -555,6 +566,10 @@ export async function handleCaseAnalysisDashboard(req, res) {
             framework.id,
             framework
         ]));
+        const globalRuleById = new Map(globalRules.map(rule => [
+            rule.id,
+            rule
+        ]));
 
         const cases = jobs.map(job => {
             const report = reportBySession.get(job.session_id);
@@ -599,6 +614,9 @@ export async function handleCaseAnalysisDashboard(req, res) {
                 researchProject: projectById.get(report.project_id) || null,
                 analysisFramework: frameworkById.get(
                     report.analysis_framework_id
+                ) || null,
+                globalAnalysisRules: globalRuleById.get(
+                    report.global_analysis_rule_id
                 ) || null,
                 reportLineage: {
                     reportId: report.id,

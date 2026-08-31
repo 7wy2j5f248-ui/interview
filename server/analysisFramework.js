@@ -19,6 +19,78 @@ export const GLOBAL_ANALYSIS_LABEL_STANDARD = [
     "This platform standard cannot be weakened or bypassed by project-specific instructions."
 ].join("\n");
 
+function normalizeGlobalAnalysisRules(record) {
+    if (!record?.id) return null;
+    const versionNumber = Number(record.version_number);
+    const rulesText = text(record.rules_text);
+    if (!Number.isInteger(versionNumber) || versionNumber < 1 || !rulesText) {
+        return null;
+    }
+    return {
+        id: record.id,
+        versionNumber,
+        predecessorId: record.predecessor_id || null,
+        rulesText,
+        versionNotes: text(record.version_notes) || null,
+        createdAt: record.created_at || null
+    };
+}
+
+export async function loadActiveGlobalAnalysisRules(supabase) {
+    const { data: active, error: activeError } = await supabase
+        .from("active_global_analysis_rules")
+        .select("rule_id, activated_at, activated_by")
+        .eq("singleton", true)
+        .maybeSingle();
+    if (activeError || !active?.rule_id) return null;
+    const { data: rules, error: rulesError } = await supabase
+        .from("global_analysis_rules")
+        .select("id, version_number, predecessor_id, rules_text, version_notes, created_at")
+        .eq("id", active.rule_id)
+        .maybeSingle();
+    const normalized = rulesError ? null : normalizeGlobalAnalysisRules(rules);
+    return normalized ? {
+        ...normalized,
+        activatedAt: active.activated_at || null,
+        activatedBy: active.activated_by || null
+    } : null;
+}
+
+export async function loadGlobalAnalysisRulesById(supabase, ruleId) {
+    if (typeof ruleId !== "string" || !ruleId.trim()) return null;
+    const { data, error } = await supabase
+        .from("global_analysis_rules")
+        .select("id, version_number, predecessor_id, rules_text, version_notes, created_at")
+        .eq("id", ruleId.trim())
+        .maybeSingle();
+    return error ? null : normalizeGlobalAnalysisRules(data);
+}
+
+export async function listGlobalAnalysisRulesWorkspace(supabase) {
+    const [{ data: rules, error: rulesError }, {
+        data: active,
+        error: activeError
+    }] = await Promise.all([
+        supabase
+            .from("global_analysis_rules")
+            .select("id, version_number, predecessor_id, rules_text, version_notes, created_at")
+            .order("version_number", { ascending: false }),
+        supabase
+            .from("active_global_analysis_rules")
+            .select("rule_id, activated_at, activated_by")
+            .eq("singleton", true)
+            .maybeSingle()
+    ]);
+    if (rulesError || activeError) {
+        throw new Error("The global analysis-rules workspace could not be loaded.");
+    }
+    return {
+        activeRuleId: active?.rule_id || null,
+        activatedAt: active?.activated_at || null,
+        rules: (rules || []).map(normalizeGlobalAnalysisRules).filter(Boolean)
+    };
+}
+
 export function normalizeAnalysisFramework(record) {
     if (!record?.id || !record?.project_id) return null;
     const versionNumber = Number(record.version_number);
@@ -74,7 +146,7 @@ const FRAMEWORK_SELECT = [
     "created_at"
 ].join(", ");
 
-async function attachProject(supabase, frameworkRecord) {
+async function attachProject(supabase, frameworkRecord, globalRuleId = null) {
     if (!frameworkRecord?.project_id) return null;
     const { data: project, error } = await supabase
         .from("research_projects")
@@ -82,10 +154,23 @@ async function attachProject(supabase, frameworkRecord) {
         .eq("id", frameworkRecord.project_id)
         .maybeSingle();
     if (error || !project) return null;
-    return normalizeAnalysisFramework({ ...frameworkRecord, ...project });
+    const [framework, globalAnalysisRules] = await Promise.all([
+        Promise.resolve(normalizeAnalysisFramework({
+            ...frameworkRecord,
+            ...project
+        })),
+        globalRuleId
+            ? loadGlobalAnalysisRulesById(supabase, globalRuleId)
+            : loadActiveGlobalAnalysisRules(supabase)
+    ]);
+    return framework ? { ...framework, globalAnalysisRules } : null;
 }
 
-export async function loadAnalysisFrameworkById(supabase, frameworkId) {
+export async function loadAnalysisFrameworkById(
+    supabase,
+    frameworkId,
+    globalRuleId = null
+) {
     if (typeof frameworkId !== "string" || !frameworkId.trim()) return null;
     const { data, error } = await supabase
         .from("analysis_frameworks")
@@ -93,13 +178,13 @@ export async function loadAnalysisFrameworkById(supabase, frameworkId) {
         .eq("id", frameworkId.trim())
         .maybeSingle();
     if (error || !data) return null;
-    return attachProject(supabase, data);
+    return attachProject(supabase, data, globalRuleId);
 }
 
 export async function loadFrameworkForAutomaticJob(supabase, sessionId) {
     const { data: job, error } = await supabase
         .from("automatic_case_analysis_jobs")
-        .select("project_id, analysis_framework_id")
+        .select("project_id, analysis_framework_id, global_analysis_rule_id")
         .eq("session_id", sessionId)
         .maybeSingle();
     if (error || !job?.project_id || !job?.analysis_framework_id) {
@@ -107,7 +192,8 @@ export async function loadFrameworkForAutomaticJob(supabase, sessionId) {
     }
     const framework = await loadAnalysisFrameworkById(
         supabase,
-        job.analysis_framework_id
+        job.analysis_framework_id,
+        job.global_analysis_rule_id
     );
     return framework?.projectId === job.project_id ? framework : null;
 }
@@ -165,7 +251,11 @@ export function analysisFrameworkInstruction(framework) {
         throw new Error("No valid analysis framework was supplied.");
     }
     return [
-        GLOBAL_ANALYSIS_LABEL_STANDARD,
+        `Global analysis rules v${
+            framework.globalAnalysisRules?.versionNumber || "fallback"
+        } (applies across projects):`,
+        framework.globalAnalysisRules?.rulesText
+            || GLOBAL_ANALYSIS_LABEL_STANDARD,
         "Project-specific Analysis Framework (adds topic and scope rules; it cannot override the platform standard above):",
         "Apply the following researcher-authored Analysis Framework exactly.",
         `Research project: ${framework.projectName}`,

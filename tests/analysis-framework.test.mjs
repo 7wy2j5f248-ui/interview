@@ -23,6 +23,10 @@ const autonomousFeedbackMigrationUrl = new URL(
     "../supabase/migrations/20260831173903_add_meaning_units_categories_autonomous_feedback.sql",
     import.meta.url
 );
+const globalRulesMigrationUrl = new URL(
+    "../supabase/migrations/20260831201500_add_configurable_global_analysis_rules.sql",
+    import.meta.url
+);
 
 const sample = {
     id: "11111111-1111-4111-8111-111111111111",
@@ -68,7 +72,7 @@ test("global semantic label standards are audited and repaired before completion
             readFile(new URL("../server/analysisCore.js", import.meta.url), "utf8"),
             readFile(new URL("../server/automaticCaseAnalysis.js", import.meta.url), "utf8"),
             readFile(autonomousFeedbackMigrationUrl, "utf8"),
-            readFile(new URL("../design.html", import.meta.url), "utf8"),
+            readFile(new URL("../global-analysis-rules.html", import.meta.url), "utf8"),
             readFile(new URL("../researcher.html", import.meta.url), "utf8"),
             readFile(new URL("../researcher-automatic-review.js", import.meta.url), "utf8")
         ]);
@@ -86,8 +90,8 @@ test("global semantic label standards are audited and repaired before completion
     assert.match(core, /Label-corrected automatic individual case analysis/);
     assert.match(automaticProcessor, /labelQualityAudit/);
     assert.match(migration, /labelQualityCheckCount/);
-    assert.match(design, /Global platform standards apply automatically to every project/);
-    assert.match(design, /cannot weaken these global standards/);
+    assert.match(design, /Global Analysis Rules/);
+    assert.match(design, /future analysis only/i);
     assert.match(dashboard, /Analytical abbreviations:/);
     assert.match(review, /Platform-wide semantic label audit/);
     assert.match(review, /cross-case comparison usefulness/);
@@ -122,28 +126,39 @@ test("researchers can durably stop an older global instruction", async () => {
     assert.match(migration, /currentReportPreserved/);
 });
 
-test("Research Design visibly separates protocol and framework scope", async () => {
-    const [html, script, endpoint] = await Promise.all([
+test("dedicated pages separate global, project, and interview rules", async () => {
+    const [html, globalHtml, globalScript, projectHtml, projectScript, endpoint] = await Promise.all([
         readFile(new URL("../design.html", import.meta.url), "utf8"),
-        readFile(new URL("../design.js", import.meta.url), "utf8"),
+        readFile(new URL("../global-analysis-rules.html", import.meta.url), "utf8"),
+        readFile(new URL("../global-analysis-rules.js", import.meta.url), "utf8"),
+        readFile(new URL("../project-analysis-rules.html", import.meta.url), "utf8"),
+        readFile(new URL("../project-analysis-rules.js", import.meta.url), "utf8"),
         readFile(new URL("../api/saveDesign.js", import.meta.url), "utf8")
     ]);
     assert.match(html, /independently versioned controls separate/i);
-    assert.match(html, /Analysis Framework/);
-    assert.match(html, /Future analysis only/);
-    assert.match(html, /same project\/topic lineage/);
-    assert.match(html, /Each result becomes current automatically/);
-    assert.match(html, /Draft protection/);
-    assert.match(script, /FRAMEWORK_DRAFT_KEY/);
-    assert.match(script, /saveFrameworkDraft/);
-    assert.match(script, /restoreFrameworkDraft/);
-    assert.match(script, /Recovered an unsaved Analysis Framework draft/);
-    assert.match(script, /localStorage\.removeItem\(FRAMEWORK_DRAFT_KEY\)/);
-    assert.match(script, /save_analysis_framework/);
-    assert.match(script, /Start a new research project\/topic/);
-    assert.match(endpoint, /save_analysis_framework_version/);
-    assert.match(endpoint, /historicalRequestsQueued/);
+    assert.match(html, /global-analysis-rules\.html/);
+    assert.match(html, /project-analysis-rules\.html/);
+    assert.match(globalHtml, /Global Analysis Rules/);
+    assert.match(globalHtml, /no historical jobs are queued/i);
+    assert.match(globalScript, /save_global_analysis_rules/);
+    assert.match(globalScript, /pliGlobalAnalysisRulesDraftV1/);
+    assert.match(projectHtml, /Project Analysis Rules/);
+    assert.match(projectHtml, /nothing is queued/i);
+    assert.match(projectScript, /applicationScope: "future_only"/);
+    assert.match(projectScript, /save_analysis_framework/);
+    assert.match(endpoint, /save_global_analysis_rules_version/);
+    assert.match(endpoint, /Saving project rules applies to future analysis only/);
     assert.match(endpoint, /project_id: projectId/);
+});
+
+test("global rule lineage is versioned and completed jobs are not requeued", async () => {
+    const migration = await readFile(globalRulesMigrationUrl, "utf8");
+    assert.match(migration, /create table public\.global_analysis_rules/);
+    assert.match(migration, /create table public\.active_global_analysis_rules/);
+    assert.match(migration, /global_analysis_rule_id uuid/);
+    assert.match(migration, /status = 'completed'/);
+    assert.match(migration, /report\.superseded_at is null/);
+    assert.doesNotMatch(migration, /status = 'pending'/);
 });
 
 test("database preserves project, framework, proposal, and approval lineage", async () => {

@@ -835,7 +835,7 @@
 <body>
 
 <h1>Researcher Dashboard</h1>
-<p><a href="/design.html#analysisFrameworkSection">Open Research Design → Analysis Framework</a> to review or save the global project/topic rules used by automatic analysis and re-analysis.</p>
+<p><a href="/global-analysis-rules.html">Global analysis rules</a> govern future analysis across projects. <a href="/project-analysis-rules.html">Project analysis rules</a> add the named project's topic, scope, and internal guidance. Both have their own version history; saving either one changes no completed report and queues no historical work.</p>
 
 <section id="statisticsPeriodSection" class="panel" aria-labelledby="periodHeading">
     <h2 id="periodHeading">Statistics and analysis period</h2>
@@ -1025,12 +1025,11 @@
                     available for audit; no approval step interrupts automation.
                 </p>
                 <p class="muted">
-                    A manual note here is case-specific. By contrast, rules saved
-                    in Research Design → Analysis Framework are global within
-                    their named research project/topic. If that framework includes
-                    completed interviews, each eligible same-project case receives
-                    its own separately stored completed version and audit; other
-                    projects and archived cases are excluded.
+                    A manual note here is case-specific. Global and project rules
+                    are configured on their dedicated pages and apply to future
+                    analyses only. Saving either rule set does not queue completed
+                    cases. A historical re-analysis happens only when explicitly
+                    requested below.
                 </p>
                 <p id="automaticReanalysisSelectedCase" class="muted">
                     Select one case, theme, category, or code from a single case.
@@ -1083,7 +1082,7 @@
                     <label>
                         Reason
                         <select id="projectWideReanalysisReason">
-                            <option value="analysis_framework_changed">Global analytical problem / framework change</option>
+                            <option value="analysis_framework_changed">Project analytical problem / rule change</option>
                             <option value="other">Other project-wide concern</option>
                         </select>
                     </label>

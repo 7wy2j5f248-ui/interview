@@ -2,9 +2,9 @@ import { createClient } from "@supabase/supabase-js";
 import { normalizeOpenAIModel } from "../server/modelConfiguration.js";
 import { authorizeResearcher } from "../server/researcherAuth.js";
 import {
-  listAnalysisFrameworkWorkspace
+  listAnalysisFrameworkWorkspace,
+  listGlobalAnalysisRulesWorkspace
 } from "../server/analysisFramework.js";
-import { scheduleAutomaticCaseAnalysis } from "../server/automaticCaseAnalysis.js";
 import { cancelProjectWideReanalysisBatch } from "../server/projectWideReanalysis.js";
 
 function requiredProtocolVersion(value) {
@@ -54,13 +54,48 @@ export default async function handler(req, res) {
 
   if (req.method === "GET") {
     try {
-      return res.status(200).json(await listAnalysisFrameworkWorkspace(supabase));
+      return res.status(200).json(
+        req.query?.action === "global_analysis_rules"
+          ? await listGlobalAnalysisRulesWorkspace(supabase)
+          : await listAnalysisFrameworkWorkspace(supabase)
+      );
     } catch (error) {
       return res.status(500).json({ error: error.message });
     }
   }
 
   const design = req.body || {};
+  if (design.action === "save_global_analysis_rules") {
+    const rulesText = typeof design.rulesText === "string"
+      ? design.rulesText.trim()
+      : "";
+    const versionNotes = typeof design.versionNotes === "string"
+      ? design.versionNotes.trim() || null
+      : null;
+    if (!rulesText) {
+      return res.status(400).json({
+        error: "Global analysis rules cannot be blank."
+      });
+    }
+    const { data, error } = await supabase.rpc(
+      "save_global_analysis_rules_version",
+      { p_rules_text: rulesText, p_version_notes: versionNotes }
+    );
+    const saved = Array.isArray(data) ? data[0] : data;
+    if (error || !saved) {
+      return res.status(409).json({
+        error: error?.message || "The global rules could not be saved."
+      });
+    }
+    return res.status(200).json({
+      message: `Global analysis rules v${saved.version_number} saved for future analysis.`,
+      ruleId: saved.rule_id,
+      versionNumber: saved.version_number,
+      predecessorId: saved.predecessor_id || null,
+      completedReportsChanged: 0,
+      historicalJobsQueued: 0
+    });
+  }
   if (design.action === "cancel_project_wide_reanalysis") {
     try {
       return res.status(200).json(await cancelProjectWideReanalysisBatch(
@@ -92,16 +127,12 @@ export default async function handler(req, res) {
         error: "Complete every Analysis Framework field before saving."
       });
     }
-    const applicationScope = design.applicationScope === "include_completed"
-      ? "include_completed"
-      : design.applicationScope === "future_only"
-        ? "future_only"
-        : null;
-    if (!applicationScope) {
+    if (design.applicationScope && design.applicationScope !== "future_only") {
       return res.status(400).json({
-        error: "Choose whether this framework applies only to future analysis or includes completed interviews from the same project/topic."
+        error: "Saving project rules applies to future analysis only. Completed reports are not queued or rewritten."
       });
     }
+    const applicationScope = "future_only";
     const projectId = typeof design.projectId === "string"
       && /^[0-9a-f-]{36}$/i.test(design.projectId)
       ? design.projectId
@@ -131,9 +162,6 @@ export default async function handler(req, res) {
         error: error?.message || "The Analysis Framework could not be saved."
       });
     }
-    if (saved.historical_requests_queued > 0) {
-      scheduleAutomaticCaseAnalysis(req);
-    }
     return res.status(200).json({
       message: `Analysis Framework v${saved.version_number} saved.`,
       frameworkId: saved.framework_id,
@@ -141,9 +169,7 @@ export default async function handler(req, res) {
       projectId: saved.project_id,
       versionNumber: saved.version_number,
       historicalRequestsQueued: saved.historical_requests_queued,
-      scopeExplanation: applicationScope === "future_only"
-        ? "Existing reports remain unchanged. New analysis for this project will use this version."
-        : `${saved.historical_requests_queued} completed same-project cases were queued as versioned proposals. Current reports remain unchanged until explicit researcher approval.`
+      scopeExplanation: "Existing reports remain unchanged and nothing was queued. New analysis for this project will use this version."
     });
   }
   let interviewModel;

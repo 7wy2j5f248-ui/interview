@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Global Analysis Rules</title>
+</head>
+<body style="margin:0;background:#f5f7f6;color:#17211b;font-family:Arial,sans-serif;line-height:1.55;">
+<main style="max-width:900px;margin:36px auto;padding:0 20px 48px;">
+<nav style="margin-bottom:24px;"><a href="/researcher.html">Researcher workspace</a> · <a href="/project-analysis-rules.html">Project analysis rules</a> · <a href="/design.html">Interview protocol</a></nav>
+<h1>Global Analysis Rules</h1>
+<p>Configure the analytical rules that apply across every research project. Saving creates a new immutable version for <strong>future analysis only</strong>. Completed reports remain completed and no historical jobs are queued.</p>
+
+<section style="background:white;border:1px solid #ccd5cf;border-radius:10px;padding:20px;margin:22px 0;">
+<label for="researcherPin"><strong>Researcher PIN</strong></label>
+<div style="display:flex;gap:8px;margin-top:8px;">
+<input id="researcherPin" type="password" autocomplete="current-password" style="flex:1;padding:10px;">
+<button id="loadRulesButton" type="button">Load rules</button>
+</div>
+<p id="rulesStatus" role="status"></p>
+</section>
+
+<section style="background:white;border:1px solid #ccd5cf;border-radius:10px;padding:20px;margin:22px 0;">
+<label for="globalRules"><strong>Rules applied across projects</strong></label>
+<p>State the common requirements for meaning units, codes, categories, themes, evidence support, cross-case terminology, researcher review, and provenance.</p>
+<textarea id="globalRules" rows="22" style="width:100%;padding:12px;box-sizing:border-box;font:inherit;"></textarea>
+
+<label for="versionNotes"><strong>Version notes</strong></label>
+<p>Record what changed and why.</p>
+<textarea id="versionNotes" rows="4" style="width:100%;padding:12px;box-sizing:border-box;font:inherit;"></textarea>
+<p id="draftStatus" role="status">Changes are protected in this browser while you type.</p>
+<button id="reviewRulesButton" type="button" style="padding:11px 18px;">Review new global version</button>
+</section>
+
+<section style="background:white;border:1px solid #ccd5cf;border-radius:10px;padding:20px;">
+<h2>Version history and lineage</h2>
+<div id="rulesHistory">Unlock the page to load rule history.</div>
+</section>
+</main>
+
+<dialog id="reviewDialog" style="border:1px solid #888;border-radius:10px;max-width:760px;width:calc(100% - 32px);max-height:85vh;overflow:auto;">
+<form method="dialog"><button type="submit" style="float:right;">Close</button></form>
+<h2>Review global analysis rules</h2>
+<p>This creates a new immutable version for future analyses. It changes no completed report and queues no historical analysis.</p>
+<div id="reviewText" style="white-space:pre-wrap;border:1px solid #ddd;padding:14px;border-radius:6px;"></div>
+<h3>Version notes</h3>
+<div id="reviewNotes" style="white-space:pre-wrap;"></div>
+<p id="saveStatus" role="status"></p>
+<button id="saveRulesButton" type="button" style="padding:11px 18px;">Save new global version</button>
+</dialog>
+<script src="global-analysis-rules.js?v=20260831-v1"></script>
+</body>
+</html>

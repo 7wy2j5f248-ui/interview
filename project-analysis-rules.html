@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Project Analysis Rules</title>
+</head>
+<body style="margin:0;background:#f5f7f6;color:#17211b;font-family:Arial,sans-serif;line-height:1.55;">
+<main style="max-width:900px;margin:36px auto;padding:0 20px 48px;">
+<nav style="margin-bottom:24px;"><a href="/researcher.html">Researcher workspace</a> · <a href="/global-analysis-rules.html">Global analysis rules</a> · <a href="/design.html">Interview protocol</a></nav>
+<h1>Project Analysis Rules</h1>
+<p>Configure the topic, scope, inclusion boundaries, and analytical guidance for one named research project. Global rules still apply. Saving creates a new immutable project version for <strong>future analysis only</strong>; completed reports remain completed and nothing is queued.</p>
+
+<section style="background:white;border:1px solid #ccd5cf;border-radius:10px;padding:20px;margin:22px 0;">
+<label for="analysisFrameworkPin"><strong>Researcher PIN</strong></label>
+<div style="display:flex;gap:8px;margin-top:8px;">
+<input id="analysisFrameworkPin" type="password" autocomplete="current-password" style="flex:1;padding:10px;">
+<button id="loadAnalysisFrameworkButton" type="button">Load projects and rules</button>
+</div>
+<p id="analysisFrameworkStatus" role="status"></p>
+</section>
+
+<section style="background:white;border:1px solid #ccd5cf;border-radius:10px;padding:20px;margin:22px 0;">
+<label for="analysisProjectSelect"><strong>Named research project</strong></label>
+<select id="analysisProjectSelect" style="width:100%;padding:10px;margin:8px 0 18px;"></select>
+
+<label for="analysisProjectName"><strong>Project name</strong></label>
+<input id="analysisProjectName" type="text" style="width:100%;padding:10px;margin:8px 0 18px;box-sizing:border-box;">
+<label for="analysisResearchTopic"><strong>Research topic</strong></label>
+<input id="analysisResearchTopic" type="text" style="width:100%;padding:10px;margin:8px 0 18px;box-sizing:border-box;">
+<label for="analysisStudyScope"><strong>Study topic and scope</strong></label>
+<textarea id="analysisStudyScope" rows="4" style="width:100%;padding:10px;margin:8px 0 18px;box-sizing:border-box;"></textarea>
+<label for="analysisThemeRequirements"><strong>Project guidance for themes</strong></label>
+<textarea id="analysisThemeRequirements" rows="4" style="width:100%;padding:10px;margin:8px 0 18px;box-sizing:border-box;"></textarea>
+<label for="analysisCodeDerivation"><strong>Project guidance for meaning units and codes</strong></label>
+<textarea id="analysisCodeDerivation" rows="4" style="width:100%;padding:10px;margin:8px 0 18px;box-sizing:border-box;"></textarea>
+<label for="analysisThemeCodeFit"><strong>Project guidance for categories and patterned themes</strong></label>
+<textarea id="analysisThemeCodeFit" rows="4" style="width:100%;padding:10px;margin:8px 0 18px;box-sizing:border-box;"></textarea>
+<label for="analysisInclusionRules"><strong>Inclusion rules</strong></label>
+<textarea id="analysisInclusionRules" rows="4" style="width:100%;padding:10px;margin:8px 0 18px;box-sizing:border-box;"></textarea>
+<label for="analysisExclusionRules"><strong>Exclusion rules</strong></label>
+<textarea id="analysisExclusionRules" rows="4" style="width:100%;padding:10px;margin:8px 0 18px;box-sizing:border-box;"></textarea>
+<label for="analysisProvenance"><strong>Researcher-visible provenance expectations</strong></label>
+<textarea id="analysisProvenance" rows="4" style="width:100%;padding:10px;margin:8px 0 18px;box-sizing:border-box;"></textarea>
+<label for="analysisVersionNotes"><strong>Version notes</strong></label>
+<textarea id="analysisVersionNotes" rows="3" style="width:100%;padding:10px;margin:8px 0 18px;box-sizing:border-box;"></textarea>
+
+<p id="analysisFrameworkDraftStatus" role="status">Changes are protected in this browser while you type.</p>
+<button id="discardAnalysisFrameworkDraft" type="button" disabled>Discard protected draft</button>
+<button id="reviewAnalysisFrameworkButton" type="button" style="padding:11px 18px;margin-left:8px;">Review new project version</button>
+</section>
+
+<section style="background:white;border:1px solid #ccd5cf;border-radius:10px;padding:20px;">
+<h2>Version history and lineage</h2>
+<div id="analysisFrameworkHistory">Unlock the page to load project rule history.</div>
+</section>
+</main>
+
+<dialog id="analysisFrameworkReviewDialog" style="border:1px solid #888;border-radius:10px;max-width:760px;width:calc(100% - 32px);max-height:85vh;overflow:auto;">
+<form method="dialog"><button type="submit" style="float:right;">Close</button></form>
+<h2>Review project analysis rules</h2>
+<p>This creates a new immutable future-only version. It changes no completed report and queues no historical analysis.</p>
+<div id="analysisFrameworkReviewSummary"></div>
+<p id="analysisFrameworkSaveStatus" role="status"></p>
+<button id="analysisFrameworkBackButton" type="button">Back to editing</button>
+<button id="confirmAnalysisFrameworkButton" type="button" style="padding:11px 18px;">Save new project version</button>
+</dialog>
+<script src="project-analysis-rules.js?v=20260831-v1"></script>
+</body>
+</html>

@@ -42,7 +42,7 @@ export async function processCaseReanalysisRequest(
     const selectedModel = model();
     const { data: request, error: requestError } = await supabase
         .from(REQUESTS)
-        .select("id, session_id, source_report_id, request_number, reason_code, researcher_notes, requested_by, status, attempt_count, project_id, analysis_framework_id, project_reanalysis_batch_id")
+        .select("id, session_id, source_report_id, request_number, reason_code, researcher_notes, requested_by, status, attempt_count, project_id, analysis_framework_id, global_analysis_rule_id, project_reanalysis_batch_id")
         .eq("id", requestId)
         .single();
     if (requestError || !request) {
@@ -81,13 +81,15 @@ export async function processCaseReanalysisRequest(
         model: selectedModel,
         analysisVersion: AUTOMATIC_CASE_REANALYSIS_VERSION,
         projectId: request.project_id,
-        analysisFrameworkId: request.analysis_framework_id
+        analysisFrameworkId: request.analysis_framework_id,
+        globalAnalysisRuleId: request.global_analysis_rule_id
     });
 
     try {
         const analysisFramework = await loadAnalysisFrameworkById(
             supabase,
-            request.analysis_framework_id
+            request.analysis_framework_id,
+            request.global_analysis_rule_id
         );
         if (!analysisFramework
             || analysisFramework.projectId !== request.project_id) {
@@ -144,7 +146,10 @@ export async function processCaseReanalysisRequest(
                 researchProjectName: analysisFramework.projectName,
                 researchTopic: analysisFramework.researchTopic,
                 analysisFrameworkId: analysisFramework.id,
-                analysisFrameworkVersion: analysisFramework.versionNumber
+                analysisFrameworkVersion: analysisFramework.versionNumber,
+                globalAnalysisRuleId: analysisFramework.globalAnalysisRules?.id,
+                globalAnalysisRuleVersion:
+                    analysisFramework.globalAnalysisRules?.versionNumber
             },
             { model: selectedModel, analysisFramework, sharedVocabulary }
         );

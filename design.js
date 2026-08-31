@@ -37,6 +37,10 @@
     );
     const analysisStatus = document.getElementById("analysisFrameworkStatus");
     const analysisPin = document.getElementById("analysisFrameworkPin");
+    const protocolProjectPin = document.getElementById("protocolProjectPin");
+    const protocolProjectStatus = document.getElementById(
+        "protocolProjectStatus"
+    );
     let frameworkWorkspace = {
         projects: [], frameworks: [], activeFrameworks: [], reanalysisBatches: []
     };
@@ -575,6 +579,19 @@
             );
         });
 
+    document.getElementById("loadProtocolProjectsButton")
+        .addEventListener("click", () => {
+            analysisPin.value = protocolProjectPin.value;
+            protocolProjectStatus.textContent = "Loading protected project list…";
+            loadFrameworkWorkspace().then(() => {
+                protocolProjectStatus.textContent =
+                    "Project list loaded. Choose the lineage for this protocol version.";
+            }).catch(error => {
+                protocolProjectStatus.textContent = error.message;
+                protocolProjectStatus.style.color = "#9b1c1c";
+            });
+        });
+
     analysisProjectSelect.addEventListener("change", () => {
         const project = frameworkWorkspace.projects.find(
             item => item.id === analysisProjectSelect.value
@@ -686,6 +703,7 @@
     const storedToken = sessionStorage.getItem(TOKEN_STORAGE_KEY);
     if (storedToken) {
         analysisPin.value = storedToken;
+        protocolProjectPin.value = storedToken;
         loadFrameworkWorkspace().catch(error =>
             setAnalysisStatus(error.message, true)
         );

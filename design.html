@@ -1,6 +1,6 @@
 <div style="max-width:900px;margin:40px auto;padding:20px;font-family:Arial,sans-serif;line-height:1.6;">
 <h1>Research Design</h1>
-<p>This page keeps two independently versioned controls separate: the <strong>Interview Protocol</strong> governs only how new interviews are conducted, while the <strong>Analysis Framework</strong> governs how completed transcripts are analysed.</p>
+<p>This page configures the versioned <strong>Interview Protocol</strong>, which governs how new interviews are conducted. Independently versioned controls separate interview configuration from analysis governance, which is configured under <a href="/global-analysis-rules.html">Global Analysis Rules</a> and <a href="/project-analysis-rules.html">Project Analysis Rules</a>.</p>
 <h2>Interview Protocol</h2>
 <p>The following AI configuration, interview content, and limits apply only to new interview sessions. Historical sessions retain the protocol version frozen when they began.</p>
 <div style="border:1px solid #ddd;border-radius:8px;padding:20px;margin-bottom:24px;">
@@ -11,7 +11,12 @@
 <input type="text" id="researchTitle" placeholder="Enter the research title" style="width:100%;padding:10px;margin-bottom:16px;box-sizing:border-box;">
 
 <label for="protocolProjectSelect"><strong>Research Project / Topic Lineage</strong></label>
-<p>Bind this protocol version to the named project below. A different research topic must start a new project and its own Analysis Framework.</p>
+<p>Bind this protocol version to a project created on the <a href="/project-analysis-rules.html">Project Analysis Rules</a> page. Use the researcher PIN to load the protected project list.</p>
+<div style="display:flex;gap:8px;margin-bottom:10px;">
+<input id="protocolProjectPin" type="password" autocomplete="current-password" placeholder="Researcher PIN" style="flex:1;padding:10px;box-sizing:border-box;">
+<button id="loadProtocolProjectsButton" type="button">Load projects</button>
+</div>
+<p id="protocolProjectStatus" role="status"></p>
 <select id="protocolProjectSelect" style="width:100%;padding:10px;margin-bottom:16px;box-sizing:border-box;"></select>
 
 <fieldset style="border:1px solid #ddd;border-radius:6px;margin:0 0 16px;padding:16px;">
@@ -83,7 +88,7 @@
 <button id="reviewButton" type="button" style="padding:12px 24px;font-size:16px;">Review Research Design</button>
 </div>
 
-<section id="analysisFrameworkSection" style="border:2px solid #2d6a4f;border-radius:8px;padding:20px;margin-bottom:24px;">
+<section id="analysisFrameworkSection" hidden style="display:none;border:2px solid #2d6a4f;border-radius:8px;padding:20px;margin-bottom:24px;">
 <h2>Analysis Framework</h2>
 <p><strong>Independent from the Interview Protocol.</strong> Editing this framework does not change interview questions, historical transcripts, or prior case reports. Every saved version is bound to one named research project and topic.</p>
 <div style="background:#edf7f1;border:1px solid #9fc8ad;border-radius:8px;padding:12px;margin-bottom:16px;">

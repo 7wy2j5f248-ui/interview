@@ -645,9 +645,10 @@
                     "analysisProvenanceCell"
                 );
                 const framework = caseRecord.analysisFramework;
+                const globalRules = caseRecord.globalAnalysisRules;
                 createCell(
                     row,
-                    `${framework ? `Framework v${framework.version_number}` : "Legacy pre-framework report"} · Report ${caseRecord.reportLineage?.reportId || "—"}`,
+                    `${globalRules ? `Global rules v${globalRules.version_number}` : "Legacy global rules"} · ${framework ? `Project rules v${framework.version_number}` : "Legacy project rules"} · Report ${caseRecord.reportLineage?.reportId || "—"}`,
                     "analysisProvenanceCell"
                 );
                 body.appendChild(row);
@@ -1149,8 +1150,9 @@
         const lineage = document.createElement("p");
         const project = caseRecord.researchProject;
         const framework = caseRecord.analysisFramework;
+        const globalRules = caseRecord.globalAnalysisRules;
         lineage.textContent = project
-            ? `Project: ${project.project_name} · Topic: ${project.research_topic} · Analysis Framework: ${framework ? `v${framework.version_number}` : "legacy pre-framework report"} · Report: ${caseRecord.reportLineage?.reportId || "—"}${caseRecord.reportLineage?.sourceReportId ? ` · Source report: ${caseRecord.reportLineage.sourceReportId}` : ""}`
+            ? `Global analysis rules: ${globalRules ? `v${globalRules.version_number}` : "legacy version not recorded"} · Project: ${project.project_name} · Topic: ${project.research_topic} · Project analysis rules: ${framework ? `v${framework.version_number}` : "legacy version not recorded"} · Report: ${caseRecord.reportLineage?.reportId || "—"}${caseRecord.reportLineage?.sourceReportId ? ` · Source report: ${caseRecord.reportLineage.sourceReportId}` : ""}`
             : `Project/topic lineage unavailable · Analysis version: ${caseRecord.analysisVersion || "—"}`;
         const interpretationHeading = document.createElement("h3");
         interpretationHeading.textContent = "Case interpretation";

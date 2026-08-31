@@ -240,6 +240,9 @@ export async function processOldestAutomaticCase(
             ungroupedCategoryNumbers: analysis.unassignedCategoryNumbers,
             analysisFrameworkId: analysisFramework.id,
             analysisFrameworkVersion: analysisFramework.versionNumber,
+            globalAnalysisRuleId: analysisFramework.globalAnalysisRules?.id,
+            globalAnalysisRuleVersion:
+                analysisFramework.globalAnalysisRules?.versionNumber,
             researchProjectId: analysisFramework.projectId,
             researchProjectName: analysisFramework.projectName,
             researchTopic: analysisFramework.researchTopic
