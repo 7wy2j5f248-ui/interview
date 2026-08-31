@@ -1791,7 +1791,7 @@ export async function generateAutomaticCaseAnalysis(
             content: `Completed participant transcript (JSON):\n${transcriptJson}`
         }
     ]);
-    const draft = parseStructuredResponse(
+    let draft = parseStructuredResponse(
         response,
         "Automatic individual case analysis"
     );
@@ -1800,10 +1800,16 @@ export async function generateAutomaticCaseAnalysis(
         ? response.usage.input_tokens
         : null;
 
-    if (!validated.complete
+    const needsStructuralRepair = () => Boolean(
+        !validated.complete
         || validated.invalidDemographicEvidence > 0
         || validated.rejectedCategoryAssignments.length > 0
         || validated.rejectedThemeAssignments.length > 0
+    );
+    for (
+        let structuralRepairAttempt = 1;
+        structuralRepairAttempt <= 2 && needsStructuralRepair();
+        structuralRepairAttempt += 1
     ) {
         const repairResponse = await createResponse([
             {
@@ -1835,13 +1841,11 @@ export async function generateAutomaticCaseAnalysis(
                 ].join("\n\n")
             }
         ]);
-        validated = validateAutomaticCaseAnalysis(
-            parseStructuredResponse(
-                repairResponse,
-                "Corrected automatic individual case analysis"
-            ),
-            messages
+        draft = parseStructuredResponse(
+            repairResponse,
+            "Corrected automatic individual case analysis"
         );
+        validated = validateAutomaticCaseAnalysis(draft, messages);
 
         if (Number.isInteger(repairResponse?.usage?.input_tokens)) {
             inputTokenCount = (inputTokenCount || 0)
