@@ -302,7 +302,7 @@
             const lineage = document.createElement("p");
             lineage.className = "muted";
             lineage.textContent = project && framework
-                ? `Global project rule: ${project.project_name} · Topic: ${project.research_topic} · Analysis Framework v${framework.version_number}. This case has its own proposal and audit; no report changes without explicit approval.`
+                ? `Global project rule: ${project.project_name} · Topic: ${project.research_topic} · Analysis Framework v${framework.version_number}. This case has its own proposal and audit. Project-wide proposals are inspectable without approval and remain separate from current reports.`
                 : "Legacy lineage: refresh after the project-bound framework migration is available.";
             record.appendChild(lineage);
             if (request.last_error) {
@@ -358,7 +358,8 @@
                     warning.append(title, list);
                     record.appendChild(warning);
                 }
-                if (request.status === "proposal_ready") {
+                if (request.status === "proposal_ready"
+                    && !request.project_reanalysis_batch_id) {
                     const reviewNotes = document.createElement("textarea");
                     reviewNotes.placeholder = "Optional approval or rejection note";
                     reviewNotes.setAttribute("aria-label", "Researcher review note");
@@ -500,6 +501,39 @@
         projectWideStatus.textContent = `${data.cancelledCaseCount} case requests were stopped. Existing reports are unchanged; generated proposals and the cancellation reason remain available for audit.`;
     }
 
+    function downloadFilename(response, fallback) {
+        const disposition = response.headers.get("Content-Disposition") || "";
+        const match = disposition.match(/filename="([^"]+)"/i);
+        return match?.[1] || fallback;
+    }
+
+    async function downloadProjectWideBatch(batch) {
+        projectWideStatus.textContent =
+            "Preparing the complete proposed analysis with current-versus-revised evidence and provenance…";
+        const response = await fetch(
+            `/api/automatic-analysis-review?action=download_project_reanalysis_batch&batchId=${encodeURIComponent(batch.id)}`,
+            { headers: { Authorization: `Bearer ${token()}` } }
+        );
+        if (!response.ok) {
+            const data = await response.json().catch(() => ({}));
+            throw new Error(data.error || "The complete batch review could not be downloaded.");
+        }
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = downloadFilename(
+            response,
+            `PLI-complete-revised-analysis-${batch.id}.xlsx`
+        );
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        URL.revokeObjectURL(url);
+        projectWideStatus.textContent =
+            "Complete batch review downloaded. It contains proposed revised analysis only; no report was approved, promoted, or overwritten.";
+    }
+
     function renderProjectWideHistory() {
         projectWideHistory.replaceChildren();
         const layer = workspace.reanalysis || {};
@@ -534,14 +568,35 @@
             counts.className = "muted";
             counts.textContent = `Eligible ${batch.eligible_case_count}; queued ${
                 batch.queued_case_count
-            }; processing ${batch.processing_case_count}; awaiting review ${
+            }; processing ${batch.processing_case_count}; revised proposals ready ${
                 batch.proposal_ready_case_count
             }; approved ${batch.approved_case_count}; rejected ${
                 batch.rejected_case_count
             }; failed ${batch.failed_case_count}; cancelled ${
                 batch.cancelled_case_count || 0
-            }. Every current report is preserved until its own explicit approval.`;
+            }. Proposal generation finishes independently of approval. Current reports remain preserved; the consolidated download is read-only.`;
             record.append(heading, lineage, counts);
+
+            if (new Set(["completed", "completed_with_failures"]).has(
+                batch.status
+            ) && batch.queued_case_count === 0
+                && batch.processing_case_count === 0) {
+                const download = document.createElement("button");
+                download.type = "button";
+                download.textContent = "Download complete batch review";
+                download.addEventListener("click", () => {
+                    download.disabled = true;
+                    downloadProjectWideBatch(batch)
+                        .catch(error => {
+                            projectWideStatus.textContent = error.message;
+                            bridge.setStatus(error.message, true);
+                        })
+                        .finally(() => {
+                            download.disabled = false;
+                        });
+                });
+                record.appendChild(download);
+            }
 
             if (batch.cancellation_reason) {
                 const cancellation = document.createElement("p");
@@ -680,7 +735,7 @@
             projectWidePreview.projectName
         } (${projectWidePreview.researchTopic}) using Analysis Framework v${
             projectWidePreview.analysisFrameworkVersion
-        } across ${projectWidePreview.eligibleCaseCount} eligible completed cases? Each result remains a proposal until individually approved.`;
+        } across ${projectWidePreview.eligibleCaseCount} eligible completed cases? The system will finish the full proposed revision without case-by-case approval and make one consolidated review download available. Current reports will remain unchanged.`;
         if (!window.confirm(confirmation)) return;
 
         projectWideRequestButton.disabled = true;
@@ -710,7 +765,7 @@
         document.getElementById("projectWideReanalysisNotes").value = "";
         await loadWorkspace(activeThreadId);
         projectWideRequestButton.disabled = true;
-        projectWideStatus.textContent = `${data.queuedCaseCount} individual case requests were queued. Processing is case by case; each proposal and audit requires explicit researcher approval before it can become current.`;
+        projectWideStatus.textContent = `${data.queuedCaseCount} individual case requests were queued. The full proposed revision will finish automatically. When complete, download one consolidated review; no case approval is required to inspect it and current reports remain unchanged.`;
     }
 
     function appendMessage(message) {

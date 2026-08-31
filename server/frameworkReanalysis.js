@@ -39,7 +39,7 @@ export async function processCaseReanalysisRequest(
     const selectedModel = model();
     const { data: request, error: requestError } = await supabase
         .from(REQUESTS)
-        .select("id, session_id, source_report_id, request_number, reason_code, researcher_notes, requested_by, status, attempt_count, project_id, analysis_framework_id")
+        .select("id, session_id, source_report_id, request_number, reason_code, researcher_notes, requested_by, status, attempt_count, project_id, analysis_framework_id, project_reanalysis_batch_id")
         .eq("id", requestId)
         .single();
     if (requestError || !request) {
@@ -221,7 +221,10 @@ export async function processCaseReanalysisRequest(
             analysisFrameworkId: analysisFramework.id,
             analysisFrameworkVersion: analysisFramework.versionNumber,
             currentReportPreserved: true,
-            researcherApprovalRequired: true
+            researcherApprovalRequired:
+                !request.project_reanalysis_batch_id,
+            proposalAccessibleWithoutApproval: true,
+            projectWideBatchId: request.project_reanalysis_batch_id || null
         });
         return {
             requestId,

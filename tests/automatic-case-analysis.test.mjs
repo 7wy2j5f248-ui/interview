@@ -689,7 +689,7 @@ test("Cases and keywords loads every case and every stored highlight", async () 
     assert.match(script, /DASHBOARD_PAGE_CONCURRENCY = 4/);
     assert.match(script, /casesWithMarkedKeywords/);
     assert.match(script, /reports currently have validated keyword evidence/);
-    assert.match(html, /researcher-automatic-analysis\.js\?version=20260831-second-layer-review-v14/);
+    assert.match(html, /researcher-automatic-analysis\.js\?version=20260831-complete-batch-export-v1/);
     assert.match(html, /automaticAnalysisGateStatus/);
     assert.match(script, /cache: "no-store"/);
     assert.match(script, /searchParams\.set\("fresh"/);

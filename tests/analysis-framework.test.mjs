@@ -135,7 +135,7 @@ test("global framework queue creates one auditable proposal per case", async () 
     assert.match(processor, /relevance_audit: analysis\.relevanceAudit/);
     assert.match(processor, /source_quality_flags: sourceQualityFlags/);
     assert.match(processor, /currentReportPreserved: true/);
-    assert.match(processor, /researcherApprovalRequired: true/);
+    assert.match(processor, /proposalAccessibleWithoutApproval: true/);
     assert.match(reviewUi, /Global project rule/);
     assert.match(reviewUi, /own proposal and audit/);
     assert.match(dashboard, /researchProject/);

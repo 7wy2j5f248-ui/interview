@@ -15,6 +15,10 @@ import {
 import { processCaseReanalysisRequest } from "../server/frameworkReanalysis.js";
 import { scheduleAutomaticCaseAnalysis } from "../server/automaticCaseAnalysis.js";
 import { cancelProjectWideReanalysisBatch } from "../server/projectWideReanalysis.js";
+import {
+    loadProjectReanalysisBatchExport,
+    writeProjectReanalysisBatchWorkbook
+} from "../server/projectReanalysisBatchExport.js";
 import { normalizeOpenAIModel } from "../server/modelConfiguration.js";
 import { authorizeResearcher } from "../server/researcherAuth.js";
 
@@ -43,6 +47,13 @@ function safeFilename(value) {
         ? value.trim().replace(/[\\/\u0000-\u001f]/g, "-").slice(0, 180)
         : "researcher-review.xlsx";
     return filename || "researcher-review.xlsx";
+}
+
+function safeExportName(value) {
+    return String(value || "project")
+        .replace(/[^A-Za-z0-9_-]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .slice(0, 80) || "project";
 }
 
 function safeId(value) {
@@ -321,6 +332,33 @@ async function listWorkspace(req, res, supabase) {
         messages,
         reanalysis
     });
+}
+
+async function downloadProjectReanalysisBatch(req, res, supabase) {
+    const data = await loadProjectReanalysisBatchExport(
+        supabase,
+        req.query?.batchId
+    );
+    const createdAt = new Date();
+    const filename = `PLI-${safeExportName(
+        data.project.project_code
+    )}-framework-v${
+        data.framework.version_number
+    }-complete-revised-analysis-${createdAt.toISOString().slice(0, 10)}.xlsx`;
+    res.setHeader(
+        "Content-Type",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${filename}"`
+    );
+    res.setHeader("X-PLI-Batch-ID", data.batch.id);
+    res.setHeader("X-PLI-Case-Count", String(data.requests.length));
+    res.setHeader("X-PLI-Report-Effect", "none-proposal-export-only");
+    res.status(200);
+    await writeProjectReanalysisBatchWorkbook(res, data, createdAt);
+    return undefined;
 }
 
 async function uploadWorkbook(req, res, supabase) {
@@ -832,7 +870,8 @@ async function previewProjectWideReanalysis(req, res, supabase) {
             openRequestExcludedCount: preview.open_request_excluded_count,
             archivedCaseExcludedCount: preview.archived_case_excluded_count,
             currentReportsPreserved: true,
-            researcherApprovalRequiredPerCase: true
+            researcherApprovalRequiredBeforeInspection: false,
+            consolidatedBatchDownloadWhenComplete: true
         }
     });
 }
@@ -873,7 +912,8 @@ async function requestProjectWideReanalysis(req, res, supabase) {
         queuedCaseCount: batch.queued_case_count,
         workerScheduled,
         currentReportsPreserved: true,
-        researcherApprovalRequiredPerCase: true
+        researcherApprovalRequiredBeforeInspection: false,
+        consolidatedBatchDownloadWhenComplete: true
     });
 }
 
@@ -950,6 +990,13 @@ export default async function handler(req, res) {
     );
     try {
         if (req.method === "GET") {
+            if (req.query?.action === "download_project_reanalysis_batch") {
+                return await downloadProjectReanalysisBatch(
+                    req,
+                    res,
+                    supabase
+                );
+            }
             return await listWorkspace(req, res, supabase);
         }
         if (req.method !== "POST") {
@@ -1016,6 +1063,10 @@ export default async function handler(req, res) {
             action: req.body?.action || req.query?.action || "workspace",
             status
         });
+        if (res.headersSent) {
+            res.destroy(error);
+            return undefined;
+        }
         return res.status(status).json({
             error: status === 500
                 ? "The second-layer analysis workspace could not complete this request."
