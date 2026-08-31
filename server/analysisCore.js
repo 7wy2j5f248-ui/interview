@@ -829,8 +829,10 @@ function validateAutomaticDemographics(value, messagesById) {
 }
 
 export function validateAutomaticCaseAnalysis(value, availableMessages) {
+    const suppliedMessages = Array.isArray(availableMessages)
+        ? availableMessages : [];
     const messagesById = new Map(
-        (Array.isArray(availableMessages) ? availableMessages : [])
+        suppliedMessages
             .map(message => [message.id, message])
     );
     const codes = [];
@@ -925,6 +927,15 @@ export function validateAutomaticCaseAnalysis(value, availableMessages) {
     );
 
     const caseInterpretation = normalizedText(value?.case_interpretation);
+    const substantiveMessageCount = suppliedMessages.filter(message =>
+        !isConversationalCourtesy(message?.originalText)
+    ).length;
+    const fullHierarchyExpected = substantiveMessageCount >= 6;
+    const hierarchyCoverageComplete = !fullHierarchyExpected || Boolean(
+        codes.length >= 4
+        && categories.length >= 2
+        && themes.length >= 1
+    );
 
     return {
         codes,
@@ -938,11 +949,15 @@ export function validateAutomaticCaseAnalysis(value, availableMessages) {
         unassignedCategoryNumbers,
         rejectedCategoryAssignments,
         rejectedThemeAssignments,
+        substantiveMessageCount,
+        fullHierarchyExpected,
+        hierarchyCoverageComplete,
         ...demographicValidation,
         complete: Boolean(
             codes.length
             && caseInterpretation
             && droppedCodes === 0
+            && hierarchyCoverageComplete
         )
     };
 }
@@ -1701,6 +1716,7 @@ export async function generateAutomaticCaseAnalysis(
         "A code names the specific phenomenon expressed by one or more meaning units. Prefer one ordinary English word; use two or three words only when they form one familiar natural phrase. Never use underscores, a clause, a sentence, or a bag of descriptors. Every code must be supportable by its text. Do not add an unsupported cause, motive, diagnosis, social structure, evaluation, consequence, or theoretical explanation.",
         "A category answers: What is being described? Group at least two related codes into one broader descriptive phenomenon. Categories must be firm, coherent, and evidence-grounded.",
         "A theme answers: What patterned meaning links these observations? Interpret at least two categories together and state the resulting patterned meaning. A theme is interpretive, but it is still part of the completed analytical result; do not pause or ask for researcher confirmation.",
+        "Cover every analytically distinct, research-relevant participant meaning in the completed transcript. Do not reduce a substantive interview to one convenient code merely to pass validation. A transcript with six or more substantive participant turns must normally retain at least four supported codes, two valid categories, and one theme that links those categories; if the evidence cannot support that structure, the case must fail transparently rather than submit a thin proposal.",
         "If a firm code or category lacks enough related material for a defensible higher level, retain it as unsynthesized. Do not manufacture a category or theme, and do not label the result as waiting for researcher review.",
         "Complete and return the whole case outcome. The researcher reviews completed work afterward and may provide feedback that starts a new version.",
         vocabularyInstruction
@@ -1808,7 +1824,7 @@ export async function generateAutomaticCaseAnalysis(
             const labelRepairResponse = await createResponse([{
                 role: "system",
                 content: systemInstruction
-                    + " Return one complete corrected report. Repair every rejected code, category, or theme label. Codes and categories must use coherent common terms suitable across cases while remaining supportable by this case alone. Categories descriptively group related codes. Themes state the patterned meaning linking categories and may use a clear interpretive phrase. Retain unsynthesized lower units instead of forcing a hierarchy. Preserve exact meaning-unit evidence, anchors, and demographic provenance."
+                    + " Return one complete corrected report. Repair every rejected code, category, or theme label. Re-label a supported analytic finding; never delete it merely to simplify the report or pass the audit. Codes and categories must use coherent common terms suitable across cases while remaining supportable by this case alone. Categories descriptively group related codes. Themes state the patterned meaning linking categories and may use a clear interpretive phrase. Retain unsynthesized lower units instead of forcing a hierarchy. Preserve exact meaning-unit evidence, anchors, and demographic provenance."
             }, {
                 role: "user",
                 content: [
@@ -2101,6 +2117,9 @@ export async function generateAutomaticCaseReanalysis(
             "The proposed re-analysis did not produce a complete evidence hierarchy.",
             `Validated ${analysis.codes?.length || 0} codes, ${analysis.categories?.length || 0} categories, and ${analysis.themes?.length || 0} themes.`,
             `${analysis.droppedCodes || 0} codes were dropped; ${analysis.invalidEvidence || 0} evidence or hierarchy records were invalid.`,
+            analysis.fullHierarchyExpected
+                ? `This ${analysis.substantiveMessageCount}-turn substantive transcript required at least 4 codes, 2 categories, and 1 theme; hierarchy coverage complete: ${Boolean(analysis.hierarchyCoverageComplete)}.`
+                : "A full multi-level hierarchy was not structurally required for this short transcript.",
             rejectedLabels.length
                 ? `Label audit rejected ${rejectedLabels.length}: ${rejectedLabels.slice(0, 8).map(item => `${item.kind} ${item.number} “${item.label}” — ${item.explanation}`).join(" | ")}`
                 : "The label audit did not reject a label."
@@ -2147,6 +2166,9 @@ export async function generateAutomaticCaseReanalysis(
                 "The corrected re-analysis did not produce a complete evidence hierarchy.",
                 `Validated ${analysis.codes?.length || 0} codes, ${analysis.categories?.length || 0} categories, and ${analysis.themes?.length || 0} themes.`,
                 `${analysis.droppedCodes || 0} codes were dropped; ${analysis.invalidEvidence || 0} evidence or hierarchy records were invalid.`,
+                analysis.fullHierarchyExpected
+                    ? `This ${analysis.substantiveMessageCount}-turn substantive transcript required at least 4 codes, 2 categories, and 1 theme; hierarchy coverage complete: ${Boolean(analysis.hierarchyCoverageComplete)}.`
+                    : "A full multi-level hierarchy was not structurally required for this short transcript.",
                 rejectedLabels.length
                     ? `Label audit rejected ${rejectedLabels.length}: ${rejectedLabels.slice(0, 8).map(item => `${item.kind} ${item.number} “${item.label}” — ${item.explanation}`).join(" | ")}`
                     : "The label audit did not reject a label."

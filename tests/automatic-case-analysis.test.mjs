@@ -158,6 +158,33 @@ test("automatic case analysis rejects paraphrased evidence and unassigned codes"
     assert.ok(result.invalidEvidence > 0);
 });
 
+test("a substantive interview cannot pass as a one-code thin proposal", () => {
+    const messages = Array.from({ length: 6 }, (_, index) => ({
+        id: `message-${index + 1}`,
+        originalText: `Sleep evidence ${index + 1}`,
+        englishTranslation: `Sleep evidence ${index + 1}`
+    }));
+    const result = validateAutomaticCaseAnalysis({
+        codes: [{
+            label: "bedtime",
+            rationale: "The participant describes bedtime.",
+            meaning_unit_evidence: [{
+                message_id: "message-1",
+                exact_text: "Sleep evidence 1",
+                anchor_expressions: ["Sleep evidence 1"]
+            }]
+        }],
+        categories: [],
+        themes: [],
+        case_interpretation: "The interview contains several distinct sleep accounts."
+    }, messages);
+
+    assert.equal(result.substantiveMessageCount, 6);
+    assert.equal(result.fullHierarchyExpected, true);
+    assert.equal(result.hierarchyCoverageComplete, false);
+    assert.equal(result.complete, false);
+});
+
 test("case re-analysis requires transcript, code, theme, and research-scope relevance", () => {
     const analysis = {
         codes: [{
