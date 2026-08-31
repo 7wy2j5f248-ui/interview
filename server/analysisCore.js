@@ -1823,7 +1823,8 @@ export async function generateAutomaticCaseAnalysis(
         vocabularyInstruction
     ].join("\n\n")
         + "\n\n" + frameworkInstruction
-        + relevanceInstruction;
+        + relevanceInstruction
+        + "\n\nFINAL NON-NEGOTIABLE OUTPUT CHECK: Count the words in every code label before returning JSON. Every code label must contain one, two, or three space-separated words—never four or more. Shorten the label without deleting its evidence. This final constraint overrides any longer wording suggested elsewhere in the framework or prior-attempt feedback.";
     const createResponse = input => openaiClient.responses.create({
         model,
         store: false,

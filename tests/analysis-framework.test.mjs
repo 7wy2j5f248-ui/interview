@@ -102,6 +102,7 @@ test("global semantic label standards are audited and repaired before completion
     assert.match(core, /labelRepairPassLimit: 0/);
     assert.match(core, /rebuild every dependent category and theme/);
     assert.match(core, /rejectedLabelCheckNames/);
+    assert.match(core, /FINAL NON-NEGOTIABLE OUTPUT CHECK/);
     assert.match(automaticProcessor, /labelQualityAudit/);
     assert.match(migration, /labelQualityCheckCount/);
     assert.match(design, /Global Analysis Rules/);
