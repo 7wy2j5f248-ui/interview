@@ -859,10 +859,18 @@ export function validateAutomaticCaseAnalysis(value, availableMessages) {
         ).forEach(evidence => {
             const messageId = normalizedText(evidence?.message_id);
             const message = messagesById.get(messageId);
-            const occurrences = exactTextOccurrences(
+            let textSource = "original";
+            let occurrences = exactTextOccurrences(
                 message?.originalText,
                 evidence?.exact_text
             );
+            if (!occurrences.length && message?.englishTranslation) {
+                occurrences = exactTextOccurrences(
+                    message.englishTranslation,
+                    evidence?.exact_text
+                );
+                if (occurrences.length) textSource = "english_translation";
+            }
 
             if (!message
                 || isConversationalCourtesy(evidence?.exact_text)
@@ -873,7 +881,7 @@ export function validateAutomaticCaseAnalysis(value, availableMessages) {
             }
 
             occurrences.forEach(occurrence => {
-                const key = `${messageId}:${occurrence.startOffset}:${occurrence.endOffset}`;
+                const key = `${messageId}:${textSource}:${occurrence.startOffset}:${occurrence.endOffset}`;
                 const anchors = normalizedList(evidence?.anchor_expressions)
                     .filter(anchor => exactTextOccurrences(
                         occurrence.exactText,
@@ -882,6 +890,7 @@ export function validateAutomaticCaseAnalysis(value, availableMessages) {
                 const meaningUnit = usedMeaningUnits.get(key) || {
                     messageId,
                     ...occurrence,
+                    textSource,
                     anchors
                 };
                 usedMeaningUnits.set(key, meaningUnit);
@@ -901,7 +910,7 @@ export function validateAutomaticCaseAnalysis(value, availableMessages) {
         }
 
         const uniqueMeaningUnits = [...new Map(meaningUnits.map(unit => [
-            `${unit.messageId}:${unit.startOffset}:${unit.endOffset}`,
+            `${unit.messageId}:${unit.textSource}:${unit.startOffset}:${unit.endOffset}`,
             unit
         ])).values()];
         codes.push({

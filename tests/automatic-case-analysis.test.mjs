@@ -127,6 +127,7 @@ test("automatic case analysis retains exact meaning units and MU to CO to CA to 
         exactText: passage,
         startOffset: 0,
         endOffset: passage.length,
+        textSource: "original",
         anchors: ["think about work before sleep"]
     });
     assert.deepEqual(result.categories[0].codeNumbers, [1, 3]);
@@ -156,6 +157,31 @@ test("automatic case analysis rejects paraphrased evidence and unassigned codes"
     assert.equal(result.complete, false);
     assert.equal(result.codes.length, 0);
     assert.ok(result.invalidEvidence > 0);
+});
+
+test("exact stored English translation is grounded with explicit provenance", () => {
+    const result = validateAutomaticCaseAnalysis({
+        codes: [{
+            label: "night shift",
+            rationale: "Night work disrupted the sleep schedule.",
+            meaning_unit_evidence: [{
+                message_id: "message-1",
+                exact_text: "The night shift disrupted my sleep.",
+                anchor_expressions: ["night shift"]
+            }]
+        }],
+        categories: [],
+        themes: [],
+        case_interpretation: "Night work disrupted sleep."
+    }, [{
+        id: "message-1",
+        originalText: "夜班打乱了我的睡眠。",
+        englishTranslation: "The night shift disrupted my sleep."
+    }]);
+
+    assert.equal(result.complete, true);
+    assert.equal(result.codes[0].meaningUnits[0].textSource, "english_translation");
+    assert.equal(result.codes[0].meaningUnits[0].exactText, "The night shift disrupted my sleep.");
 });
 
 test("a substantive interview cannot pass as a one-code thin proposal", () => {
