@@ -408,6 +408,12 @@
             margin-block-start: 0.3rem;
         }
 
+        .analysisDiscussionSelectButton {
+            display: block;
+            font-size: 0.76rem;
+            margin-block-start: 0.35rem;
+        }
+
         .keywordRecordsScroll {
             max-height: 42rem;
             overflow: auto;
@@ -671,6 +677,25 @@
             padding: 0.65rem;
         }
 
+        .automaticReanalysisAudit {
+            background: #edf7f1;
+            border-inline-start: 4px solid #2d6a4f;
+            padding: 0.65rem;
+        }
+
+        .transcriptReturnButton {
+            background: #ffffff;
+            border: 2px solid #245fbd;
+            border-radius: 0.35rem;
+            color: #173968;
+            font-weight: 700;
+            inset-block-start: 0;
+            max-width: 100%;
+            padding: 0.6rem 0.8rem;
+            position: sticky;
+            z-index: 3;
+        }
+
         .analysisProposal {
             background: #fff8e8;
             border: 1px solid #d9b66f;
@@ -884,6 +909,15 @@
         evidence, not generation order. Equal mention totals share the same
         level, and the labels never carry a fixed meaning across participants.
     </p>
+    <p class="automaticPipelineNote">
+        <strong>Global label standard for every project:</strong> keywords stay
+        as exact participant expressions. Codes and themes must be meaningful,
+        everyday semantic concepts: one word is preferred, and two or three
+        words are allowed only as one natural phrase. Bag-of-words labels are
+        rejected and repaired before a future report or re-analysis proposal
+        can be completed. Project-specific frameworks add topic and inclusion
+        rules but cannot weaken this standard.
+    </p>
 
     <div id="automaticAnalysisTokenGate">
         <label>
@@ -970,7 +1004,8 @@
                 <p class="muted">
                     Select exactly one case above. The preserved transcript and
                     every earlier report remain unchanged. AI creates a new
-                    proposal with exact-evidence and semantic relevance checks;
+                    proposal with exact-evidence, semantic relevance, and
+                    human-meaningful label-quality checks;
                     it becomes current only after your explicit approval.
                 </p>
                 <p class="muted">
@@ -1097,7 +1132,7 @@
 </section>
 
 <dialog id="automaticTranscriptDialog">
-    <button id="automaticTranscriptCloseButton" type="button">Close transcript</button>
+    <button id="automaticTranscriptCloseButton" class="transcriptReturnButton" type="button">Return to analysis form</button>
     <h2 id="automaticTranscriptHeading">Annotated transcript</h2>
     <p id="automaticTranscriptIdentity" class="transcriptIdentity"></p>
     <p><strong>Demographic data:</strong> <span id="automaticTranscriptDemographics"></span></p>
@@ -1942,7 +1977,7 @@ document.getElementById("periodResetButton").addEventListener("click", () => {
 loadStatistics();
 
 </script>
-<script src="researcher-automatic-analysis.js?version=20260831-four-analysis-forms-v1"></script>
+<script src="researcher-automatic-analysis.js?version=20260831-global-label-nav-v1"></script>
     
 </body>
 </html>

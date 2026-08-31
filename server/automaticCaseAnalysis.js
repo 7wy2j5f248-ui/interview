@@ -193,6 +193,10 @@ export async function processOldestAutomaticCase(
         }
 
         if (!analysis.complete || !source.participantCode) {
+            const rejectedLabels = analysis.labelQualityAudit?.rejectedLabels || [];
+            const labelProblems = rejectedLabels.length
+                ? ` Label-quality audit rejected ${rejectedLabels.length} label(s): ${rejectedLabels.map(item => `${item.kind} ${item.number} “${item.label}” — ${item.explanation}`).join(" | ")}.`
+                : "";
             throw new Error(
                 "The automatic individual case report was incomplete and was not saved. "
                 + `Validated ${analysis.codes.length} codes, `
@@ -200,6 +204,7 @@ export async function processOldestAutomaticCase(
                 + `${analysis.invalidEvidence} invalid evidence records; `
                 + `${analysis.droppedCodes} codes were dropped and `
                 + `${analysis.unassignedCodeNumbers.length} codes were unassigned.`
+                + labelProblems
             );
         }
 
@@ -211,6 +216,7 @@ export async function processOldestAutomaticCase(
             caseInterpretation: analysis.caseInterpretation,
             codes: analysis.codes,
             themes: analysis.themes,
+            labelQualityAudit: analysis.labelQualityAudit,
             analysisFrameworkId: analysisFramework.id,
             analysisFrameworkVersion: analysisFramework.versionNumber,
             researchProjectId: analysisFramework.projectId,

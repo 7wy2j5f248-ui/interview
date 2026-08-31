@@ -215,6 +215,10 @@ export async function processCaseReanalysisRequest(
             sourceReportId: sourceReport.id,
             sourceQualityFlagCount: sourceQualityFlags.length,
             relevanceCheckCount: analysis.relevanceAudit.checks.length,
+            labelQualityCheckCount:
+                analysis.relevanceAudit.labelQualityAudit?.checks?.length || 0,
+            rejectedLabelCount:
+                analysis.relevanceAudit.labelQualityAudit?.rejectedLabels?.length || 0,
             projectId: analysisFramework.projectId,
             projectName: analysisFramework.projectName,
             researchTopic: analysisFramework.researchTopic,

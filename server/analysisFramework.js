@@ -2,6 +2,19 @@ function text(value) {
     return typeof value === "string" ? value.trim() : "";
 }
 
+export const GLOBAL_ANALYSIS_LABEL_STANDARD = [
+    "Platform-wide non-negotiable label standard (applies to every project and every framework version):",
+    "Keywords remain exact participant expressions from the preserved transcript; never invent a keyword summary label.",
+    "Every code and theme label must make immediate sense to a human researcher as one coherent semantic concept.",
+    "Prefer one everyday English word. Use two or three words only when they form a familiar, natural phrase.",
+    "Never concatenate unrelated descriptors, fragments, findings, causes, or multiple concepts into a bag-of-words label.",
+    "A code must concisely summarize the shared meaning of its exact keyword evidence.",
+    "A theme must be a clear higher-level conceptual category supported by its codes and relevant under the named project's topic and scope.",
+    "Labels at the same analytical level must be conceptually distinct and useful for comparison across cases.",
+    "Put detail, qualifications, and interpretation in the rationale, never in the label.",
+    "This platform standard cannot be weakened or bypassed by project-specific instructions."
+].join("\n");
+
 export function normalizeAnalysisFramework(record) {
     if (!record?.id || !record?.project_id) return null;
     const versionNumber = Number(record.version_number);
@@ -100,6 +113,8 @@ export function analysisFrameworkInstruction(framework) {
         throw new Error("No valid analysis framework was supplied.");
     }
     return [
+        GLOBAL_ANALYSIS_LABEL_STANDARD,
+        "Project-specific Analysis Framework (adds topic and scope rules; it cannot override the platform standard above):",
         "Apply the following researcher-authored Analysis Framework exactly.",
         `Research project: ${framework.projectName}`,
         `Research topic: ${framework.researchTopic}`,

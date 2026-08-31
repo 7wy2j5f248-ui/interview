@@ -4,7 +4,9 @@ import test from "node:test";
 import {
     detectCompoundQuestionTurns,
     isConversationalCourtesy,
+    isNaturalAnalyticLabelShape,
     validateAutomaticCaseAnalysis,
+    validateAutomaticLabelQualityAudit,
     validateAutomaticCaseRelevanceAudit
 } from "../server/analysisCore.js";
 
@@ -144,6 +146,53 @@ test("case re-analysis requires transcript, code, theme, and research-scope rele
     assert.equal(result.rejectedEvidence.length, 1);
     assert.equal(result.checks[0].transcriptGrounded, true);
     assert.equal(result.checks[0].researchScopeRelevant, false);
+});
+
+test("global label audit rejects short but incoherent labels", () => {
+    const analysis = {
+        codes: [{
+            label: "Routine Stable Longstanding",
+            rationale: "A descriptor bundle rather than one natural concept.",
+            highlights: [{ messageId: "message-1", exactText: "same routine" }]
+        }],
+        themes: [{
+            label: "Sleep routine",
+            rationale: "A coherent higher-level concept.",
+            codeNumbers: [1]
+        }]
+    };
+    const audit = validateAutomaticLabelQualityAudit(analysis, {
+        checks: [{
+            kind: "code",
+            number: 1,
+            label: "Routine Stable Longstanding",
+            natural_language: false,
+            coherent_concept: false,
+            conceptually_distinct: true,
+            evidence_supported: true,
+            topic_relevant: true,
+            comparison_useful: false,
+            explanation: "Three descriptors were concatenated without naming one concept."
+        }, {
+            kind: "theme",
+            number: 1,
+            label: "Sleep routine",
+            natural_language: true,
+            coherent_concept: true,
+            conceptually_distinct: true,
+            evidence_supported: true,
+            topic_relevant: true,
+            comparison_useful: true,
+            explanation: "A clear concept suitable for cross-case comparison."
+        }],
+        overall_summary: "Repair the code label."
+    });
+
+    assert.equal(isNaturalAnalyticLabelShape("Sleep routine"), true);
+    assert.equal(isNaturalAnalyticLabelShape("Work and family"), false);
+    assert.equal(audit.complete, false);
+    assert.equal(audit.rejectedLabels.length, 1);
+    assert.match(audit.rejectedLabels[0].explanation, /concatenated/);
 });
 
 test("compound interviewer questions remain visible as source-quality flags", () => {
@@ -692,7 +741,7 @@ test("separate Cases and Keywords forms load every case and stored highlight", a
     assert.match(script, /function renderKeywords/);
     assert.match(script, /Open exact evidence/);
     assert.match(script, /Framework \/ report provenance/);
-    assert.match(html, /researcher-automatic-analysis\.js\?version=20260831-four-analysis-forms-v1/);
+    assert.match(html, /researcher-automatic-analysis\.js\?version=20260831-global-label-nav-v1/);
     assert.match(html, /automaticAnalysisGateStatus/);
     assert.match(script, /cache: "no-store"/);
     assert.match(script, /searchParams\.set\("fresh"/);
@@ -717,7 +766,10 @@ test("automatic dashboard has compact cases, traceable keyword records, and a fi
     assert.match(script, /analysisExactKeywordCell/);
     assert.match(script, /highlight\.exact_text/);
     assert.match(script, /highlight\.message_id/);
-    assert.match(script, /openTranscript\(caseRecord, highlight\.message_id\)/);
+    assert.match(
+        script,
+        /openTranscript\(\s*caseRecord,\s*highlight\.message_id/
+    );
     assert.match(html, /analysisIdentifierColumn[\s\S]*min-width: 4\.25rem/);
     assert.match(html, /analysisEvidenceTextCell[\s\S]*min-width: 22rem/);
     assert.match(html, /keywordRecordsScroll[\s\S]*max-height: 42rem/);
@@ -726,6 +778,35 @@ test("automatic dashboard has compact cases, traceable keyword records, and a fi
     assert.match(script, /new AbortController\(\)/);
     assert.match(script, /signal: controller\.signal/);
     assert.match(script, /dashboard request timed out\. Please try unlocking again/);
+});
+
+test("Forms 2 to 4 open transcript evidence and return to the same record", async () => {
+    const [html, script, review] = await Promise.all([
+        readFile(new URL("../researcher.html", import.meta.url), "utf8"),
+        readFile(
+            new URL("../researcher-automatic-analysis-legacy.js", import.meta.url),
+            "utf8"
+        ),
+        readFile(
+            new URL("../researcher-automatic-review.js", import.meta.url),
+            "utf8"
+        )
+    ]);
+
+    assert.match(html, /Return to analysis form/);
+    assert.match(html, /Global label standard for every project/);
+    assert.match(script, /function firstEvidenceMessageId/);
+    assert.match(script, /function rememberTranscriptOrigin/);
+    assert.match(script, /function returnFromTranscript/);
+    assert.match(script, /data-transcript-origin/);
+    assert.match(script, /Open the annotated transcript evidence for this/);
+    assert.match(script, /Return to \$\{transcriptReturnContext\.label\}/);
+    assert.match(script, /trigger\?\.focus\(\{ preventScroll: true \}\)/);
+    assert.doesNotMatch(
+        review,
+        /automaticAnalysisReview"\)\.scrollIntoView/
+    );
+    assert.match(review, /current form and scroll position were preserved/);
 });
 
 test("researcher analysis assets cannot be held on a stale cached version", async () => {

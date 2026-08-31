@@ -29,6 +29,16 @@
     let loadPromise = null;
     let requestedTranscriptOpened = false;
     let activeCaseRecord = null;
+    let transcriptReturnContext = null;
+
+    const ANALYSIS_VIEW_LABELS = Object.freeze({
+        cases: "Form 1 · Cases",
+        keywords: "Form 2 · Keywords",
+        codes: "Form 3 · Codes",
+        themes: "Form 4 · Themes",
+        incomplete: "Needs attention",
+        archive: "Archive"
+    });
 
     const gate = document.getElementById("automaticAnalysisTokenGate");
     const workspace = document.getElementById("automaticAnalysisWorkspace");
@@ -166,6 +176,10 @@
         return { scroll, table };
     }
 
+    function transcriptOriginKey(caseRecord, kind, identity = "case") {
+        return `${caseRecord.caseNumber}:${kind}:${identity}`;
+    }
+
     function transcriptButton(caseRecord) {
         const button = document.createElement("button");
         button.type = "button";
@@ -174,7 +188,18 @@
             ? "Open transcript"
             : "Transcript unavailable";
         button.disabled = !caseRecord.transcriptIdentity?.sessionId;
-        button.addEventListener("click", () => openTranscript(caseRecord));
+        button.dataset.transcriptOrigin = transcriptOriginKey(
+            caseRecord,
+            "case"
+        );
+        button.addEventListener("click", event => openTranscript(
+            caseRecord,
+            null,
+            {
+                trigger: event.currentTarget,
+                label: `${ANALYSIS_VIEW_LABELS[activeView]} · ${caseRecord.caseNumber}`
+            }
+        ));
         return button;
     }
 
@@ -319,18 +344,49 @@
             : record?.original_theme_label || record?.theme_label || "—";
     }
 
-    function keywordEvidenceButton(caseRecord, highlight) {
+    function keywordEvidenceButton(
+        caseRecord,
+        highlight,
+        buttonText = "Open exact evidence"
+    ) {
         const button = document.createElement("button");
         button.type = "button";
         button.className = "worksheetTranscriptButton";
-        button.textContent = "Open exact evidence";
+        button.textContent = buttonText;
         button.title = highlight.message_id
             ? `Open source message ${highlight.message_id} in the preserved transcript`
             : "Open the preserved transcript";
-        button.addEventListener("click", () =>
-            openTranscript(caseRecord, highlight.message_id)
+        const keywordPosition = Number.isFinite(Number(highlight.keyword_number))
+            ? `K${highlight.keyword_number}`
+            : "keyword evidence";
+        button.dataset.transcriptOrigin = transcriptOriginKey(
+            caseRecord,
+            "keyword",
+            highlight.id || keywordPosition
         );
+        button.addEventListener("click", event => openTranscript(
+            caseRecord,
+            highlight.message_id,
+            {
+                trigger: event.currentTarget,
+                label: `Form 2 · Keywords · ${caseRecord.caseNumber} · ${keywordPosition}`
+            }
+        ));
         return button;
+    }
+
+    function firstEvidenceMessageId(caseRecord, kind, record) {
+        if (kind === "code") {
+            return (caseRecord.highlights || []).find(
+                highlight => highlight.code_id === record.id
+            )?.message_id || null;
+        }
+        const codeIds = new Set((caseRecord.themeCodes || [])
+            .filter(mapping => mapping.theme_id === record.id)
+            .map(mapping => mapping.code_id));
+        return (caseRecord.highlights || []).find(
+            highlight => codeIds.has(highlight.code_id)
+        )?.message_id || null;
     }
 
     function linkedRecordButton(caseRecord, kind, record) {
@@ -342,7 +398,28 @@
             ? record.code_number
             : record.theme_number;
         button.textContent = `${prefix}${number}: ${recordLabel(record, kind)}`;
-        button.title = `Add this linked ${kind} to the second-layer AI discussion`;
+        button.title = `Open the annotated transcript evidence for this ${kind}`;
+        button.dataset.transcriptOrigin = transcriptOriginKey(
+            caseRecord,
+            kind,
+            record.id || number
+        );
+        button.addEventListener("click", event => openTranscript(
+            caseRecord,
+            firstEvidenceMessageId(caseRecord, kind, record),
+            {
+                trigger: event.currentTarget,
+                label: `${ANALYSIS_VIEW_LABELS[activeView]} · ${caseRecord.caseNumber} · ${prefix}${number}`
+            }
+        ));
+        return button;
+    }
+
+    function discussionSelectButton(caseRecord, kind, record) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "worksheetTranscriptButton analysisDiscussionSelectButton";
+        button.textContent = "Select for AI discussion";
         button.addEventListener("click", () =>
             sendSourceToReview(caseRecord, kind, record)
         );
@@ -401,11 +478,14 @@
                         : `K${index + 1}`,
                     "analysisIdentifierCell"
                 );
-                createCell(
-                    row,
-                    highlight.exact_text || "—",
-                    "analysisExactKeywordCell"
-                );
+                const keywordCell = document.createElement("td");
+                keywordCell.className = "analysisExactKeywordCell";
+                keywordCell.appendChild(keywordEvidenceButton(
+                    caseRecord,
+                    highlight,
+                    highlight.exact_text || "Open keyword evidence"
+                ));
+                row.appendChild(keywordCell);
                 createCell(
                     row,
                     highlight.english_translation || "—",
@@ -416,6 +496,11 @@
                 const codeCell = document.createElement("td");
                 if (code) {
                     codeCell.appendChild(linkedRecordButton(caseRecord, "code", code));
+                    codeCell.appendChild(discussionSelectButton(
+                        caseRecord,
+                        "code",
+                        code
+                    ));
                 } else {
                     codeCell.textContent = "Unlinked";
                     codeCell.className = "analysisEmptyCell";
@@ -430,6 +515,11 @@
                     themes.forEach(theme => {
                         const line = document.createElement("div");
                         line.appendChild(linkedRecordButton(
+                            caseRecord,
+                            "theme",
+                            theme
+                        ));
+                        line.appendChild(discussionSelectButton(
                             caseRecord,
                             "theme",
                             theme
@@ -526,7 +616,6 @@
         const recordsKey = kind === "codes" ? "codes" : "themes";
         const prefix = kind === "codes" ? "C" : "T";
         const numberKey = kind === "codes" ? "code_number" : "theme_number";
-        const labelKey = kind === "codes" ? "code_label" : "theme_label";
         const maximum = Math.max(0, ...completed.map(item =>
             Math.max(0, ...(item[recordsKey] || []).map(record => record[numberKey]))
         ));
@@ -556,19 +645,19 @@
                 if (records.length) {
                     records.forEach(record => {
                         const line = document.createElement("div");
-                        const button = document.createElement("button");
-                        button.type = "button";
-                        button.className = "worksheetExpressionButton";
-                        button.textContent = record[labelKey];
-                        button.title = `${record.rationale}\n\nClick to add this participant-local ${prefix}${number} source to the second-layer AI discussion.`;
-                        button.addEventListener("click", () =>
-                            sendSourceToReview(
-                                caseRecord,
-                                kind === "themes" ? "theme" : "code",
-                                record
-                            )
+                        const recordKind = kind === "themes" ? "theme" : "code";
+                        const button = linkedRecordButton(
+                            caseRecord,
+                            recordKind,
+                            record
                         );
+                        button.title = `${record.rationale}\n\nOpen the preserved annotated transcript at this record's evidence.`;
                         line.appendChild(button);
+                        line.appendChild(discussionSelectButton(
+                            caseRecord,
+                            recordKind,
+                            record
+                        ));
                         const context = document.createElement("small");
                         context.className = "analysisLinkedContext";
                         if (kind === "codes") {
@@ -756,11 +845,11 @@
             activeView === "cases"
                 ? `Form 1 · Cases: ${completedCases.length} available case reports are shown in permanent participant-code order, matching Forms 2–4. This compact register contains transcript, case-report, status, and separated demographic controls only; keyword evidence is kept in Form 2. Use Archive on a completed row to remove it from active analysis; it can later be restored from the Archive view.`
                 : activeView === "keywords"
-                    ? `Form 2 · Keywords: ${casesWithMarkedKeywords} cases contain validated transcript-grounded evidence. Every stored keyword record remains linked to its case, exact source message, participant-local code and theme, analysis status, project/topic, framework version, and report provenance.`
+                    ? `Form 2 · Keywords: ${casesWithMarkedKeywords} cases contain validated transcript-grounded evidence. Keywords remain exact participant expressions, never invented summary labels. Select a keyword, linked code/theme, or “Open exact evidence” to open the annotated transcript at that source; the return control restores this form and record.`
                     : activeView === "codes"
-                        ? "Form 3 · Codes: each case starts at C1. Code cells retain visible links to their keyword-evidence count and supporting themes; total validated mentions determine rank, with equal totals sharing a cell."
+                        ? "Form 3 · Codes: each case starts at C1. Every code must be one coherent, human-meaningful semantic concept—one word preferred, two or three only as a natural phrase. Select a code to open its annotated transcript evidence; the return control restores this form and record."
                         : activeView === "themes"
-                            ? "Form 4 · Themes: each case starts at T1. Theme cells retain visible links to their supporting participant-local codes; total validated mentions determine rank, with equal totals sharing a cell."
+                            ? "Form 4 · Themes: each case starts at T1. Every theme must be a clear, comparison-useful higher-level concept supported by its codes. Select a theme to open its annotated transcript evidence; the return control restores this form and record."
                         : activeView === "incomplete"
                             ? "Needs attention: unfinished interviews are separate from Forms 1–4. Each row preserves its transcript and separated demographic fields, summarizes only the material actually recorded, and states how incomplete the interview is. No themes, codes, or keywords are assigned before formal completion."
                             : "Archived cases are excluded from every active analysis form and from future automatic reanalysis. Each archived row preserves its transcript, report, language, demographic columns, mention-ranked C1–Cn code groups, mention-ranked T1–Tn theme groups, and archive history.";
@@ -795,7 +884,55 @@
         return fragment;
     }
 
-    async function openTranscript(caseRecord, requestedMessageId = null) {
+    function rememberTranscriptOrigin(caseRecord, origin = {}) {
+        const tableScroll = tableHost.querySelector(".tableScroll");
+        const trigger = origin.trigger || null;
+        transcriptReturnContext = {
+            view: activeView,
+            caseNumber: caseRecord.caseNumber,
+            label: origin.label
+                || `${ANALYSIS_VIEW_LABELS[activeView]} · ${caseRecord.caseNumber}`,
+            trigger,
+            triggerKey: trigger?.dataset?.transcriptOrigin || null,
+            windowX: window.scrollX,
+            windowY: window.scrollY,
+            tableScrollLeft: tableScroll?.scrollLeft || 0,
+            tableScrollTop: tableScroll?.scrollTop || 0
+        };
+        document.getElementById("automaticTranscriptCloseButton").textContent =
+            `Return to ${transcriptReturnContext.label}`;
+    }
+
+    function returnFromTranscript() {
+        const origin = transcriptReturnContext;
+        dialog.close();
+        transcriptReturnContext = null;
+        if (!origin) return;
+        window.requestAnimationFrame(() => {
+            const tableScroll = tableHost.querySelector(".tableScroll");
+            if (tableScroll) {
+                tableScroll.scrollLeft = origin.tableScrollLeft;
+                tableScroll.scrollTop = origin.tableScrollTop;
+            }
+            window.scrollTo(origin.windowX, origin.windowY);
+            let trigger = origin.trigger?.isConnected ? origin.trigger : null;
+            if (!trigger && origin.triggerKey) {
+                trigger = [...document.querySelectorAll(
+                    "[data-transcript-origin]"
+                )].find(candidate =>
+                    candidate.dataset.transcriptOrigin === origin.triggerKey
+                ) || null;
+            }
+            trigger?.focus({ preventScroll: true });
+        });
+    }
+
+    async function openTranscript(
+        caseRecord,
+        requestedMessageId = null,
+        origin = {}
+    ) {
+        rememberTranscriptOrigin(caseRecord, origin);
         document.getElementById("automaticTranscriptHeading").textContent =
             `${caseRecord.caseNumber} · annotated transcript`;
         const expectedIdentity = caseRecord.transcriptIdentity;
@@ -1361,7 +1498,11 @@
             }
         }));
     document.getElementById("automaticTranscriptCloseButton")
-        .addEventListener("click", () => dialog.close());
+        .addEventListener("click", returnFromTranscript);
+    dialog.addEventListener("cancel", event => {
+        event.preventDefault();
+        returnFromTranscript();
+    });
     document.getElementById("automaticCaseReportCloseButton")
         .addEventListener("click", () => {
             activeCaseRecord = null;

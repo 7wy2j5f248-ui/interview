@@ -343,6 +343,36 @@
                     proposal.relevance_audit?.overallSummary || ""
                 }`;
                 record.appendChild(audit);
+                const labelAudit = proposal.relevance_audit?.labelQualityAudit;
+                if (labelAudit) {
+                    const labelAuditSummary = document.createElement("div");
+                    labelAuditSummary.className = labelAudit.complete
+                        ? "automaticReanalysisAudit"
+                        : "automaticReanalysisWarning";
+                    const acceptedLabels = (labelAudit.checks || []).filter(
+                        item => item.accepted
+                    ).length;
+                    const heading = document.createElement("strong");
+                    heading.textContent = "Platform-wide semantic label audit";
+                    const summary = document.createElement("p");
+                    summary.textContent = `${acceptedLabels}/${
+                        (labelAudit.checks || []).length
+                    } code/theme labels passed natural-language coherence, one-concept meaning, evidence support, project-topic fit, conceptual distinctness, and cross-case comparison usefulness. ${
+                        labelAudit.overallSummary || ""
+                    }`;
+                    labelAuditSummary.append(heading, summary);
+                    const rejected = labelAudit.rejectedLabels || [];
+                    if (rejected.length) {
+                        const list = document.createElement("ul");
+                        rejected.forEach(flag => {
+                            const item = document.createElement("li");
+                            item.textContent = `${flag.kind} ${flag.number} “${flag.label}”: ${flag.explanation}`;
+                            list.appendChild(item);
+                        });
+                        labelAuditSummary.appendChild(list);
+                    }
+                    record.appendChild(labelAuditSummary);
+                }
                 const flags = proposal.source_quality_flags || [];
                 if (flags.length) {
                     const warning = document.createElement("div");
@@ -1031,10 +1061,9 @@
             );
         }
         renderSelection();
-        document.getElementById("automaticAnalysisReview").scrollIntoView({
-            behavior: "smooth",
-            block: "start"
-        });
+        bridge.setStatus(
+            "Analytical source selected for discussion. Your current form and scroll position were preserved."
+        );
     });
     window.addEventListener("automatic-analysis-review-ready", () => {
         loadWorkspace().catch(error => bridge.setStatus(error.message, true));

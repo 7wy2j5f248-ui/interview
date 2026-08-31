@@ -9,7 +9,7 @@ export const AUTOMATIC_CASE_ANALYSIS_VERSION =
 export const AUTOMATIC_CASE_REANALYSIS_VERSION =
     "case-reanalysis-v2-framework-governed";
 export const DEFAULT_ANALYSIS_BATCH_SIZE = 40;
-export const MAX_THEME_SUBJECT_WORDS = 2;
+export const MAX_THEME_SUBJECT_WORDS = 3;
 export const MAX_THEME_SUBJECT_LENGTH = 60;
 
 function normalizedText(value) {
@@ -18,16 +18,22 @@ function normalizedText(value) {
         : null;
 }
 
-export function isShortThemeSubject(value) {
-    const theme = normalizedText(value)?.replace(/\s+/gu, " ");
+export function isNaturalAnalyticLabelShape(value) {
+    const label = normalizedText(value)?.replace(/\s+/gu, " ");
 
-    if (!theme || theme.length > MAX_THEME_SUBJECT_LENGTH) {
+    if (!label || label.length > MAX_THEME_SUBJECT_LENGTH) {
         return false;
     }
 
-    const words = theme.split(" ").filter(Boolean);
+    const words = label.split(" ").filter(Boolean);
     return words.length <= MAX_THEME_SUBJECT_WORDS
-        && !/[.!?;:]$/u.test(theme);
+        && !/[.!?;:,/|&]/u.test(label)
+        && !/\b(?:and|or|but|because|while|although)\b/iu.test(label)
+        && !/\b(?:affects|causes|creates|disrupts|improves|increases|interrupts|leads|prevents|reduces|supports|worsens)\b/iu.test(label);
+}
+
+export function isShortThemeSubject(value) {
+    return isNaturalAnalyticLabelShape(value);
 }
 
 function normalizedList(value) {
@@ -418,6 +424,46 @@ const automaticCaseRelevanceAuditSchema = {
     additionalProperties: false
 };
 
+const automaticLabelQualityAuditSchema = {
+    type: "object",
+    properties: {
+        checks: {
+            type: "array",
+            items: {
+                type: "object",
+                properties: {
+                    kind: { type: "string", enum: ["code", "theme"] },
+                    number: { type: "integer" },
+                    label: { type: "string" },
+                    natural_language: { type: "boolean" },
+                    coherent_concept: { type: "boolean" },
+                    conceptually_distinct: { type: "boolean" },
+                    evidence_supported: { type: "boolean" },
+                    topic_relevant: { type: "boolean" },
+                    comparison_useful: { type: "boolean" },
+                    explanation: { type: "string" }
+                },
+                required: [
+                    "kind",
+                    "number",
+                    "label",
+                    "natural_language",
+                    "coherent_concept",
+                    "conceptually_distinct",
+                    "evidence_supported",
+                    "topic_relevant",
+                    "comparison_useful",
+                    "explanation"
+                ],
+                additionalProperties: false
+            }
+        },
+        overall_summary: { type: "string" }
+    },
+    required: ["checks", "overall_summary"],
+    additionalProperties: false
+};
+
 const CONVERSATIONAL_COURTESIES = new Set([
     "hi", "hello", "hello there", "hey", "greetings", "good morning",
     "good afternoon", "good evening", "thanks", "thank you",
@@ -491,6 +537,7 @@ function exactTextOccurrences(source, phrase) {
 function validateAutomaticThemes(rawThemes, codes) {
     const themes = [];
     const assignedCodeNumbers = new Set();
+    const invalidLabels = [];
     let invalidThemes = 0;
 
     (Array.isArray(rawThemes) ? rawThemes : []).forEach(rawTheme => {
@@ -512,6 +559,9 @@ function validateAutomaticThemes(rawThemes, codes) {
             || !codeNumbers.length
         ) {
             invalidThemes += 1;
+            if (!isShortThemeSubject(label)) {
+                invalidLabels.push({ kind: "theme", label: label || "" });
+            }
             return;
         }
 
@@ -523,7 +573,7 @@ function validateAutomaticThemes(rawThemes, codes) {
         .map((_, index) => index + 1)
         .filter(number => !assignedCodeNumbers.has(number));
 
-    return { themes, invalidThemes, unassignedCodeNumbers };
+    return { themes, invalidThemes, unassignedCodeNumbers, invalidLabels };
 }
 
 const AUTOMATIC_DEMOGRAPHIC_FIELDS = Object.freeze([
@@ -634,6 +684,7 @@ export function validateAutomaticCaseAnalysis(value, availableMessages) {
     );
     const codes = [];
     const usedHighlights = new Set();
+    const invalidLabels = [];
     let invalidEvidence = 0;
     let droppedCodes = 0;
 
@@ -673,9 +724,14 @@ export function validateAutomaticCaseAnalysis(value, availableMessages) {
             });
         });
 
-        if (!label || !rationale || !highlights.length) {
+        if (!isNaturalAnalyticLabelShape(label)
+            || !rationale
+            || !highlights.length) {
             invalidEvidence += 1;
             droppedCodes += 1;
+            if (!isNaturalAnalyticLabelShape(label)) {
+                invalidLabels.push({ kind: "code", label: label || "" });
+            }
             return;
         }
 
@@ -684,6 +740,7 @@ export function validateAutomaticCaseAnalysis(value, availableMessages) {
 
     const themeValidation = validateAutomaticThemes(value?.themes, codes);
     const { themes, unassignedCodeNumbers } = themeValidation;
+    invalidLabels.push(...themeValidation.invalidLabels);
     invalidEvidence += themeValidation.invalidThemes;
     const demographicValidation = validateAutomaticDemographics(
         value?.demographics,
@@ -699,6 +756,7 @@ export function validateAutomaticCaseAnalysis(value, availableMessages) {
         caseInterpretation,
         invalidEvidence,
         droppedCodes,
+        invalidLabels,
         unassignedCodeNumbers,
         ...demographicValidation,
         complete: Boolean(
@@ -708,6 +766,190 @@ export function validateAutomaticCaseAnalysis(value, availableMessages) {
             && droppedCodes === 0
             && allCodesAssigned
         )
+    };
+}
+
+function labelQualityKey(kind, number) {
+    return `${kind}:${number}`;
+}
+
+export function validateAutomaticLabelQualityAudit(analysis, value) {
+    const expected = [
+        ...(analysis?.codes || []).map((record, index) => ({
+            kind: "code",
+            number: index + 1,
+            label: record.label
+        })),
+        ...(analysis?.themes || []).map((record, index) => ({
+            kind: "theme",
+            number: index + 1,
+            label: record.label
+        }))
+    ];
+    const labelCounts = expected.reduce((counts, item) => {
+        const key = `${item.kind}:${
+            normalizedText(item.label)?.toLocaleLowerCase() || ""
+        }`;
+        counts.set(key, (counts.get(key) || 0) + 1);
+        return counts;
+    }, new Map());
+    const auditByKey = new Map();
+    let duplicateChecks = 0;
+
+    (Array.isArray(value?.checks) ? value.checks : []).forEach(check => {
+        const kind = check?.kind === "code" || check?.kind === "theme"
+            ? check.kind
+            : null;
+        const number = Number.isInteger(check?.number) && check.number > 0
+            ? check.number
+            : null;
+        const label = normalizedText(check?.label);
+        if (!kind || !number || !label) return;
+        const key = labelQualityKey(kind, number);
+        if (auditByKey.has(key)) duplicateChecks += 1;
+        auditByKey.set(key, {
+            kind,
+            number,
+            label,
+            naturalLanguage: check.natural_language === true,
+            coherentConcept: check.coherent_concept === true,
+            conceptuallyDistinct: check.conceptually_distinct === true,
+            evidenceSupported: check.evidence_supported === true,
+            topicRelevant: check.topic_relevant === true,
+            comparisonUseful: check.comparison_useful === true,
+            explanation: normalizedText(check.explanation)
+                || "No label-quality explanation was supplied."
+        });
+    });
+
+    const checks = expected.map(item => {
+        const audit = auditByKey.get(labelQualityKey(item.kind, item.number));
+        const exactLabel = audit?.label === item.label;
+        const structurallyValid = isNaturalAnalyticLabelShape(item.label);
+        const uniqueAtLevel = labelCounts.get(
+            `${item.kind}:${
+                normalizedText(item.label)?.toLocaleLowerCase() || ""
+            }`
+        ) === 1;
+        const accepted = Boolean(
+            exactLabel
+            && structurallyValid
+            && uniqueAtLevel
+            && audit.naturalLanguage
+            && audit.coherentConcept
+            && audit.conceptuallyDistinct
+            && audit.evidenceSupported
+            && audit.topicRelevant
+            && audit.comparisonUseful
+        );
+        return {
+            ...item,
+            naturalLanguage: Boolean(audit?.naturalLanguage),
+            coherentConcept: Boolean(audit?.coherentConcept),
+            conceptuallyDistinct: Boolean(audit?.conceptuallyDistinct)
+                && uniqueAtLevel,
+            evidenceSupported: Boolean(audit?.evidenceSupported),
+            topicRelevant: Boolean(audit?.topicRelevant),
+            comparisonUseful: Boolean(audit?.comparisonUseful),
+            structurallyValid,
+            accepted,
+            explanation: audit?.explanation
+                || "The independent label audit did not return this record."
+        };
+    });
+    const expectedKeys = new Set(expected.map(item =>
+        labelQualityKey(item.kind, item.number)
+    ));
+    const unexpectedCheckCount = [...auditByKey.keys()].filter(
+        key => !expectedKeys.has(key)
+    ).length;
+    const rejectedLabels = checks.filter(check => !check.accepted);
+
+    return {
+        checks,
+        overallSummary: normalizedText(value?.overall_summary)
+            || "No overall label-quality summary was supplied.",
+        rejectedLabels,
+        duplicateChecks,
+        unexpectedCheckCount,
+        complete: Boolean(
+            expected.length
+            && !rejectedLabels.length
+            && !duplicateChecks
+            && !unexpectedCheckCount
+            && auditByKey.size === expected.length
+        )
+    };
+}
+
+function automaticAnalysisDraftForModel(analysis) {
+    return {
+        demographics: analysis.demographics,
+        codes: (analysis.codes || []).map(code => ({
+            label: code.label,
+            rationale: code.rationale,
+            keyword_evidence: (code.highlights || []).map(highlight => ({
+                message_id: highlight.messageId,
+                exact_text: highlight.exactText
+            }))
+        })),
+        themes: (analysis.themes || []).map(theme => ({
+            label: theme.label,
+            rationale: theme.rationale,
+            code_numbers: theme.codeNumbers
+        })),
+        case_interpretation: analysis.caseInterpretation
+    };
+}
+
+async function auditAutomaticLabelQuality(
+    openaiClient,
+    messages,
+    analysis,
+    model,
+    analysisFramework
+) {
+    const analysisForAudit = automaticAnalysisDraftForModel(analysis);
+    const response = await openaiClient.responses.create({
+        model,
+        store: false,
+        text: {
+            format: {
+                type: "json_schema",
+                name: "automatic_case_label_quality_audit",
+                strict: true,
+                schema: automaticLabelQualityAuditSchema
+            }
+        },
+        input: [{
+            role: "system",
+            content: [
+                "Act as a strict independent label-quality auditor for one qualitative case.",
+                "Return exactly one check for every numbered code and theme, and no other checks.",
+                "Set natural_language true only for a normal everyday English word or familiar natural phrase, never a concatenation of descriptors.",
+                "Set coherent_concept true only when the whole label names one meaningful concept rather than a finding, sentence, list, or bag of words.",
+                "Set conceptually_distinct true only when the label is not duplicative or confusingly overlapping with another label at the same level.",
+                "Set evidence_supported true only when a code summarizes its exact keyword evidence or a theme is supported by its assigned codes.",
+                "Set topic_relevant true only when the label satisfies the named project's topic, scope, inclusion, and exclusion rules.",
+                "Set comparison_useful true only when another researcher could understand and compare the concept across cases without reading its rationale.",
+                analysisFrameworkInstruction(analysisFramework)
+            ].join("\n\n")
+        }, {
+            role: "user",
+            content: [
+                `Preserved participant transcript (JSON):\n${messagesForModel(messages)}`,
+                `Proposed analytical hierarchy (JSON):\n${JSON.stringify(analysisForAudit)}`
+            ].join("\n\n")
+        }]
+    });
+    return {
+        audit: validateAutomaticLabelQualityAudit(
+            analysis,
+            parseStructuredResponse(response, "Automatic label-quality audit")
+        ),
+        inputTokenCount: Number.isInteger(response?.usage?.input_tokens)
+            ? response.usage.input_tokens
+            : null
     };
 }
 
@@ -1109,7 +1351,7 @@ export async function generateSuggestionsForBatch(
         input: [
             {
                 role: "system",
-                content: "You are producing one qualitative individual case report. The supplied evidence belongs to exactly one participant session; never compare, combine, or generalize across participants. Analyse this case bottom-up: first identify exact evidence phrases and concise keywords, then group them into concise codes, then group those codes into themes. Return the required theme-centred JSON structure only after completing that bottom-up case analysis. The case must have at least one theme when substantive answers are present. A theme is a reusable, comparable subject label, not a case summary. It must be exactly one or two words. Reuse labels such as 'Sleep routine', 'Sleep duration', 'Night waking', 'Sleep strategies', 'Technology', 'Work', 'Family', 'Ageing', 'Environment', and 'Satisfaction'. For example, replace 'Stable sleep routines anchored by longstanding habits' with the theme 'Sleep routine'; put 'Stable' and 'Longstanding' under concise codes. Under 'Work', use codes such as 'Long hours', 'Overtime', 'Weekend work', or 'Overwork'. If this case covers two subjects such as work and family, create separate themes rather than a compound statement. Themes and codes must be short labels, never sentences, findings, cause-and-effect interpretations, or case summaries. Put fuller case interpretation in the rationale. Return exact supporting participant message IDs, explicit code-to-message attribution, explicit keyword-to-message attribution, and exact verbatim coded phrases. A coded phrase must appear verbatim in the original message or its supplied English translation. Never cite an ID outside this single-case evidence set. Do not invent or rewrite evidence."
+                content: "You are producing one qualitative individual case report. The supplied evidence belongs to exactly one participant session; never compare, combine, or generalize across participants. Analyse this case bottom-up: first identify exact evidence phrases and concise keywords, then group them into concise codes, then group those codes into themes. Return the required theme-centred JSON structure only after completing that bottom-up case analysis. The case must have at least one theme when substantive answers are present. A theme is a reusable, comparable subject label, not a case summary. Prefer one word; use two or three words only when they form one familiar natural phrase. Reuse labels such as 'Sleep routine', 'Sleep duration', 'Night waking', 'Sleep strategies', 'Technology', 'Work', 'Family', 'Ageing', 'Environment', and 'Satisfaction'. For example, replace 'Stable sleep routines anchored by longstanding habits' with the theme 'Sleep routine'; put 'Stable' and 'Longstanding' under concise codes. Under 'Work', use codes such as 'Long hours', 'Overtime', 'Weekend work', or 'Overwork'. If this case covers two subjects such as work and family, create separate themes rather than a compound statement. Themes and codes must be meaningful natural-language concepts, never sentences, findings, cause-and-effect interpretations, case summaries, or concatenated descriptor bundles. Put fuller case interpretation in the rationale. Return exact supporting participant message IDs, explicit code-to-message attribution, explicit keyword-to-message attribution, and exact verbatim coded phrases. A coded phrase must appear verbatim in the original message or its supplied English translation. Never cite an ID outside this single-case evidence set. Do not invent or rewrite evidence."
             },
             {
                 role: "user",
@@ -1147,7 +1389,7 @@ export async function generateAutomaticCaseAnalysis(
         ? " This is a researcher-requested re-analysis. Apply the framework's relevance boundary strictly. Exact quotation is necessary but not sufficient: each keyword must semantically support its code and that code's assigned theme. Reject unrelated cross-topic evidence. Researcher request context (JSON): "
             + JSON.stringify(reanalysisContext)
         : "";
-    const systemInstruction = "Read this single completed participant transcript line by line. The entire analytical report must be written in English, regardless of the interview language. This includes every demographic value, additional descriptor, code label, code rationale, theme label, theme rationale, and the case interpretation. Only exact_text keyword evidence remains verbatim in the participant's original language because it identifies the precise highlighted source text. First extract the fixed demographic fields. Every non-null demographic value must cite one exact participant original_text phrase and its message_id. Use null when the participant did not provide the information; never guess. Birth year must be explicitly stated. Birth cohort may be derived only from an explicitly stated birth year. Diaspora status may be derived from explicit residence and origin evidence. Mark each supported value as stated or derived. Then work strictly from evidence upward. Identify analytically meaningful words or short phrases in the participant's original_text and return them verbatim as keyword evidence with their exact message_id. Keywords are research evidence, not every word in the conversation. Never select greetings, introductions, thanks, farewells, politeness formulas, interviewer-directed courtesies, or other phatic conversational language as keywords or codes. Examples to exclude include hello, hi, good morning, thank you, and their equivalents in every interview language. Never return translated wording as exact_text. Then categorize the substantive keyword occurrences into participant-specific codes. Codes are concise English category names and may be abstractions such as 'Work patterns' or 'Media use'; they do not need to repeat transcript wording. Finally group related code numbers into broad one- or two-word English themes. Every code must belong to at least one theme. Do not compare this case with any participant. Do not invent or paraphrase evidence. Return the substantive keyword occurrences needed to make the code system inspectable without flooding it with routine conversation. Codes, themes, and demographic values are proposals with exact provenance for researcher review, not confirmed findings."
+    const systemInstruction = "Read this single completed participant transcript line by line. The entire analytical report must be written in English, regardless of the interview language. This includes every demographic value, additional descriptor, code label, code rationale, theme label, theme rationale, and the case interpretation. Only exact_text keyword evidence remains verbatim in the participant's original language because it identifies the precise highlighted source text. First extract the fixed demographic fields. Every non-null demographic value must cite one exact participant original_text phrase and its message_id. Use null when the participant did not provide the information; never guess. Birth year must be explicitly stated. Birth cohort may be derived only from an explicitly stated birth year. Diaspora status may be derived from explicit residence and origin evidence. Mark each supported value as stated or derived. Then work strictly from evidence upward. Identify analytically meaningful words or short phrases in the participant's original_text and return them verbatim as keyword evidence with their exact message_id. Keywords are research evidence, not every word in the conversation. Never select greetings, introductions, thanks, farewells, politeness formulas, interviewer-directed courtesies, or other phatic conversational language as keywords or codes. Examples to exclude include hello, hi, good morning, thank you, and their equivalents in every interview language. Never return translated wording as exact_text or invent a keyword summary label. Then categorize the substantive keyword occurrences into participant-specific codes. A code label must be a concise, everyday, coherent English concept that summarizes its related exact keyword evidence. Prefer one word; use two or three only as a familiar natural phrase. Never concatenate multiple descriptors. Finally group related code numbers into equally clear higher-level themes. Theme labels follow the same one-word-preferred, two-or-three-word-natural-phrase limit and must be useful for comparison across cases. Every code must belong to at least one theme. Do not compare this case with any participant. Do not invent or paraphrase evidence. Return the substantive keyword occurrences needed to make the code system inspectable without flooding it with routine conversation. Codes, themes, and demographic values are proposals with exact provenance for researcher review, not confirmed findings."
         + "\n\n" + frameworkInstruction
         + relevanceInstruction;
     const createResponse = input => openaiClient.responses.create({
@@ -1198,6 +1440,7 @@ export async function generateAutomaticCaseAnalysis(
                         invalidDemographicEvidence:
                             validated.invalidDemographicEvidence,
                         droppedCodes: validated.droppedCodes,
+                        invalidLabels: validated.invalidLabels,
                         unassignedCodeNumbers:
                             validated.unassignedCodeNumbers
                     })
@@ -1234,7 +1477,7 @@ export async function generateAutomaticCaseAnalysis(
             },
             input: [{
                 role: "system",
-                content: "Group the supplied participant-specific codes into broad one- or two-word English themes. Write every label and rationale in English. Use only the numbered codes provided. The union of every code_numbers array must equal the complete integer sequence from 1 through the stated code count; no number may be omitted. Multiple codes may share one theme. Return concise subject labels, never findings or sentences."
+                content: "Group the supplied participant-specific codes into clear higher-level English themes. Prefer one everyday word; use two or three only when they form one familiar natural phrase. Write every label and rationale in English. Use only the numbered codes provided. The union of every code_numbers array must equal the complete integer sequence from 1 through the stated code count; no number may be omitted. Multiple codes may share one theme. Return coherent comparison-useful concepts, never findings, sentences, or concatenated descriptor bundles."
             }, {
                 role: "user",
                 content: JSON.stringify({
@@ -1289,7 +1532,7 @@ export async function generateAutomaticCaseAnalysis(
                 },
                 input: [{
                     role: "system",
-                    content: "Return a complete corrected theme assignment. Every supplied code number must appear in at least one code_numbers array. Pay special attention to the explicitly listed missing numbers. Use broad one- or two-word subject labels only. Return the entire replacement theme list."
+                    content: "Return a complete corrected theme assignment. Every supplied code number must appear in at least one code_numbers array. Pay special attention to the explicitly listed missing numbers. Prefer one everyday word; use two or three only as one familiar natural phrase. Reject bag-of-words labels. Return the entire replacement theme list."
                 }, {
                     role: "user",
                     content: JSON.stringify({
@@ -1338,8 +1581,75 @@ export async function generateAutomaticCaseAnalysis(
         }
     }
 
+    let labelQualityAudit = {
+        checks: [],
+        rejectedLabels: [],
+        overallSummary: "Label quality was not audited because the evidence hierarchy was incomplete.",
+        complete: false
+    };
+
+    if (validated.complete) {
+        let auditedLabels = await auditAutomaticLabelQuality(
+            openaiClient,
+            messages,
+            validated,
+            model,
+            analysisFramework
+        );
+        inputTokenCount = (inputTokenCount || 0)
+            + (auditedLabels.inputTokenCount || 0);
+
+        if (!auditedLabels.audit.complete) {
+            const labelRepairResponse = await createResponse([{
+                role: "system",
+                content: systemInstruction
+                    + " Return one complete corrected report. Repair every rejected code or theme label so it names one everyday, coherent, evidence-supported, topic-relevant concept that is useful for cross-case comparison. Prefer one word; use two or three only as a genuine natural phrase. Remove duplicate or bag-of-words labels. Preserve exact keyword evidence and all valid demographic provenance. Put descriptive detail in rationales."
+            }, {
+                role: "user",
+                content: [
+                    `Completed participant transcript (JSON):\n${transcriptJson}`,
+                    `Validated draft requiring label repair (JSON):\n${JSON.stringify(automaticAnalysisDraftForModel(validated))}`,
+                    `Rejected label audit (JSON):\n${JSON.stringify({
+                        rejectedLabels: auditedLabels.audit.rejectedLabels,
+                        overallSummary: auditedLabels.audit.overallSummary
+                    })}`
+                ].join("\n\n")
+            }]);
+            validated = validateAutomaticCaseAnalysis(
+                parseStructuredResponse(
+                    labelRepairResponse,
+                    "Label-corrected automatic individual case analysis"
+                ),
+                messages
+            );
+            if (Number.isInteger(labelRepairResponse?.usage?.input_tokens)) {
+                inputTokenCount += labelRepairResponse.usage.input_tokens;
+            }
+            if (validated.complete) {
+                auditedLabels = await auditAutomaticLabelQuality(
+                    openaiClient,
+                    messages,
+                    validated,
+                    model,
+                    analysisFramework
+                );
+                inputTokenCount += auditedLabels.inputTokenCount || 0;
+            }
+        }
+
+        labelQualityAudit = auditedLabels.audit;
+        validated = {
+            ...validated,
+            complete: Boolean(
+                validated.complete
+                && labelQualityAudit.complete
+            )
+        };
+    }
+
     return {
         ...validated,
+        labelQualityAudit,
         inputTokenCount
     };
 }
@@ -1591,7 +1901,10 @@ export async function generateAutomaticCaseReanalysis(
 
     return {
         ...analysis,
-        relevanceAudit: audited.audit,
+        relevanceAudit: {
+            ...audited.audit,
+            labelQualityAudit: analysis.labelQualityAudit
+        },
         inputTokenCount: totalInputTokens || null
     };
 }

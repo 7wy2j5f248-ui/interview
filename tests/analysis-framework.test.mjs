@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
+    GLOBAL_ANALYSIS_LABEL_STANDARD,
     analysisFrameworkInstruction,
     normalizeAnalysisFramework
 } from "../server/analysisFramework.js";
@@ -49,6 +50,35 @@ test("analysis framework instructions are project-bound and complete", () => {
     assert.match(instruction, /Analysis framework version: 2/);
     assert.match(instruction, /exact keywords/);
     assert.match(instruction, /Do not import assumptions from a different project/);
+    assert.match(GLOBAL_ANALYSIS_LABEL_STANDARD, /every project/);
+    assert.match(instruction, /cannot be weakened or bypassed/);
+    assert.match(instruction, /Project-specific Analysis Framework/);
+});
+
+test("global semantic label standards are audited and repaired before completion", async () => {
+    const [core, automaticProcessor, reanalysisProcessor, design, dashboard, review] =
+        await Promise.all([
+            readFile(new URL("../server/analysisCore.js", import.meta.url), "utf8"),
+            readFile(new URL("../server/automaticCaseAnalysis.js", import.meta.url), "utf8"),
+            readFile(new URL("../server/frameworkReanalysis.js", import.meta.url), "utf8"),
+            readFile(new URL("../design.html", import.meta.url), "utf8"),
+            readFile(new URL("../researcher.html", import.meta.url), "utf8"),
+            readFile(new URL("../researcher-automatic-review.js", import.meta.url), "utf8")
+        ]);
+
+    assert.match(core, /automatic_case_label_quality_audit/);
+    assert.match(core, /natural_language/);
+    assert.match(core, /coherent_concept/);
+    assert.match(core, /comparison_useful/);
+    assert.match(core, /Rejected label audit/);
+    assert.match(core, /Label-corrected automatic individual case analysis/);
+    assert.match(automaticProcessor, /labelQualityAudit/);
+    assert.match(reanalysisProcessor, /labelQualityCheckCount/);
+    assert.match(design, /Global platform standards apply automatically to every project/);
+    assert.match(design, /cannot weaken these global standards/);
+    assert.match(dashboard, /Global label standard for every project/);
+    assert.match(review, /Platform-wide semantic label audit/);
+    assert.match(review, /cross-case comparison usefulness/);
 });
 
 test("researchers can durably stop an older global instruction", async () => {
