@@ -154,6 +154,30 @@ export async function processCaseReanalysisRequest(
             analysisFrameworkVersion: analysisFramework.versionNumber
         };
         const sourceQualityFlags = detectCompoundQuestionTurns(transcriptRows);
+        const { data: currentRequest, error: currentRequestError } =
+            await supabase
+                .from(REQUESTS)
+                .select("status, cancelled_at, cancellation_reason")
+                .eq("id", requestId)
+                .single();
+        if (currentRequestError) {
+            throw new Error("The re-analysis cancellation state could not be checked.");
+        }
+        if (currentRequest.status === "cancelled") {
+            await storeEvent(supabase, requestId, "cancellation_observed", {
+                cancelledAt: currentRequest.cancelled_at,
+                cancellationReason: currentRequest.cancellation_reason,
+                modelOutputDiscarded: true,
+                currentReportPreserved: true
+            });
+            return {
+                requestId,
+                status: "cancelled",
+                caseNumber: sourceReport.case_number,
+                modelOutputDiscarded: true,
+                analysisFramework
+            };
+        }
         const { data: proposal, error: proposalError } = await supabase
             .from(PROPOSALS)
             .insert({
@@ -210,20 +234,25 @@ export async function processCaseReanalysisRequest(
     } catch (error) {
         const failure = (error instanceof Error ? error.message : String(error))
             .slice(0, 2_000);
-        await supabase
+        const { data: failedRequest } = await supabase
             .from(REQUESTS)
             .update({ status: "failed", last_error: failure })
-            .eq("id", requestId);
-        await supabase.from(EVENTS).insert({
-            request_id: requestId,
-            event_type: "failed",
-            actor: "system",
-            details: {
-                error: failure,
-                projectId: request.project_id,
-                analysisFrameworkId: request.analysis_framework_id
-            }
-        });
+            .eq("id", requestId)
+            .eq("status", "processing")
+            .select("id")
+            .maybeSingle();
+        if (failedRequest) {
+            await supabase.from(EVENTS).insert({
+                request_id: requestId,
+                event_type: "failed",
+                actor: "system",
+                details: {
+                    error: failure,
+                    projectId: request.project_id,
+                    analysisFrameworkId: request.analysis_framework_id
+                }
+            });
+        }
         throw new Error(failure);
     }
 }

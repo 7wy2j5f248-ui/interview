@@ -470,6 +470,36 @@
         projectWideFramework.disabled = !frameworks.length;
     }
 
+    async function cancelProjectWideRun(batchId, cancellationReason) {
+        const reason = cancellationReason.trim();
+        if (!reason) {
+            throw new Error("Explain why this project-wide run should stop.");
+        }
+        if (!window.confirm(
+            "Stop this project-wide re-analysis? Queued and in-flight work will be cancelled, unreviewed proposals will remain only for audit, and no current report will be changed."
+        )) return;
+        projectWideStatus.textContent =
+            "Stopping the run and preserving its requests, proposals, and cancellation lineage…";
+        const response = await fetch("/api/automatic-analysis-review", {
+            method: "POST",
+            headers: {
+                Authorization: `Bearer ${token()}`,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                action: "cancel_project_wide_reanalysis",
+                batchId,
+                cancellationReason: reason
+            })
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            throw new Error(data.error || "The project-wide run could not be stopped.");
+        }
+        await loadWorkspace(activeThreadId);
+        projectWideStatus.textContent = `${data.cancelledCaseCount} case requests were stopped. Existing reports are unchanged; generated proposals and the cancellation reason remain available for audit.`;
+    }
+
     function renderProjectWideHistory() {
         projectWideHistory.replaceChildren();
         const layer = workspace.reanalysis || {};
@@ -508,8 +538,47 @@
                 batch.proposal_ready_case_count
             }; approved ${batch.approved_case_count}; rejected ${
                 batch.rejected_case_count
-            }; failed ${batch.failed_case_count}. Every current report is preserved until its own explicit approval.`;
+            }; failed ${batch.failed_case_count}; cancelled ${
+                batch.cancelled_case_count || 0
+            }. Every current report is preserved until its own explicit approval.`;
             record.append(heading, lineage, counts);
+
+            if (batch.cancellation_reason) {
+                const cancellation = document.createElement("p");
+                cancellation.className = "automaticReanalysisWarning";
+                cancellation.textContent = `Stopped by ${
+                    batch.cancelled_by || "researcher"
+                } · ${batch.cancellation_reason}`;
+                record.appendChild(cancellation);
+            }
+
+            if (new Set([
+                "queued", "processing", "awaiting_review",
+                "completed_with_failures", "cancellation_requested"
+            ]).has(batch.status)) {
+                const stopReason = document.createElement("textarea");
+                stopReason.placeholder =
+                    "Why should this older project-wide instruction stop?";
+                stopReason.setAttribute(
+                    "aria-label",
+                    "Project-wide re-analysis cancellation reason"
+                );
+                const stopButton = document.createElement("button");
+                stopButton.type = "button";
+                stopButton.textContent = "Stop this project-wide run";
+                stopButton.addEventListener("click", () => {
+                    stopButton.disabled = true;
+                    cancelProjectWideRun(batch.id, stopReason.value)
+                        .catch(error => {
+                            projectWideStatus.textContent = error.message;
+                            bridge.setStatus(error.message, true);
+                        })
+                        .finally(() => {
+                            stopButton.disabled = false;
+                        });
+                });
+                record.append(stopReason, stopButton);
+            }
 
             if (batchIndex === 0) {
                 const statuses = (layer.projectWideCaseStatuses || []).filter(

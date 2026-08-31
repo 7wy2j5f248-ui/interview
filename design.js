@@ -25,7 +25,7 @@
     const analysisStatus = document.getElementById("analysisFrameworkStatus");
     const analysisPin = document.getElementById("analysisFrameworkPin");
     let frameworkWorkspace = {
-        projects: [], frameworks: [], activeFrameworks: []
+        projects: [], frameworks: [], activeFrameworks: [], reanalysisBatches: []
     };
     let reviewedFramework = null;
     const versionInputs = [
@@ -259,6 +259,103 @@
         host.replaceChildren(list);
     }
 
+    async function stopFrameworkRun(batch, cancellationReason) {
+        const reason = cancellationReason.trim();
+        if (!reason) throw new Error("Explain why the older run should stop.");
+        if (!window.confirm(
+            "Stop this project-wide re-analysis? Queued and in-flight work will be cancelled. Existing reports will remain unchanged and all prior proposals will be retained for audit."
+        )) return;
+        setAnalysisStatus("Stopping the older project-wide instruction…");
+        const response = await fetch("/api/saveDesign", {
+            method: "POST",
+            headers: {
+                Authorization: `Bearer ${researcherToken()}`,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                action: "cancel_project_wide_reanalysis",
+                batchId: batch.id,
+                cancellationReason: reason
+            })
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            throw new Error(result.error || "The older run could not be stopped.");
+        }
+        await loadFrameworkWorkspace();
+        setAnalysisStatus(
+            `${result.cancelledCaseCount} case requests stopped. Existing reports remain unchanged. You can now save or start the newer framework instruction.`
+        );
+    }
+
+    function renderActiveFrameworkRuns() {
+        const host = field("analysisFrameworkActiveRuns");
+        const projectId = analysisProjectSelect.value;
+        const batches = (frameworkWorkspace.reanalysisBatches || []).filter(
+            batch => batch.project_id === projectId
+        );
+        host.replaceChildren();
+        if (!batches.length) {
+            host.textContent = "No project-wide re-analysis run exists for this project.";
+            return;
+        }
+        batches.forEach(batch => {
+            const framework = frameworkWorkspace.frameworks.find(
+                item => item.id === batch.analysis_framework_id
+            );
+            const article = document.createElement("article");
+            article.style.border = "1px solid #bbb";
+            article.style.borderRadius = "6px";
+            article.style.padding = "12px";
+            article.style.marginBottom = "12px";
+            const heading = document.createElement("strong");
+            heading.textContent = `Analysis Framework v${
+                framework?.versionNumber || "?"
+            } · ${String(batch.status).replaceAll("_", " ")}`;
+            const counts = document.createElement("p");
+            counts.textContent = `Eligible ${batch.eligible_case_count}; queued ${
+                batch.queued_case_count
+            }; processing ${batch.processing_case_count}; awaiting review ${
+                batch.proposal_ready_case_count
+            }; failed ${batch.failed_case_count}; cancelled ${
+                batch.cancelled_case_count || 0
+            }.`;
+            const instruction = document.createElement("p");
+            instruction.textContent = batch.researcher_notes;
+            article.append(heading, counts, instruction);
+
+            if (batch.cancellation_reason) {
+                const stopped = document.createElement("p");
+                stopped.textContent = `Cancellation reason: ${batch.cancellation_reason}`;
+                stopped.style.color = "#8a1c1c";
+                article.appendChild(stopped);
+            }
+
+            if (new Set([
+                "queued", "processing", "awaiting_review",
+                "completed_with_failures", "cancellation_requested"
+            ]).has(batch.status)) {
+                const reason = document.createElement("textarea");
+                reason.rows = 2;
+                reason.placeholder =
+                    "Why should this older instruction stop?";
+                reason.style.width = "100%";
+                reason.style.boxSizing = "border-box";
+                const stop = document.createElement("button");
+                stop.type = "button";
+                stop.textContent = "Stop this project-wide run";
+                stop.addEventListener("click", () => {
+                    stop.disabled = true;
+                    stopFrameworkRun(batch, reason.value)
+                        .catch(error => setAnalysisStatus(error.message, true))
+                        .finally(() => { stop.disabled = false; });
+                });
+                article.append(reason, stop);
+            }
+            host.appendChild(article);
+        });
+    }
+
     async function loadFrameworkWorkspace() {
         const token = researcherToken();
         if (!token) {
@@ -275,6 +372,7 @@
         frameworkWorkspace = data;
         renderProjectOptions();
         renderFrameworkHistory();
+        renderActiveFrameworkRuns();
         setAnalysisStatus(
             "Framework history loaded. Saving always creates a new immutable version."
         );
@@ -384,6 +482,7 @@
         );
         if (project) protocolProjectSelect.value = project.id;
         renderFrameworkHistory();
+        renderActiveFrameworkRuns();
     });
 
     document.getElementById("reviewAnalysisFrameworkButton")

@@ -14,6 +14,10 @@ const batchMigrationUrl = new URL(
     "../supabase/migrations/20260831052656_add_project_wide_reanalysis_batches.sql",
     import.meta.url
 );
+const cancellationMigrationUrl = new URL(
+    "../supabase/migrations/20260831064607_stop_project_wide_reanalysis.sql",
+    import.meta.url
+);
 
 const sample = {
     id: "11111111-1111-4111-8111-111111111111",
@@ -45,6 +49,33 @@ test("analysis framework instructions are project-bound and complete", () => {
     assert.match(instruction, /Analysis framework version: 2/);
     assert.match(instruction, /exact keywords/);
     assert.match(instruction, /Do not import assumptions from a different project/);
+});
+
+test("researchers can durably stop an older global instruction", async () => {
+    const [designHtml, designClient, reviewClient, endpoint, processor, migration] =
+        await Promise.all([
+            readFile(new URL("../design.html", import.meta.url), "utf8"),
+            readFile(new URL("../design.js", import.meta.url), "utf8"),
+            readFile(new URL("../researcher-automatic-review.js", import.meta.url), "utf8"),
+            readFile(new URL("../api/saveDesign.js", import.meta.url), "utf8"),
+            readFile(new URL("../server/frameworkReanalysis.js", import.meta.url), "utf8"),
+            readFile(cancellationMigrationUrl, "utf8")
+        ]);
+    assert.match(designHtml, /Active Project-Wide Re-analysis/);
+    assert.match(designHtml, /Stop an older run/);
+    assert.match(designClient, /Stop this project-wide run/);
+    assert.match(designClient, /action: "cancel_project_wide_reanalysis"/);
+    assert.match(reviewClient, /Stop this project-wide run/);
+    assert.match(endpoint, /save_analysis_framework_version_with_batch/);
+    assert.match(endpoint, /cancelProjectWideReanalysisBatch/);
+    assert.match(processor, /cancellation_observed/);
+    assert.match(processor, /modelOutputDiscarded: true/);
+    assert.match(migration, /cancel_project_wide_reanalysis_batch/);
+    assert.match(migration, /status = 'cancelled'/);
+    assert.match(migration, /prevent_cancelled_reanalysis_restart/);
+    assert.match(migration, /prevent_cancelled_reanalysis_proposal/);
+    assert.match(migration, /save_analysis_framework_version_with_batch/);
+    assert.match(migration, /currentReportPreserved/);
 });
 
 test("Research Design visibly separates protocol and framework scope", async () => {

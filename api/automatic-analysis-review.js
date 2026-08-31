@@ -14,6 +14,7 @@ import {
 } from "../server/analysisCore.js";
 import { processCaseReanalysisRequest } from "../server/frameworkReanalysis.js";
 import { scheduleAutomaticCaseAnalysis } from "../server/automaticCaseAnalysis.js";
+import { cancelProjectWideReanalysisBatch } from "../server/projectWideReanalysis.js";
 import { normalizeOpenAIModel } from "../server/modelConfiguration.js";
 import { authorizeResearcher } from "../server/researcherAuth.js";
 
@@ -135,7 +136,7 @@ async function loadReanalysisWorkspace(supabase) {
     const requests = await requireData(
         supabase
             .from(TABLES.reanalysisRequests)
-            .select("id, session_id, source_report_id, request_number, reason_code, researcher_notes, requested_by, status, analysis_version, model, attempt_count, requested_at, processing_started_at, proposal_ready_at, reviewed_at, last_error, project_id, analysis_framework_id, project_reanalysis_batch_id")
+            .select("id, session_id, source_report_id, request_number, reason_code, researcher_notes, requested_by, status, analysis_version, model, attempt_count, requested_at, processing_started_at, proposal_ready_at, reviewed_at, last_error, project_id, analysis_framework_id, project_reanalysis_batch_id, cancelled_at, cancellation_reason")
             .order("requested_at", { ascending: false })
             .limit(60),
         "Case re-analysis requests could not be loaded."
@@ -235,7 +236,7 @@ async function loadReanalysisWorkspace(supabase) {
         requireData(
             supabase
                 .from(TABLES.reanalysisBatches)
-                .select("id, project_id, analysis_framework_id, reason_code, researcher_notes, requested_by, status, eligible_case_count, queued_case_count, processing_case_count, proposal_ready_case_count, approved_case_count, rejected_case_count, failed_case_count, scope_snapshot, requested_at, updated_at, completed_at")
+                .select("id, project_id, analysis_framework_id, reason_code, researcher_notes, requested_by, status, eligible_case_count, queued_case_count, processing_case_count, proposal_ready_case_count, approved_case_count, rejected_case_count, failed_case_count, cancelled_case_count, scope_snapshot, requested_at, updated_at, completed_at, cancellation_requested_at, cancelled_at, cancellation_reason, cancelled_by")
                 .order("requested_at", { ascending: false })
                 .limit(20),
             "Project-wide re-analysis history could not be loaded."
@@ -246,7 +247,7 @@ async function loadReanalysisWorkspace(supabase) {
     const projectWideCaseStatuses = latestBatchId ? await requireData(
         supabase
             .from(TABLES.reanalysisRequests)
-            .select("id, session_id, source_report_id, request_number, status, last_error, requested_at, proposal_ready_at, reviewed_at, project_id, analysis_framework_id, project_reanalysis_batch_id")
+            .select("id, session_id, source_report_id, request_number, status, last_error, requested_at, proposal_ready_at, reviewed_at, project_id, analysis_framework_id, project_reanalysis_batch_id, cancelled_at, cancellation_reason")
             .eq("project_reanalysis_batch_id", latestBatchId)
             .order("requested_at", { ascending: true })
             .limit(1000),
@@ -876,6 +877,18 @@ async function requestProjectWideReanalysis(req, res, supabase) {
     });
 }
 
+async function cancelProjectWideReanalysis(req, res, supabase) {
+    try {
+        return res.status(200).json(await cancelProjectWideReanalysisBatch(
+            supabase,
+            req.body?.batchId,
+            req.body?.cancellationReason
+        ));
+    } catch (error) {
+        throw new ReviewRequestError(409, error.message);
+    }
+}
+
 async function reviewCaseReanalysis(req, res, supabase) {
     const requestId = safeId(req.body?.requestId);
     if (!requestId) {
@@ -989,6 +1002,9 @@ export default async function handler(req, res) {
                 res,
                 supabase
             );
+        }
+        if (req.body?.action === "cancel_project_wide_reanalysis") {
+            return await cancelProjectWideReanalysis(req, res, supabase);
         }
         if (req.body?.action === "review_case_reanalysis") {
             return await reviewCaseReanalysis(req, res, supabase);

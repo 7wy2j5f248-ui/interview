@@ -5,6 +5,7 @@ import {
   listAnalysisFrameworkWorkspace
 } from "../server/analysisFramework.js";
 import { scheduleAutomaticCaseAnalysis } from "../server/automaticCaseAnalysis.js";
+import { cancelProjectWideReanalysisBatch } from "../server/projectWideReanalysis.js";
 
 function requiredProtocolVersion(value) {
   if (typeof value !== "string" || !value.trim()) {
@@ -60,6 +61,17 @@ export default async function handler(req, res) {
   }
 
   const design = req.body || {};
+  if (design.action === "cancel_project_wide_reanalysis") {
+    try {
+      return res.status(200).json(await cancelProjectWideReanalysisBatch(
+        supabase,
+        design.batchId,
+        design.cancellationReason
+      ));
+    } catch (error) {
+      return res.status(409).json({ error: error.message });
+    }
+  }
   if (design.action === "save_analysis_framework") {
     const fields = [
       "projectName",
@@ -95,7 +107,7 @@ export default async function handler(req, res) {
       ? design.projectId
       : null;
     const { data, error } = await supabase.rpc(
-      "save_analysis_framework_version",
+      "save_analysis_framework_version_with_batch",
       {
         p_project_id: projectId,
         p_project_name: design.projectName.trim(),
@@ -125,6 +137,7 @@ export default async function handler(req, res) {
     return res.status(200).json({
       message: `Analysis Framework v${saved.version_number} saved.`,
       frameworkId: saved.framework_id,
+      historicalBatchId: saved.historical_batch_id || null,
       projectId: saved.project_id,
       versionNumber: saved.version_number,
       historicalRequestsQueued: saved.historical_requests_queued,

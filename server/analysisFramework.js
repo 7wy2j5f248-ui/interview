@@ -119,7 +119,10 @@ export async function listAnalysisFrameworkWorkspace(supabase) {
     const [{ data: projects, error: projectError }, {
         data: frameworks,
         error: frameworkError
-    }, { data: active, error: activeError }] = await Promise.all([
+    }, { data: active, error: activeError }, {
+        data: reanalysisBatches,
+        error: batchError
+    }] = await Promise.all([
         supabase
             .from("research_projects")
             .select("id, project_code, project_name, research_topic, created_at")
@@ -130,9 +133,14 @@ export async function listAnalysisFrameworkWorkspace(supabase) {
             .order("created_at", { ascending: false }),
         supabase
             .from("active_analysis_frameworks")
-            .select("project_id, framework_id, activated_at, activated_by")
+            .select("project_id, framework_id, activated_at, activated_by"),
+        supabase
+            .from("analysis_framework_reanalysis_batches")
+            .select("id, project_id, analysis_framework_id, status, researcher_notes, eligible_case_count, queued_case_count, processing_case_count, proposal_ready_case_count, approved_case_count, rejected_case_count, failed_case_count, cancelled_case_count, requested_at, updated_at, completed_at, cancellation_requested_at, cancelled_at, cancellation_reason, cancelled_by")
+            .order("requested_at", { ascending: false })
+            .limit(30)
     ]);
-    if (projectError || frameworkError || activeError) {
+    if (projectError || frameworkError || activeError || batchError) {
         throw new Error("The analysis-framework workspace could not be loaded.");
     }
     const projectById = new Map((projects || []).map(project => [
@@ -148,6 +156,7 @@ export async function listAnalysisFrameworkWorkspace(supabase) {
     return {
         projects: projects || [],
         frameworks: normalized,
-        activeFrameworks: active || []
+        activeFrameworks: active || [],
+        reanalysisBatches: reanalysisBatches || []
     };
 }
