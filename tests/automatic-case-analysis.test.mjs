@@ -297,7 +297,7 @@ test("formal completion enqueues a strict FIFO atomic case pipeline", async () =
     assert.match(chat, /if \(finalQuestionAnswered\)[\s\S]*scheduleAutomaticCaseAnalysis\(req\)/);
 });
 
-test("researcher dashboard uses cases, positional codes, and positional themes", async () => {
+test("researcher dashboard uses separate case, keyword, code, and theme forms", async () => {
     const html = await readFile(new URL("../researcher.html", import.meta.url), "utf8");
     const script = await readFile(
         new URL("../researcher-automatic-analysis-legacy.js", import.meta.url),
@@ -308,12 +308,13 @@ test("researcher dashboard uses cases, positional codes, and positional themes",
         "utf8"
     );
 
-    assert.match(html, /1 · Cases &amp; keywords/);
-    assert.match(html, /2 · Codes/);
-    assert.match(html, /3 · Themes/);
-    assert.match(html, /4 · Incomplete transcripts/);
+    assert.match(html, /Form 1 · Cases/);
+    assert.match(html, /Form 2 · Keywords/);
+    assert.match(html, /Form 3 · Codes/);
+    assert.match(html, /Form 4 · Themes/);
+    assert.match(html, /data-automatic-analysis-view="incomplete"[^>]*>Needs attention/);
     assert.match(html, /data-automatic-analysis-view="archive"/);
-    assert.match(html, /Download complete Excel \(Forms 1–3\)/);
+    assert.match(html, /Download complete Excel analysis/);
     assert.match(html, /automaticCaseReportDialog/);
     assert.match(html, /automaticCaseArchiveButton/);
     assert.match(script, /Array\.from\(\{ length: maximum \}[^\n]*`\$\{prefix\}\$\{index \+ 1\}`/);
@@ -332,7 +333,7 @@ test("researcher dashboard uses cases, positional codes, and positional themes",
     assert.match(script, /\["social_identity", "Social identity"\]/);
     assert.match(
         script,
-        /\.\.\.COMPACT_IDENTIFIER_HEADERS,\s*"Link to transcript",\s*"Case report",\s*"Archive",\s*"AI discussion",\s*"Language",\s*\.\.\.FORM_ONE_DEMOGRAPHIC_COLUMNS/
+        /\.\.\.COMPACT_IDENTIFIER_HEADERS,\s*"Link to transcript",\s*"Case report",\s*"Analysis status",\s*"Archive",\s*"AI discussion",\s*"Language",\s*\.\.\.FORM_ONE_DEMOGRAPHIC_COLUMNS/
     );
     assert.match(script, /transcriptUrl\(item\)/);
     assert.match(script, /URLSearchParams\(window\.location\.search\)\.get\("case"\)/);
@@ -355,7 +356,7 @@ test("researcher dashboard uses cases, positional codes, and positional themes",
     );
     assert.match(script, /Restore to active analysis/);
     assert.match(script, /action: shouldArchive \? "archive" : "restore"/);
-    assert.match(script, /function casesForCaseAndKeywordForm/);
+    assert.match(script, /function casesForAnalysisForms/);
     assert.match(script, /leftCompleted \? -1 : 1/);
     assert.match(script, /participantCode\(left\)\.localeCompare/);
     assert.match(script, /function sessionNumber/);
@@ -366,7 +367,7 @@ test("researcher dashboard uses cases, positional codes, and positional themes",
     assert.doesNotMatch(script, /"Demographic data",\s*"Case report"/);
 });
 
-test("Form 4 keeps incomplete transcripts separate and marks why they need attention", async () => {
+test("Needs attention keeps incomplete transcripts separate from the four analysis forms", async () => {
     const html = await readFile(new URL("../researcher.html", import.meta.url), "utf8");
     const script = await readFile(
         new URL("../researcher-automatic-analysis-legacy.js", import.meta.url),
@@ -660,7 +661,7 @@ test("automatic dashboard exposes every transcript independently of analysis com
     assert.match(script, /Verified match/);
 });
 
-test("Cases and keywords loads every case and every stored highlight", async () => {
+test("separate Cases and Keywords forms load every case and stored highlight", async () => {
     const dashboard = await readFile(
         new URL("../server/caseAnalysisDashboard.js", import.meta.url),
         "utf8"
@@ -688,8 +689,10 @@ test("Cases and keywords loads every case and every stored highlight", async () 
     assert.match(script, /const remainingPages = await fetchRemainingDashboardPages/);
     assert.match(script, /DASHBOARD_PAGE_CONCURRENCY = 4/);
     assert.match(script, /casesWithMarkedKeywords/);
-    assert.match(script, /reports currently have validated keyword evidence/);
-    assert.match(html, /researcher-automatic-analysis\.js\?version=20260831-complete-batch-export-v1/);
+    assert.match(script, /function renderKeywords/);
+    assert.match(script, /Open exact evidence/);
+    assert.match(script, /Framework \/ report provenance/);
+    assert.match(html, /researcher-automatic-analysis\.js\?version=20260831-four-analysis-forms-v1/);
     assert.match(html, /automaticAnalysisGateStatus/);
     assert.match(script, /cache: "no-store"/);
     assert.match(script, /searchParams\.set\("fresh"/);
@@ -698,7 +701,7 @@ test("Cases and keywords loads every case and every stored highlight", async () 
     assert.match(dashboard, /generatedAt: new Date\(\)\.toISOString\(\)/);
 });
 
-test("automatic dashboard has compact identifiers, wide keywords, translation traceability, and a finite unlock wait", async () => {
+test("automatic dashboard has compact cases, traceable keyword records, and a finite unlock wait", async () => {
     const html = await readFile(new URL("../researcher.html", import.meta.url), "utf8");
     const script = await readFile(
         new URL("../researcher-automatic-analysis-legacy.js", import.meta.url),
@@ -711,12 +714,13 @@ test("automatic dashboard has compact identifiers, wide keywords, translation tr
 
     assert.match(script, /label: "P#", className: "analysisIdentifierColumn"/);
     assert.match(script, /label: "S#", className: "analysisIdentifierColumn"/);
-    assert.match(script, /analysisPrimaryKeywordColumn/);
-    assert.match(script, /keyword\.originalText/);
-    assert.match(script, /sourceMessageIds/);
+    assert.match(script, /analysisExactKeywordCell/);
+    assert.match(script, /highlight\.exact_text/);
+    assert.match(script, /highlight\.message_id/);
+    assert.match(script, /openTranscript\(caseRecord, highlight\.message_id\)/);
     assert.match(html, /analysisIdentifierColumn[\s\S]*min-width: 4\.25rem/);
-    assert.match(html, /analysisKeywordColumn[\s\S]*min-width: 24rem/);
-    assert.match(html, /analysisPrimaryKeywordColumn[\s\S]*min-width: 30rem/);
+    assert.match(html, /analysisEvidenceTextCell[\s\S]*min-width: 22rem/);
+    assert.match(html, /keywordRecordsScroll[\s\S]*max-height: 42rem/);
     assert.match(dashboard, /enrichAnalysisHighlightSources/);
     assert.match(script, /DASHBOARD_REQUEST_TIMEOUT_MS = 20000/);
     assert.match(script, /new AbortController\(\)/);

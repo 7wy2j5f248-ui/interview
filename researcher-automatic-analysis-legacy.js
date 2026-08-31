@@ -249,7 +249,7 @@
         return button;
     }
 
-    function casesForCaseAndKeywordForm() {
+    function casesForAnalysisForms() {
         return [...payload.cases].sort((left, right) => {
             const leftCompleted = left.hasReport;
             const rightCompleted = right.hasReport;
@@ -272,30 +272,16 @@
     }
 
     function renderCases() {
-        const orderedCases = casesForCaseAndKeywordForm();
-        const maximumKeywords = Math.max(
-            0,
-            ...orderedCases.map(caseRecord =>
-                caseRecord.keywordFrequency?.length || 0
-            )
-        );
+        const orderedCases = casesForAnalysisForms();
         const { scroll, table } = createTable([
             ...COMPACT_IDENTIFIER_HEADERS,
             "Link to transcript",
             "Case report",
+            "Analysis status",
             "Archive",
             "AI discussion",
             "Language",
-            ...FORM_ONE_DEMOGRAPHIC_COLUMNS.map(([, label]) => label),
-            ...Array.from(
-                { length: maximumKeywords },
-                (_, index) => ({
-                    label: `K${index + 1} · mention level`,
-                    className: index === 0
-                        ? "analysisKeywordColumn analysisPrimaryKeywordColumn"
-                        : "analysisKeywordColumn"
-                })
-            )
+            ...FORM_ONE_DEMOGRAPHIC_COLUMNS.map(([, label]) => label)
         ]);
         const body = document.createElement("tbody");
 
@@ -308,6 +294,7 @@
             const reportCell = document.createElement("td");
             reportCell.appendChild(caseReportButton(caseRecord));
             row.appendChild(reportCell);
+            createCell(row, caseRecord.status || "—");
             const archiveCell = document.createElement("td");
             archiveCell.appendChild(archiveCaseButton(caseRecord));
             row.appendChild(archiveCell);
@@ -319,44 +306,181 @@
                 row,
                 demographicValue(caseRecord, key)
             ));
-            for (let index = 0; index < maximumKeywords; index += 1) {
-                const keyword = caseRecord.keywordFrequency?.[index];
-                const cell = createCell(
-                    row,
-                    keyword
-                        ? `${keyword.count} mention${
-                            keyword.count === 1 ? "" : "s"
-                        } each · ${keyword.text}`
-                        : "—",
-                    index === 0
-                        ? "analysisKeywordColumn analysisPrimaryKeywordColumn"
-                        : "analysisKeywordColumn"
-                );
-                if (keyword) {
-                    const sourceMessageIds = [...new Set(
-                        (keyword.items || []).flatMap(item =>
-                            item.sourceMessageIds || []
-                        )
-                    )];
-                    cell.title = [
-                        `${keyword.count} validated occurrence${
-                            keyword.count === 1 ? "" : "s"
-                        } for each tied keyword.`,
-                        keyword.originalText
-                            ? `Original evidence: ${keyword.originalText}`
-                            : "",
-                        sourceMessageIds.length
-                            ? `Source message ID${sourceMessageIds.length === 1 ? "" : "s"}: ${
-                                sourceMessageIds.join(", ")
-                            }`
-                            : ""
-                    ].filter(Boolean).join("\n");
-                } else {
-                    cell.className = "analysisEmptyCell";
-                }
-            }
             body.appendChild(row);
         });
+
+        table.appendChild(body);
+        tableHost.replaceChildren(scroll);
+    }
+
+    function recordLabel(record, kind) {
+        return kind === "code"
+            ? record?.original_code_label || record?.code_label || "—"
+            : record?.original_theme_label || record?.theme_label || "—";
+    }
+
+    function keywordEvidenceButton(caseRecord, highlight) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "worksheetTranscriptButton";
+        button.textContent = "Open exact evidence";
+        button.title = highlight.message_id
+            ? `Open source message ${highlight.message_id} in the preserved transcript`
+            : "Open the preserved transcript";
+        button.addEventListener("click", () =>
+            openTranscript(caseRecord, highlight.message_id)
+        );
+        return button;
+    }
+
+    function linkedRecordButton(caseRecord, kind, record) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "worksheetExpressionButton";
+        const prefix = kind === "code" ? "C" : "T";
+        const number = kind === "code"
+            ? record.code_number
+            : record.theme_number;
+        button.textContent = `${prefix}${number}: ${recordLabel(record, kind)}`;
+        button.title = `Add this linked ${kind} to the second-layer AI discussion`;
+        button.addEventListener("click", () =>
+            sendSourceToReview(caseRecord, kind, record)
+        );
+        return button;
+    }
+
+    function renderKeywords() {
+        const completed = casesForAnalysisForms().filter(item => item.hasReport);
+        const { scroll, table } = createTable([
+            ...COMPACT_IDENTIFIER_HEADERS,
+            "Case report",
+            "Keyword record",
+            "Exact keyword",
+            "English transcript text",
+            "Linked code",
+            "Linked theme(s)",
+            "Transcript evidence",
+            "Analysis status",
+            "Project / topic",
+            "Framework / report provenance"
+        ]);
+        scroll.classList.add("keywordRecordsScroll");
+        const body = document.createElement("tbody");
+        let keywordRecordCount = 0;
+
+        completed.forEach(caseRecord => {
+            const codeById = new Map((caseRecord.codes || []).map(code => [
+                code.id,
+                code
+            ]));
+            const themeById = new Map((caseRecord.themes || []).map(theme => [
+                theme.id,
+                theme
+            ]));
+            const themeIdsByCode = (caseRecord.themeCodes || []).reduce(
+                (groups, mapping) => {
+                    const values = groups.get(mapping.code_id) || [];
+                    values.push(mapping.theme_id);
+                    groups.set(mapping.code_id, values);
+                    return groups;
+                },
+                new Map()
+            );
+
+            (caseRecord.highlights || []).forEach((highlight, index) => {
+                keywordRecordCount += 1;
+                const row = document.createElement("tr");
+                createIdentifierCells(row, caseRecord);
+                const caseCell = document.createElement("td");
+                caseCell.appendChild(caseReportButton(caseRecord));
+                row.appendChild(caseCell);
+                createCell(
+                    row,
+                    Number.isFinite(Number(highlight.keyword_number))
+                        ? `K${highlight.keyword_number}`
+                        : `K${index + 1}`,
+                    "analysisIdentifierCell"
+                );
+                createCell(
+                    row,
+                    highlight.exact_text || "—",
+                    "analysisExactKeywordCell"
+                );
+                createCell(
+                    row,
+                    highlight.english_translation || "—",
+                    "analysisEvidenceTextCell"
+                );
+
+                const code = codeById.get(highlight.code_id);
+                const codeCell = document.createElement("td");
+                if (code) {
+                    codeCell.appendChild(linkedRecordButton(caseRecord, "code", code));
+                } else {
+                    codeCell.textContent = "Unlinked";
+                    codeCell.className = "analysisEmptyCell";
+                }
+                row.appendChild(codeCell);
+
+                const themeCell = document.createElement("td");
+                const themes = [...new Set(themeIdsByCode.get(highlight.code_id) || [])]
+                    .map(themeId => themeById.get(themeId))
+                    .filter(Boolean);
+                if (themes.length) {
+                    themes.forEach(theme => {
+                        const line = document.createElement("div");
+                        line.appendChild(linkedRecordButton(
+                            caseRecord,
+                            "theme",
+                            theme
+                        ));
+                        themeCell.appendChild(line);
+                    });
+                } else {
+                    themeCell.textContent = "Unlinked";
+                    themeCell.className = "analysisEmptyCell";
+                }
+                row.appendChild(themeCell);
+
+                const evidenceCell = document.createElement("td");
+                evidenceCell.appendChild(keywordEvidenceButton(caseRecord, highlight));
+                if (highlight.message_id) {
+                    const messageReference = document.createElement("small");
+                    messageReference.className = "analysisLinkedContext";
+                    messageReference.textContent = `Message ${highlight.message_id}`;
+                    evidenceCell.appendChild(messageReference);
+                }
+                row.appendChild(evidenceCell);
+                createCell(row, caseRecord.status || "—");
+
+                const project = caseRecord.researchProject;
+                createCell(
+                    row,
+                    project
+                        ? `${project.project_name} · ${project.research_topic}`
+                        : "Legacy project/topic not recorded",
+                    "analysisProvenanceCell"
+                );
+                const framework = caseRecord.analysisFramework;
+                createCell(
+                    row,
+                    `${framework ? `Framework v${framework.version_number}` : "Legacy pre-framework report"} · Report ${caseRecord.reportLineage?.reportId || "—"}`,
+                    "analysisProvenanceCell"
+                );
+                body.appendChild(row);
+            });
+        });
+
+        if (!keywordRecordCount) {
+            const row = document.createElement("tr");
+            const cell = createCell(
+                row,
+                "No validated keyword evidence is available in the active completed reports.",
+                "analysisEmptyRow"
+            );
+            cell.colSpan = 13;
+            body.appendChild(row);
+        }
 
         table.appendChild(body);
         tableHost.replaceChildren(scroll);
@@ -374,7 +498,7 @@
         ]);
         const body = document.createElement("tbody");
 
-        casesForCaseAndKeywordForm().forEach(caseRecord => {
+        casesForAnalysisForms().forEach(caseRecord => {
             const row = document.createElement("tr");
             createIdentifierCells(row, caseRecord);
             const transcriptCell = document.createElement("td");
@@ -396,7 +520,7 @@
     }
 
     function renderMatrix(kind) {
-        const completed = casesForCaseAndKeywordForm().filter(
+        const completed = casesForAnalysisForms().filter(
             item => item.hasReport
         );
         const recordsKey = kind === "codes" ? "codes" : "themes";
@@ -445,7 +569,32 @@
                             )
                         );
                         line.appendChild(button);
+                        const context = document.createElement("small");
+                        context.className = "analysisLinkedContext";
+                        if (kind === "codes") {
+                            const linkedThemes = (caseRecord.themeCodes || [])
+                                .filter(mapping => mapping.code_id === record.id)
+                                .map(mapping => (caseRecord.themes || []).find(
+                                    theme => theme.id === mapping.theme_id
+                                ))
+                                .filter(Boolean)
+                                .map(theme => `T${theme.theme_number}`);
+                            const evidenceCount = (caseRecord.highlights || [])
+                                .filter(highlight => highlight.code_id === record.id)
+                                .length;
+                            context.textContent = `Keywords: ${evidenceCount} evidence mark${evidenceCount === 1 ? "" : "s"} · Themes: ${linkedThemes.join(", ") || "unlinked"}`;
+                        } else {
+                            const linkedCodes = (caseRecord.themeCodes || [])
+                                .filter(mapping => mapping.theme_id === record.id)
+                                .map(mapping => (caseRecord.codes || []).find(
+                                    code => code.id === mapping.code_id
+                                ))
+                                .filter(Boolean)
+                                .map(code => `C${code.code_number}`);
+                            context.textContent = `Codes: ${linkedCodes.join(", ") || "unlinked"}`;
+                        }
                         cell.appendChild(line);
+                        cell.appendChild(context);
                     });
                 } else {
                     cell.textContent = "—";
@@ -568,7 +717,7 @@
 
     function render() {
         const counts = payload.counts || {};
-        const completedCases = casesForCaseAndKeywordForm().filter(
+        const completedCases = casesForAnalysisForms().filter(
             caseRecord => caseRecord.hasReport
         );
         const casesWithMarkedKeywords = completedCases.filter(
@@ -590,6 +739,8 @@
             renderIncomplete();
         } else if (activeView === "cases") {
             renderCases();
+        } else if (activeView === "keywords") {
+            renderKeywords();
         } else {
             renderMatrix(activeView);
         }
@@ -603,13 +754,15 @@
             });
         document.getElementById("automaticAnalysisDescription").textContent =
             activeView === "cases"
-                ? `Form 1: ${completedCases.length} available case reports are shown first in permanent participant-code order, matching Forms 2 and 3. ${casesWithMarkedKeywords} reports currently have validated keyword evidence, grouped into equal mention-count levels with deterministic alphabetical ordering inside each tie. Use Archive on a completed row to remove it from active analysis; it can later be restored from the Archive tab. Transcripts awaiting their first report remain available below them in the same stable order.`
-                : activeView === "codes"
-                    ? "Form 2: each case starts at C1. Total validated mentions are the sole grading criterion; equal-mention codes share one rank cell and are ordered alphabetically inside that tied group. Distinct keyword counts remain reference metadata only."
-                    : activeView === "themes"
-                        ? "Form 3: each case starts at T1. Total validated mentions are the sole grading criterion; equal-mention themes share one rank cell and are ordered alphabetically inside that tied group. Supporting-code and distinct-keyword counts remain reference metadata only."
+                ? `Form 1 · Cases: ${completedCases.length} available case reports are shown in permanent participant-code order, matching Forms 2–4. This compact register contains transcript, case-report, status, and separated demographic controls only; keyword evidence is kept in Form 2. Use Archive on a completed row to remove it from active analysis; it can later be restored from the Archive view.`
+                : activeView === "keywords"
+                    ? `Form 2 · Keywords: ${casesWithMarkedKeywords} cases contain validated transcript-grounded evidence. Every stored keyword record remains linked to its case, exact source message, participant-local code and theme, analysis status, project/topic, framework version, and report provenance.`
+                    : activeView === "codes"
+                        ? "Form 3 · Codes: each case starts at C1. Code cells retain visible links to their keyword-evidence count and supporting themes; total validated mentions determine rank, with equal totals sharing a cell."
+                        : activeView === "themes"
+                            ? "Form 4 · Themes: each case starts at T1. Theme cells retain visible links to their supporting participant-local codes; total validated mentions determine rank, with equal totals sharing a cell."
                         : activeView === "incomplete"
-                            ? "Form 4 · Needs attention: unfinished interviews are separate from Forms 1–3. Each row preserves its transcript and separated demographic fields, summarizes only the material actually recorded, and states how incomplete the interview is. No themes, codes, or keywords are assigned before formal completion."
+                            ? "Needs attention: unfinished interviews are separate from Forms 1–4. Each row preserves its transcript and separated demographic fields, summarizes only the material actually recorded, and states how incomplete the interview is. No themes, codes, or keywords are assigned before formal completion."
                             : "Archived cases are excluded from every active analysis form and from future automatic reanalysis. Each archived row preserves its transcript, report, language, demographic columns, mention-ranked C1–Cn code groups, mention-ranked T1–Tn theme groups, and archive history.";
         window.dispatchEvent(new CustomEvent("automatic-analysis-review-ready"));
     }
@@ -642,7 +795,7 @@
         return fragment;
     }
 
-    async function openTranscript(caseRecord) {
+    async function openTranscript(caseRecord, requestedMessageId = null) {
         document.getElementById("automaticTranscriptHeading").textContent =
             `${caseRecord.caseNumber} · annotated transcript`;
         const expectedIdentity = caseRecord.transcriptIdentity;
@@ -695,9 +848,16 @@
             document.getElementById("automaticTranscriptIdentity").textContent =
                 `Participant code: ${identity.participantCode} · Participant ID: ${identity.participantId} · Session ID: ${identity.sessionId} · Verified match`;
             messages.replaceChildren();
+            let requestedMessage = null;
             (data.messages || []).forEach(message => {
                 const article = document.createElement("article");
                 article.className = "message";
+                if (requestedMessageId !== null
+                    && String(message.id) === String(requestedMessageId)) {
+                    article.classList.add("targetTranscriptMessage");
+                    article.tabIndex = -1;
+                    requestedMessage = article;
+                }
                 const paragraph = document.createElement("p");
                 const speaker = document.createElement("strong");
                 const messageLanguage = String(message.Language || "").toLowerCase();
@@ -722,6 +882,13 @@
 
                 messages.appendChild(article);
             });
+            if (requestedMessage) {
+                requestedMessage.focus({ preventScroll: true });
+                requestedMessage.scrollIntoView({
+                    behavior: "smooth",
+                    block: "center"
+                });
+            }
         } catch (error) {
             document.getElementById("automaticTranscriptIdentity").textContent =
                 "Transcript identity could not be verified.";
@@ -842,7 +1009,7 @@
     }
 
     function downloadCurrentForm() {
-        const completed = casesForCaseAndKeywordForm().filter(
+        const completed = casesForAnalysisForms().filter(
             item => item.hasReport
         );
         let rows;
@@ -903,7 +1070,7 @@
                 "Last activity",
                 "Language",
                 ...FORM_ONE_DEMOGRAPHIC_COLUMNS.map(([, label]) => label)
-            ], ...casesForCaseAndKeywordForm().map(item => [
+            ], ...casesForAnalysisForms().map(item => [
                 participantCode(item),
                 sessionNumber(item),
                 transcriptUrl(item),
@@ -916,7 +1083,7 @@
                 )
             ])];
         } else if (activeView === "cases") {
-            const orderedCases = casesForCaseAndKeywordForm();
+            const orderedCases = casesForAnalysisForms();
             rows = [[
                 "P#",
                 "S#",
@@ -935,6 +1102,56 @@
                     ),
                     item.hasReport ? "Available" : item.status
                 ])];
+        } else if (activeView === "keywords") {
+            rows = [[
+                "P#",
+                "S#",
+                "Keyword record",
+                "Exact keyword",
+                "English transcript text",
+                "Code",
+                "Themes",
+                "Source message ID",
+                "Transcript link",
+                "Analysis status",
+                "Project",
+                "Topic",
+                "Framework version",
+                "Report ID"
+            ]];
+            completed.forEach(item => {
+                const codeById = new Map((item.codes || []).map(code => [
+                    code.id,
+                    code
+                ]));
+                const themeById = new Map((item.themes || []).map(theme => [
+                    theme.id,
+                    theme
+                ]));
+                (item.highlights || []).forEach(highlight => {
+                    const code = codeById.get(highlight.code_id);
+                    const themes = (item.themeCodes || [])
+                        .filter(mapping => mapping.code_id === highlight.code_id)
+                        .map(mapping => themeById.get(mapping.theme_id))
+                        .filter(Boolean);
+                    rows.push([
+                        participantCode(item),
+                        sessionNumber(item),
+                        highlight.keyword_number || "",
+                        highlight.exact_text || "",
+                        highlight.english_translation || "",
+                        code ? `C${code.code_number}: ${recordLabel(code, "code")}` : "",
+                        themes.map(theme => `T${theme.theme_number}: ${recordLabel(theme, "theme")}`).join(" | "),
+                        highlight.message_id || "",
+                        transcriptUrl(item),
+                        item.status || "",
+                        item.researchProject?.project_name || "",
+                        item.researchProject?.research_topic || "",
+                        item.analysisFramework?.version_number || "",
+                        item.reportLineage?.reportId || ""
+                    ]);
+                });
+            });
         } else {
             const recordsKey = activeView;
             const isCodes = activeView === "codes";

@@ -10,8 +10,8 @@
 
     const button = originalButton.cloneNode(true);
     button.id = originalButton.id;
-    button.textContent = "Download complete Excel (Forms 1–3)";
-    button.title = "Downloads every active case in one Excel workbook. K/C/T levels use total validated mentions, and equal mention counts share one rank cell; the 100-case dashboard page size does not limit this export.";
+    button.textContent = "Download complete Excel analysis";
+    button.title = "Downloads every active case in one Excel workbook. The workbook keeps its established compact layout while the dashboard provides four separate review forms; the 100-case dashboard page size does not limit this export.";
     originalButton.replaceWith(button);
 
     if (lockButton) {
@@ -63,8 +63,8 @@
             URL.revokeObjectURL(url);
 
             status.textContent = caseCount
-                ? `Complete Excel downloaded: ${caseCount} active cases across Forms 1–3.`
-                : "Complete Excel downloaded with Forms 1–3.";
+                ? `Complete Excel downloaded: ${caseCount} active cases.`
+                : "Complete Excel analysis downloaded.";
             status.className = "muted";
         } catch (error) {
             status.textContent = error.message;

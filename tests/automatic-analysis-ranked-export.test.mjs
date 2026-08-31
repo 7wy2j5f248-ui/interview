@@ -332,7 +332,7 @@ test("Vercel function entries remain within the Hobby deployment limit", async (
     assert.ok(!apiFiles.includes("automatic-analysis-export.js"));
 });
 
-test("keyword columns are rebuilt from each fully loaded page set", async () => {
+test("separate keyword records are rebuilt from each fully loaded page set", async () => {
     const dashboard = await readFile(
         new URL("../researcher-automatic-analysis-legacy.js", import.meta.url),
         "utf8"
@@ -345,7 +345,9 @@ test("keyword columns are rebuilt from each fully loaded page set", async () => 
     assert.match(dashboard, /const remainingPages = await fetchRemainingDashboardPages/);
     assert.match(dashboard, /DASHBOARD_PAGE_CONCURRENCY = 4/);
     assert.match(dashboard, /payload = \{ \.\.\.firstPage, cases \};[\s\S]*render\(\)/);
-    assert.match(dashboard, /function renderCases[\s\S]*keywordFrequency/);
+    assert.match(dashboard, /function renderKeywords[\s\S]*caseRecord\.highlights/);
+    assert.match(dashboard, /Framework \/ report provenance/);
+    assert.match(dashboard, /Open exact evidence/);
     assert.match(dashboard, /tableHost\.replaceChildren\(scroll\)/);
     assert.doesNotMatch(dashboard, /dataset\.frequencyKeywords/);
     assert.match(dashboardApi, /import \{ rankAnalysisCase \}/);

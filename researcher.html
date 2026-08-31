@@ -164,6 +164,7 @@
             display: flex;
             gap: 0.2rem;
             margin-block-start: 1.25rem;
+            overflow-x: auto;
             padding: 0.45rem 0.55rem 0;
         }
 
@@ -382,6 +383,34 @@
         .automaticAnalysisTable .analysisPrimaryKeywordColumn {
             min-width: 30rem;
             width: 30rem;
+        }
+
+        .analysisExactKeywordCell {
+            font-weight: 700;
+            min-width: 12rem;
+        }
+
+        .analysisEvidenceTextCell {
+            min-width: 22rem;
+        }
+
+        .analysisProvenanceCell {
+            color: #405775;
+            font-size: 0.88rem;
+            min-width: 16rem;
+        }
+
+        .analysisLinkedContext {
+            color: #5b6878;
+            display: block;
+            font-size: 0.78rem;
+            line-height: 1.35;
+            margin-block-start: 0.3rem;
+        }
+
+        .keywordRecordsScroll {
+            max-height: 42rem;
+            overflow: auto;
         }
 
         .analysisRelationCell {
@@ -756,6 +785,10 @@
                 font-size: 0.78rem;
                 padding-inline: 0.25rem;
             }
+
+            .keywordRecordsScroll {
+                max-height: 34rem;
+            }
         }
     </style>
 </head>
@@ -866,7 +899,7 @@
     <div id="automaticAnalysisWorkspace" hidden>
         <div class="actionRow">
             <button id="automaticAnalysisRefreshButton" type="button">Refresh progress</button>
-            <button id="automaticAnalysisDownloadButton" type="button">Download complete Excel (Forms 1–3)</button>
+            <button id="automaticAnalysisDownloadButton" type="button">Download complete Excel analysis</button>
             <button id="automaticAnalysisLockButton" type="button">Lock workspace</button>
         </div>
         <p id="automaticAnalysisStatus" class="muted" role="status"></p>
@@ -878,10 +911,11 @@
             <div class="analysisMetric"><strong id="automaticAnalysisIncompleteCount">0</strong>Incomplete transcripts</div>
         </div>
         <nav class="analysisViewTabs" aria-label="Automatic analysis forms">
-            <button type="button" data-automatic-analysis-view="cases" aria-pressed="true">1 · Cases &amp; keywords</button>
-            <button type="button" data-automatic-analysis-view="codes" aria-pressed="false">2 · Codes</button>
-            <button type="button" data-automatic-analysis-view="themes" aria-pressed="false">3 · Themes</button>
-            <button type="button" data-automatic-analysis-view="incomplete" aria-pressed="false">4 · Incomplete transcripts</button>
+            <button type="button" data-automatic-analysis-view="cases" aria-pressed="true">Form 1 · Cases</button>
+            <button type="button" data-automatic-analysis-view="keywords" aria-pressed="false">Form 2 · Keywords</button>
+            <button type="button" data-automatic-analysis-view="codes" aria-pressed="false">Form 3 · Codes</button>
+            <button type="button" data-automatic-analysis-view="themes" aria-pressed="false">Form 4 · Themes</button>
+            <button type="button" data-automatic-analysis-view="incomplete" aria-pressed="false">Needs attention</button>
             <button type="button" data-automatic-analysis-view="archive" aria-pressed="false">Archive</button>
         </nav>
         <p id="automaticAnalysisDescription" class="muted"></p>
@@ -1908,7 +1942,7 @@ document.getElementById("periodResetButton").addEventListener("click", () => {
 loadStatistics();
 
 </script>
-<script src="researcher-automatic-analysis.js?version=20260831-complete-batch-export-v1"></script>
+<script src="researcher-automatic-analysis.js?version=20260831-four-analysis-forms-v1"></script>
     
 </body>
 </html>
