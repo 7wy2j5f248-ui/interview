@@ -7,6 +7,19 @@
     const saveStatus = document.getElementById("saveStatus");
     const confirmSaveButton = document.getElementById("confirmSaveButton");
     const TOKEN_STORAGE_KEY = "researcherDashboardToken";
+    const FRAMEWORK_DRAFT_KEY = "pliAnalysisFrameworkDraftV1";
+    const FRAMEWORK_DRAFT_FIELDS = Object.freeze({
+        projectName: "analysisProjectName",
+        researchTopic: "analysisResearchTopic",
+        studyScope: "analysisStudyScope",
+        themeRequirements: "analysisThemeRequirements",
+        codeDerivationRules: "analysisCodeDerivation",
+        themeCodeFitRules: "analysisThemeCodeFit",
+        inclusionRules: "analysisInclusionRules",
+        exclusionRules: "analysisExclusionRules",
+        provenanceExpectations: "analysisProvenance",
+        analysisVersionNotes: "analysisVersionNotes"
+    });
     const analysisProjectSelect = document.getElementById(
         "analysisProjectSelect"
     );
@@ -141,6 +154,93 @@
         return document.querySelector(
             'input[name="analysisApplicationScope"]:checked'
         )?.value || "";
+    }
+
+    function draftStatus(message, isError = false) {
+        const status = field("analysisFrameworkDraftStatus");
+        status.textContent = message;
+        status.style.color = isError ? "#9b1c1c" : "#2d6a4f";
+    }
+
+    function saveFrameworkDraft() {
+        const values = Object.fromEntries(Object.entries(
+            FRAMEWORK_DRAFT_FIELDS
+        ).map(([key, id]) => [key, field(id).value]));
+        const draft = {
+            projectId: analysisProjectSelect.value || null,
+            applicationScope: selectedScope() || "future_only",
+            values,
+            savedAt: new Date().toISOString()
+        };
+        try {
+            localStorage.setItem(FRAMEWORK_DRAFT_KEY, JSON.stringify(draft));
+            field("discardAnalysisFrameworkDraft").disabled = false;
+            draftStatus(
+                `Unsaved Analysis Framework draft protected automatically at ${
+                    new Date(draft.savedAt).toLocaleTimeString()
+                }.`
+            );
+        } catch {
+            draftStatus(
+                "This browser could not protect the draft automatically. Copy the text before leaving this page.",
+                true
+            );
+        }
+    }
+
+    function loadStoredFrameworkDraft() {
+        try {
+            const parsed = JSON.parse(
+                localStorage.getItem(FRAMEWORK_DRAFT_KEY) || "null"
+            );
+            return parsed?.values && parsed?.savedAt ? parsed : null;
+        } catch {
+            return null;
+        }
+    }
+
+    function restoreFrameworkDraft() {
+        const draft = loadStoredFrameworkDraft();
+        if (!draft) return false;
+        if (draft.projectId && frameworkWorkspace.projects.some(
+            project => project.id === draft.projectId
+        )) {
+            analysisProjectSelect.value = draft.projectId;
+            protocolProjectSelect.value = draft.projectId;
+        } else if (!draft.projectId) {
+            analysisProjectSelect.value = "";
+        }
+        Object.entries(FRAMEWORK_DRAFT_FIELDS).forEach(([key, id]) => {
+            if (typeof draft.values[key] === "string") {
+                field(id).value = draft.values[key];
+            }
+        });
+        const scope = document.querySelector(
+            `input[name="analysisApplicationScope"][value="${
+                draft.applicationScope === "include_completed"
+                    ? "include_completed"
+                    : "future_only"
+            }"]`
+        );
+        if (scope) scope.checked = true;
+        const existingProject = Boolean(analysisProjectSelect.value);
+        field("analysisProjectName").readOnly = existingProject;
+        field("analysisResearchTopic").readOnly = existingProject;
+        field("discardAnalysisFrameworkDraft").disabled = false;
+        draftStatus(
+            `Recovered an unsaved Analysis Framework draft from ${
+                new Date(draft.savedAt).toLocaleString()
+            }. Review it before saving.`
+        );
+        return true;
+    }
+
+    function clearFrameworkDraft() {
+        localStorage.removeItem(FRAMEWORK_DRAFT_KEY);
+        field("discardAnalysisFrameworkDraft").disabled = true;
+        draftStatus(
+            "No unsaved draft. New changes will be protected automatically while you type."
+        );
     }
 
     function collectAnalysisFramework() {
@@ -371,10 +471,13 @@
         sessionStorage.setItem(TOKEN_STORAGE_KEY, token);
         frameworkWorkspace = data;
         renderProjectOptions();
+        const recoveredDraft = restoreFrameworkDraft();
         renderFrameworkHistory();
         renderActiveFrameworkRuns();
         setAnalysisStatus(
-            "Framework history loaded. Saving always creates a new immutable version."
+            recoveredDraft
+                ? "Framework history loaded and the protected unsaved draft was restored."
+                : "Framework history loaded. Saving always creates a new immutable version."
         );
     }
 
@@ -483,6 +586,7 @@
         if (project) protocolProjectSelect.value = project.id;
         renderFrameworkHistory();
         renderActiveFrameworkRuns();
+        saveFrameworkDraft();
     });
 
     document.getElementById("reviewAnalysisFrameworkButton")
@@ -545,6 +649,7 @@
                 setAnalysisStatus(
                     `${result.message} Project and topic lineage preserved.`
                 );
+                clearFrameworkDraft();
                 reviewedFramework = null;
                 await loadFrameworkWorkspace();
                 analysisProjectSelect.value = result.projectId;
@@ -564,6 +669,20 @@
             }
         });
 
+    Object.values(FRAMEWORK_DRAFT_FIELDS).forEach(id => {
+        field(id).addEventListener("input", saveFrameworkDraft);
+    });
+    document.querySelectorAll(
+        'input[name="analysisApplicationScope"]'
+    ).forEach(input => input.addEventListener("change", saveFrameworkDraft));
+    field("discardAnalysisFrameworkDraft").addEventListener("click", () => {
+        clearFrameworkDraft();
+        const project = frameworkWorkspace.projects.find(
+            item => item.id === analysisProjectSelect.value
+        ) || null;
+        fillFramework(project ? activeFramework(project.id) : null, project);
+    });
+
     const storedToken = sessionStorage.getItem(TOKEN_STORAGE_KEY);
     if (storedToken) {
         analysisPin.value = storedToken;
@@ -576,5 +695,6 @@
         option.value = "";
         option.textContent = "Unlock Analysis Framework to select a project";
         protocolProjectSelect.appendChild(option);
+        restoreFrameworkDraft();
     }
 }());

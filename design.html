@@ -94,6 +94,8 @@
 <button id="loadAnalysisFrameworkButton" type="button">Load framework</button>
 </div>
 <p id="analysisFrameworkStatus" role="status"></p>
+<p id="analysisFrameworkDraftStatus" role="status"><strong>Draft protection:</strong> changes will be saved automatically in this browser while you type.</p>
+<button id="discardAnalysisFrameworkDraft" type="button" style="margin-bottom:16px;" disabled>Discard recovered draft</button>
 
 <label for="analysisProjectSelect"><strong>Named Research Project</strong></label>
 <p>Select an existing project/topic lineage, or start a new project. A new topic never inherits or re-analyses another project's transcripts by default.</p>
@@ -175,4 +177,4 @@
 <button id="confirmAnalysisFrameworkButton" type="button" style="padding:10px 18px;">Save New Framework Version</button>
 </div>
 </dialog>
-<script src="design.js?version=20260831-stop-reanalysis-v1"></script>
+<script src="design.js?version=20260831-draft-protection-v2"></script>

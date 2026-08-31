@@ -89,6 +89,12 @@ test("Research Design visibly separates protocol and framework scope", async () 
     assert.match(html, /Future analysis only/);
     assert.match(html, /same project\/topic lineage/);
     assert.match(html, /explicitly approves its proposal/);
+    assert.match(html, /Draft protection/);
+    assert.match(script, /FRAMEWORK_DRAFT_KEY/);
+    assert.match(script, /saveFrameworkDraft/);
+    assert.match(script, /restoreFrameworkDraft/);
+    assert.match(script, /Recovered an unsaved Analysis Framework draft/);
+    assert.match(script, /localStorage\.removeItem\(FRAMEWORK_DRAFT_KEY\)/);
     assert.match(script, /save_analysis_framework/);
     assert.match(script, /Start a new research project\/topic/);
     assert.match(endpoint, /save_analysis_framework_version/);
