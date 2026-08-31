@@ -60,6 +60,15 @@ export function isConciseCodeLabelShape(value) {
     return label.split(" ").filter(Boolean).length <= 3;
 }
 
+export function isCategoryLabelShape(value) {
+    const label = normalizedText(value)?.replace(/\s+/gu, " ");
+    if (!label || label.length > MAX_ANALYTIC_LABEL_LENGTH) return false;
+    const words = label.split(" ").filter(Boolean);
+    return words.length <= MAX_ANALYTIC_LABEL_WORDS
+        && !/[.!?;:/|&_]/u.test(label)
+        && !/\b(?:or|but|because|although)\b/iu.test(label);
+}
+
 export function isThemePatternLabelShape(value) {
     const label = normalizedText(value)?.replace(/\s+/gu, " ");
 
@@ -672,13 +681,13 @@ function validateAutomaticHierarchy(rawCategories, rawThemes, codes) {
             number => assignedCodeNumbers.has(number)
         );
 
-        if (!isNaturalAnalyticLabelShape(label)
+        if (!isCategoryLabelShape(label)
             || !rationale
             || codeNumbers.length < 2
             || duplicatedCodeNumbers.length > 0
         ) {
             invalidCategories += 1;
-            if (!isNaturalAnalyticLabelShape(label)) {
+            if (!isCategoryLabelShape(label)) {
                 invalidLabels.push({ kind: "category", label: label || "" });
             }
             rejectedCategoryAssignments.push({
@@ -1103,7 +1112,7 @@ export function validateAutomaticLabelQualityAudit(analysis, value) {
             ? isThemePatternLabelShape(item.label)
             : item.kind === "code"
                 ? isConciseCodeLabelShape(item.label)
-                : isNaturalAnalyticLabelShape(item.label);
+                : isCategoryLabelShape(item.label);
         const uniqueAtLevel = labelCounts.get(
             `${item.kind}:${
                 normalizedText(item.label)?.toLocaleLowerCase() || ""

@@ -4,6 +4,7 @@ import test from "node:test";
 import {
     detectCompoundQuestionTurns,
     isConversationalCourtesy,
+    isCategoryLabelShape,
     isConciseCodeLabelShape,
     isNaturalAnalyticLabelShape,
     validateAutomaticCaseAnalysis,
@@ -348,6 +349,7 @@ test("global label audit rejects short but incoherent labels", () => {
 
     assert.equal(isNaturalAnalyticLabelShape("Sleep routine"), true);
     assert.equal(isNaturalAnalyticLabelShape("Work and family"), false);
+    assert.equal(isCategoryLabelShape("Sleep timing and duration"), true);
     assert.equal(isConciseCodeLabelShape("Sleep timing"), true);
     assert.equal(isConciseCodeLabelShape("Good_morning_sleep_quality"), false);
     assert.equal(isConciseCodeLabelShape("Long descriptive bedtime work pattern"), false);
