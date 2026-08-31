@@ -1762,7 +1762,7 @@ export async function generateAutomaticCaseAnalysis(
             {
                 role: "system",
                 content: systemInstruction
-                    + " Correct the supplied draft into a complete replacement. Preserve valid exact meaning units. Remove or replace non-verbatim evidence and restore any dropped code using exact evidence. A category must descriptively group at least two related codes. A theme must interpret the patterned meaning linking at least two categories. Retain firm unsynthesized codes or categories instead of inventing a hierarchy. Return the entire corrected JSON object."
+                    + " Correct the supplied draft into a complete replacement. Preserve valid exact meaning units. Remove or replace non-verbatim evidence and restore any dropped code using exact evidence. EVERY code label must be one ordinary English word when possible and never more than three space-separated words. When a code label is too long, rewrite only the label; do not delete its supported evidence. A category must descriptively group at least two related codes. A theme must interpret the patterned meaning linking at least two categories. A substantive transcript must retain at least four codes, two categories, and one theme when those levels are required by the validation problems. Retain firm unsynthesized codes or categories instead of inventing a hierarchy. Return the entire corrected JSON object."
             },
             {
                 role: "user",
@@ -1824,7 +1824,7 @@ export async function generateAutomaticCaseAnalysis(
             const labelRepairResponse = await createResponse([{
                 role: "system",
                 content: systemInstruction
-                    + " Return one complete corrected report. Repair every rejected code, category, or theme label. Re-label a supported analytic finding; never delete it merely to simplify the report or pass the audit. Codes and categories must use coherent common terms suitable across cases while remaining supportable by this case alone. Categories descriptively group related codes. Themes state the patterned meaning linking categories and may use a clear interpretive phrase. Retain unsynthesized lower units instead of forcing a hierarchy. Preserve exact meaning-unit evidence, anchors, and demographic provenance."
+                    + " Return one complete corrected report. Repair every rejected code, category, or theme label. EVERY code label must contain no more than three space-separated words. Re-label a supported analytic finding; never delete it merely to simplify the report or pass the audit. Codes and categories must use coherent common terms suitable across cases while remaining supportable by this case alone. Categories descriptively group related codes. Themes state the patterned meaning linking categories and may use a clear interpretive phrase. Retain unsynthesized lower units instead of forcing a hierarchy. Preserve exact meaning-unit evidence, anchors, and demographic provenance."
             }, {
                 role: "user",
                 content: [
@@ -2117,6 +2117,9 @@ export async function generateAutomaticCaseReanalysis(
             "The proposed re-analysis did not produce a complete evidence hierarchy.",
             `Validated ${analysis.codes?.length || 0} codes, ${analysis.categories?.length || 0} categories, and ${analysis.themes?.length || 0} themes.`,
             `${analysis.droppedCodes || 0} codes were dropped; ${analysis.invalidEvidence || 0} evidence or hierarchy records were invalid.`,
+            (analysis.invalidLabels || []).length
+                ? `Structurally invalid labels: ${analysis.invalidLabels.slice(0, 12).map(item => `${item.kind} “${item.label}”`).join(" | ")}`
+                : "No structurally invalid labels were recorded.",
             analysis.fullHierarchyExpected
                 ? `This ${analysis.substantiveMessageCount}-turn substantive transcript required at least 4 codes, 2 categories, and 1 theme; hierarchy coverage complete: ${Boolean(analysis.hierarchyCoverageComplete)}.`
                 : "A full multi-level hierarchy was not structurally required for this short transcript.",
@@ -2166,6 +2169,9 @@ export async function generateAutomaticCaseReanalysis(
                 "The corrected re-analysis did not produce a complete evidence hierarchy.",
                 `Validated ${analysis.codes?.length || 0} codes, ${analysis.categories?.length || 0} categories, and ${analysis.themes?.length || 0} themes.`,
                 `${analysis.droppedCodes || 0} codes were dropped; ${analysis.invalidEvidence || 0} evidence or hierarchy records were invalid.`,
+                (analysis.invalidLabels || []).length
+                    ? `Structurally invalid labels: ${analysis.invalidLabels.slice(0, 12).map(item => `${item.kind} “${item.label}”`).join(" | ")}`
+                    : "No structurally invalid labels were recorded.",
                 analysis.fullHierarchyExpected
                     ? `This ${analysis.substantiveMessageCount}-turn substantive transcript required at least 4 codes, 2 categories, and 1 theme; hierarchy coverage complete: ${Boolean(analysis.hierarchyCoverageComplete)}.`
                     : "A full multi-level hierarchy was not structurally required for this short transcript.",
