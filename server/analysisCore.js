@@ -995,6 +995,34 @@ function labelQualityKey(kind, number) {
     return `${kind}:${number}`;
 }
 
+function rejectedLabelCheckNames(item) {
+    const failed = [];
+    if (!item.structurallyValid) failed.push("structure");
+    if (!item.naturalLanguage) failed.push("natural-language");
+    if (!item.coherentConcept) failed.push("coherence");
+    if (!item.evidenceSupported) failed.push("evidence");
+    if (!item.topicRelevant) failed.push("topic");
+    if (item.kind !== "code" && !item.conceptuallyDistinct) {
+        failed.push("distinctness");
+    }
+    if (item.kind !== "code" && !item.comparisonUseful) {
+        failed.push("comparison");
+    }
+    if (item.kind !== "code" && !item.hasMultipleChildren) {
+        failed.push("multiple-children");
+    }
+    if (item.kind !== "code" && !item.semanticCoverage) {
+        failed.push("semantic-coverage");
+    }
+    if (item.kind !== "code" && !item.higherLevelAbstraction) {
+        failed.push("higher-abstraction");
+    }
+    if (item.kind === "theme" && !item.patternedMeaning) {
+        failed.push("patterned-meaning");
+    }
+    return failed.length ? failed.join(",") : "unspecified";
+}
+
 export function validateAutomaticLabelQualityAudit(analysis, value) {
     const expected = [
         ...(analysis?.codes || []).map((record, index) => ({
@@ -2180,7 +2208,7 @@ export async function generateAutomaticCaseReanalysis(
                 ? `This ${analysis.substantiveMessageCount}-turn substantive transcript required at least 4 codes, 2 categories, and 1 theme; hierarchy coverage complete: ${Boolean(analysis.hierarchyCoverageComplete)}.`
                 : "A full multi-level hierarchy was not structurally required for this short transcript.",
             rejectedLabels.length
-                ? `Label audit rejected ${rejectedLabels.length}: ${rejectedLabels.slice(0, 8).map(item => `${item.kind} ${item.number} “${item.label}” — ${item.explanation}`).join(" | ")}`
+                ? `Label audit rejected ${rejectedLabels.length}: ${rejectedLabels.slice(0, 8).map(item => `${item.kind} ${item.number} “${item.label}” [${rejectedLabelCheckNames(item)}] — ${item.explanation}`).join(" | ")}`
                 : "The label audit did not reject a label."
         ].join(" "));
     }
@@ -2232,7 +2260,7 @@ export async function generateAutomaticCaseReanalysis(
                     ? `This ${analysis.substantiveMessageCount}-turn substantive transcript required at least 4 codes, 2 categories, and 1 theme; hierarchy coverage complete: ${Boolean(analysis.hierarchyCoverageComplete)}.`
                     : "A full multi-level hierarchy was not structurally required for this short transcript.",
                 rejectedLabels.length
-                    ? `Label audit rejected ${rejectedLabels.length}: ${rejectedLabels.slice(0, 8).map(item => `${item.kind} ${item.number} “${item.label}” — ${item.explanation}`).join(" | ")}`
+                    ? `Label audit rejected ${rejectedLabels.length}: ${rejectedLabels.slice(0, 8).map(item => `${item.kind} ${item.number} “${item.label}” [${rejectedLabelCheckNames(item)}] — ${item.explanation}`).join(" | ")}`
                     : "The label audit did not reject a label."
             ].join(" "));
         }
