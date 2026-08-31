@@ -247,6 +247,36 @@ test("model underscore formatting is normalized before hierarchy validation", ()
     assert.equal(result.themes[0].label, "active management of sleep disruption");
 });
 
+test("overlong model code labels are deterministically reduced to three words", () => {
+    const text = "I do not think technology changed my sleep.";
+    const result = validateAutomaticCaseAnalysis({
+        codes: [{
+            label: "direct bed after call",
+            rationale: "A supported bedtime transition.",
+            meaning_unit_evidence: [{
+                message_id: "message-1",
+                exact_text: text,
+                anchor_expressions: []
+            }]
+        }, {
+            label: "no tech sleep change",
+            rationale: "A supported negative technology assessment.",
+            meaning_unit_evidence: [{
+                message_id: "message-1",
+                exact_text: text,
+                anchor_expressions: []
+            }]
+        }],
+        categories: [],
+        themes: [],
+        case_interpretation: "The participant reports a bounded technology stance."
+    }, [{ id: "message-1", originalText: text }]);
+
+    assert.equal(result.codes[0].label, "direct bed call");
+    assert.equal(result.codes[1].label, "no sleep change");
+    assert.ok(result.codes.every(code => code.label.split(" ").length <= 3));
+});
+
 test("case re-analysis requires transcript, code, theme, and research-scope relevance", () => {
     const analysis = {
         codes: [{

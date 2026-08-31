@@ -33,11 +33,21 @@ function normalizedModelCodeLabel(value) {
     const words = label.split(" ").filter(Boolean);
     if (words.length <= 3) return label;
     const withoutConnectors = words.filter(word => !new Set([
-        "a", "an", "the", "of", "with", "to", "for", "from", "in", "on"
+        "a", "an", "the", "of", "with", "to", "for", "from", "in", "on",
+        "at", "as", "after", "before", "during", "only"
     ]).has(word.toLocaleLowerCase()));
-    return withoutConnectors.length > 0 && withoutConnectors.length <= 3
-        ? withoutConnectors.join(" ")
-        : label;
+    if (withoutConnectors.length > 0 && withoutConnectors.length <= 3) {
+        return withoutConnectors.join(" ");
+    }
+    if (withoutConnectors.length > 3) {
+        const first = withoutConnectors[0].toLocaleLowerCase();
+        if (["no", "not", "never", "without"].includes(first)) {
+            return [withoutConnectors[0], ...withoutConnectors.slice(-2)]
+                .join(" ");
+        }
+        return withoutConnectors.slice(-3).join(" ");
+    }
+    return label;
 }
 
 export function isNaturalAnalyticLabelShape(value) {
