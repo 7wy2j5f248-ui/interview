@@ -460,6 +460,58 @@ test("one-code categories are rejected while the code remains a completed findin
     assert.equal(audit.themeHierarchy.ungroupedCodes.length, 1);
 });
 
+test("each code and category has at most one hierarchy parent", () => {
+    const messages = [1, 2, 3, 4].map(number => ({
+        id: `message-${number}`,
+        originalText: `sleep evidence ${number}`
+    }));
+    const analysis = validateAutomaticCaseAnalysis({
+        codes: messages.map((message, index) => ({
+            label: `Sleep ${index + 1}`,
+            rationale: "One supported sleep concept.",
+            meaning_unit_evidence: [{
+                message_id: message.id,
+                exact_text: message.originalText,
+                anchor_expressions: [message.originalText]
+            }]
+        })),
+        categories: [{
+            label: "Sleep timing",
+            rationale: "Related timing codes.",
+            code_numbers: [1, 2]
+        }, {
+            label: "Sleep pattern",
+            rationale: "Overlapping code assignment.",
+            code_numbers: [1, 3]
+        }, {
+            label: "Sleep context",
+            rationale: "Related context codes.",
+            code_numbers: [3, 4]
+        }],
+        themes: [{
+            label: "Timing shapes the sleep experience",
+            rationale: "A patterned relationship.",
+            category_numbers: [1, 2]
+        }, {
+            label: "Context shapes the sleep experience",
+            rationale: "An overlapping category assignment.",
+            category_numbers: [1, 2]
+        }],
+        case_interpretation: "A bounded hierarchy test."
+    }, messages);
+
+    assert.equal(analysis.categories.length, 2);
+    assert.match(
+        analysis.rejectedCategoryAssignments[0].reason,
+        /at most one category parent/
+    );
+    assert.equal(analysis.themes.length, 1);
+    assert.match(
+        analysis.rejectedThemeAssignments[0].reason,
+        /at most one theme parent/
+    );
+});
+
 test("themes fail when their categories do not form a patterned meaning", () => {
     const analysis = {
         codes: [
