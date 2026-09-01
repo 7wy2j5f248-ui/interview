@@ -3,13 +3,16 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
     ADVANCED_PRELIMINARY_ANALYSIS_VERSION,
-    ADVANCED_PRELIMINARY_MODEL,
     ADVANCED_PRELIMINARY_PROMPT_VERSION,
     ADVANCED_PRELIMINARY_REASONING_EFFORT,
     ADVANCED_PRELIMINARY_STOP_LAYER,
     generateAdvancedPreliminaryAnalysis,
     validateAdvancedPreliminaryAnalysis
 } from "../server/advancedPreliminaryAnalysis.js";
+import {
+    createAnalysisProviderClient,
+    publicAnalysisProviderCatalog
+} from "../server/analysisProvider.js";
 import {
     configuredStage1DefaultModel,
     configuredStage1Models
@@ -146,7 +149,8 @@ test("Stage 1 performs one fresh model call from the original transcript only", 
     const result = await generateAdvancedPreliminaryAnalysis(
         openaiClient,
         messages,
-        { projectName: "Sleeping habits", researchTopic: "Sleeping habits" }
+        { projectName: "Sleeping habits", researchTopic: "Sleeping habits" },
+        { model: "gpt-5.6-sol" }
     );
     assert.equal(calls.length, 1);
     assert.match(calls[0].input[1].content, /Original participant transcript/);
@@ -160,11 +164,10 @@ test("Stage 1 performs one fresh model call from the original transcript only", 
 });
 
 test("Phase 1 is versioned, stronger-model capable, and completes tentative themes", async () => {
-    assert.equal(ADVANCED_PRELIMINARY_MODEL, "gpt-5.6-sol");
     assert.equal(ADVANCED_PRELIMINARY_REASONING_EFFORT, "high");
     assert.equal(ADVANCED_PRELIMINARY_STOP_LAYER, "preliminary_tentative_themes");
-    assert.match(ADVANCED_PRELIMINARY_ANALYSIS_VERSION, /v3-fresh-single-pass-complete/);
-    assert.match(ADVANCED_PRELIMINARY_PROMPT_VERSION, /v3-transcript-only-single-pass/);
+    assert.match(ADVANCED_PRELIMINARY_ANALYSIS_VERSION, /v4-researcher-controlled-independent/);
+    assert.match(ADVANCED_PRELIMINARY_PROMPT_VERSION, /v4-explicit-run-contract/);
     const worker = await source("server/advancedPreliminaryAnalysis.js");
     assert.match(worker, /Meaning Units → Preliminary Codes → Preliminary Categories → Preliminary Tentative Themes/);
     assert.match(worker, /Relationships are many-to-many/);
@@ -177,6 +180,33 @@ test("Phase 1 is versioned, stronger-model capable, and completes tentative them
     assert.doesNotMatch(worker, /sharedVocabulary/);
 });
 
+test("analysis providers are server-configured and never expose credentials", () => {
+    const environment = {
+        OPENAI_API_KEY: "server-secret",
+        ANALYSIS_PROVIDER_CONFIG_JSON: JSON.stringify([{
+            id: "second-provider",
+            label: "Second Provider",
+            apiKeyEnvironmentVariable: "SECOND_PROVIDER_KEY",
+            baseURL: "https://provider.example/v1"
+        }]),
+        SECOND_PROVIDER_KEY: "second-server-secret"
+    };
+    const catalog = publicAnalysisProviderCatalog(environment);
+    assert.deepEqual(catalog.map(provider => provider.id), ["openai", "second-provider"]);
+    assert.equal(catalog.every(provider => provider.configured), true);
+    assert.doesNotMatch(JSON.stringify(catalog), /server-secret/);
+
+    const constructed = [];
+    class FakeClient {
+        constructor(options) { constructed.push(options); }
+    }
+    createAnalysisProviderClient("second-provider", environment, FakeClient);
+    assert.deepEqual(constructed, [{
+        apiKey: "second-server-secret",
+        baseURL: "https://provider.example/v1"
+    }]);
+});
+
 test("model suggestions are server-configurable without constraining manual model entry", () => {
     const configured = configuredStage1Models({
         ADVANCED_PRELIMINARY_ANALYSIS_MODELS: "gpt-5.6-sol,gpt-5.5,gpt-5.6-sol"
@@ -187,20 +217,24 @@ test("model suggestions are server-configurable without constraining manual mode
     }), "gpt-5.5");
 });
 
-test("database change scopes Phase 1, stores tentative themes, and preserves source data", async () => {
+test("database execution contract creates a fresh run without legacy analysis dependencies", async () => {
     const migration = await source(
-        "supabase/migrations/20260901122121_complete_preliminary_case_reports.sql"
+        "supabase/migrations/20260901160500_restore_researcher_execution_contract.sql"
     );
-    assert.match(migration, /create_stage1_meaning_unit_run/);
+    assert.match(migration, /create_fresh_independent_analysis_run/);
+    assert.match(migration, /preview_fresh_independent_analysis_run/);
+    assert.match(migration, /cancel_advanced_preliminary_analysis_run/);
+    assert.match(migration, /execution_plan_hash/);
+    assert.match(migration, /rules_snapshot/);
     assert.match(migration, /single_project_formally_completed_transcripts/);
     assert.match(migration, /'preliminary_tentative_themes'/);
-    assert.match(migration, /advanced_preliminary_themes/);
-    assert.match(migration, /advanced_preliminary_theme_categories/);
-    assert.match(migration, /drop constraint if exists advanced_preliminary_category_codes_report_id_code_id_key/);
+    assert.match(migration, /join public\.case_code_map/);
+    assert.match(migration, /source_report_id is null/);
     assert.match(migration, /design\.project_id = selected_project\.id/);
-    assert.match(migration, /SLEEPING-HABITS/);
     assert.doesNotMatch(migration, /delete from public\./i);
     assert.doesNotMatch(migration, /update public\.qualitative_case_reports/i);
+    assert.doesNotMatch(migration, /join public\.automatic_case_analysis_jobs/i);
+    assert.doesNotMatch(migration, /join public\.qualitative_case_reports/i);
 });
 
 test("researcher UI exposes the complete one-pass case hierarchy and locks later cross-case layers", async () => {
@@ -217,13 +251,17 @@ test("researcher UI exposes the complete one-pass case hierarchy and locks later
     assert.match(script, /choose Lock workspace and unlock again/);
     assert.match(script, /advancedPreliminaryLockButton/);
     assert.match(script, /sessionStorage\.removeItem\(TOKEN_STORAGE_KEY\)/);
-    assert.match(html, /Phase 2A · Cross-Case Code Refinement — automatic after Phase 1/);
+    assert.match(html, /Phase 2A · Cross-Case Code Refinement — separate researcher-selected operation/);
     assert.match(html, /Phase 2B · Cross-Case Category Refinement — locked/);
     assert.match(html, /Phase 2C · Cross-Case Theme Development — locked/);
     assert.match(html, /Meaning Units →[\s\S]*Codes → Categories → Themes/);
-    assert.match(html, /Rejected GPT-5\.1[\s\S]*is not used, audited, repaired, or supplied to the new model/);
-    assert.match(html, /without[\s\S]*a per-case approval bottleneck/);
+    assert.match(html, /Earlier analytical[\s\S]*never silently used, audited, repaired/);
+    assert.match(html, /without a per-case approval[\s\S]*bottleneck/);
     assert.match(html, /advancedPreliminaryModel/);
+    assert.match(html, /advancedPreliminaryProvider/);
+    assert.match(html, /Preview exact execution plan/);
+    assert.match(html, /Start exactly this plan/);
+    assert.match(html, /Stop active run/);
     assert.match(html, /list="advancedPreliminaryModelSuggestions"/);
     assert.match(html, /Enter any exact model identifier/);
     assert.match(html, /never silently replaced/);
@@ -234,9 +272,13 @@ test("researcher UI exposes the complete one-pass case hierarchy and locks later
     assert.match(access, /workspace\.hidden = false/);
     assert.match(vercel, /"source": "\/researcher\.html"[\s\S]*"destination": "\/staged-analysis\.html"[\s\S]*"permanent": false/);
     assert.match(script, /payload\.availableModels/);
+    assert.match(script, /payload\.availableProviders/);
     assert.match(script, /modelSelect\.value\.trim\(\)/);
-    assert.match(script, /Keep every manually typed/);
+    assert.doesNotMatch(script, /payload\.defaultModel/);
     assert.match(script, /modelSelect\.disabled = active/);
+    assert.match(script, /action: "preflight"/);
+    assert.match(script, /executionPlanHash/);
+    assert.match(script, /action: "cancel"/);
     assert.match(script, /Inspect complete case report/);
     assert.match(script, /Stage 1 annotated transcript/);
     assert.match(script, /meaningUnitAnnotation/);
@@ -255,7 +297,21 @@ test("researcher UI exposes the complete one-pass case hierarchy and locks later
     assert.match(dashboard, /configuredStage1Models/);
     assert.match(dashboard, /probeAdvancedPreliminaryModel/);
     assert.doesNotMatch(dashboard, /models\.includes\(requestedModel\)/);
-    assert.match(dashboard, /normalizeOpenAIModel\(req\.body\.model\)/);
+    assert.match(dashboard, /normalizeAnalysisModel\(req\.body\?\.model\)/);
+    assert.match(dashboard, /createAnalysisProviderClient\(plan\.provider\)/);
+    assert.match(dashboard, /execution plan changed or was not explicitly confirmed/i);
+    assert.doesNotMatch(dashboard, /scheduleStagedAnalysis\(req\);\s*return \{ jobId/);
     assert.match(dashboard, /Requested model/);
     assert.match(dashboard, /Exact source text/);
+});
+
+test("ordinary design reads and Stage 1 claims cannot silently buy translation or cross-case work", async () => {
+    const loadDesign = await source("api/loadDesign.js");
+    const stage1 = await source("server/advancedPreliminaryAnalysis.js");
+    const endpoint = await source("api/automatic-analysis.js");
+    assert.doesNotMatch(loadDesign, /scheduleStagedAnalysis/);
+    assert.doesNotMatch(loadDesign, /scheduleTranscriptTranslationBackfill/);
+    assert.doesNotMatch(stage1, /ensureEnglishTranslations/);
+    assert.doesNotMatch(endpoint, /processNextCrossCaseCodeRefinement/);
+    assert.match(endpoint, /explicitly_authorized_run_continuation/);
 });

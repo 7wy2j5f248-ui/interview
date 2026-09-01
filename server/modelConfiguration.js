@@ -23,3 +23,10 @@ export function normalizeOpenAIModel(
 
     return candidate;
 }
+
+export function normalizeAnalysisModel(value) {
+    if (typeof value !== "string" || !value.trim()) {
+        throw new Error("An exact researcher-selected analysis model ID is required.");
+    }
+    return normalizeOpenAIModel(value, value.trim());
+}

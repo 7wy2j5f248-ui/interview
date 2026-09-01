@@ -10,9 +10,6 @@ import {
     processNextAdvancedPreliminaryAnalysis
 } from "../server/advancedPreliminaryAnalysis.js";
 import {
-    processNextCrossCaseCodeRefinement
-} from "../server/crossCaseCodeRefinement.js";
-import {
     continueTranscriptTranslation,
     processTranscriptTranslation,
     transcriptTranslationBaseUrl,
@@ -27,27 +24,15 @@ export const config = { maxDuration: 300 };
 async function processStagedAndContinue(req) {
     const supabaseUrl = process.env.SUPABASE_URL;
     const secretKey = process.env.SUPABASE_SECRET_KEY;
-    const openaiKey = process.env.OPENAI_API_KEY;
 
-    if (!supabaseUrl || !secretKey || !openaiKey) {
+    if (!supabaseUrl || !secretKey) {
         throw new Error("Staged-analysis configuration is incomplete.");
     }
 
     const supabaseClient = createClient(supabaseUrl, secretKey, {
         auth: { persistSession: false, autoRefreshToken: false }
     });
-    const openaiClient = new OpenAI({ apiKey: openaiKey });
-    let result = await processNextAdvancedPreliminaryAnalysis(
-        supabaseClient,
-        openaiClient
-    );
-
-    if (!result.claimed) {
-        result = await processNextCrossCaseCodeRefinement(
-            supabaseClient,
-            openaiClient
-        );
-    }
+    const result = await processNextAdvancedPreliminaryAnalysis(supabaseClient);
 
     if (result.claimed) {
         if (!result.completed) {
@@ -92,7 +77,8 @@ export default async function handler(req, res) {
     if (req.query?.view === "advanced-preliminary"
         && (req.method === "GET"
             || (req.method === "POST"
-                && ["start", "mark-legacy"].includes(req.body?.action)))) {
+                && ["preflight", "start", "cancel", "mark-legacy"]
+                    .includes(req.body?.action)))) {
         return handleAdvancedPreliminaryDashboard(req, res);
     }
 
@@ -105,8 +91,8 @@ export default async function handler(req, res) {
         }));
         return res.status(202).json({
             accepted: true,
-            processing: "complete_preliminary_cases_then_cross_case_code_refinement",
-            trigger: "independent_schedule"
+            processing: "fresh_independent_preliminary_case_analysis_only",
+            trigger: "explicitly_authorized_run_continuation"
         });
     }
 
@@ -151,7 +137,7 @@ export default async function handler(req, res) {
 
     return res.status(202).json({
         accepted: true,
-        processing: "complete_preliminary_cases_then_cross_case_code_refinement",
+        processing: "fresh_independent_preliminary_case_analysis_only",
         processingOrder: "earliest_completed_first"
     });
 }

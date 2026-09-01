@@ -84,7 +84,7 @@ test("cross-case refinement requires semantic evidence for an existing shared Co
     assert.equal(unknown.complete, false);
 });
 
-test("Stage 2 schema is automatic, case-grounded, traceable, and stops before Categories", async () => {
+test("Stage 2 schema remains case-grounded and traceable but cannot start automatically", async () => {
     const migration = await source(
         "supabase/migrations/20260901070000_add_automatic_stage2_code_refinement.sql"
     );
@@ -112,8 +112,10 @@ test("Stage 2 schema is automatic, case-grounded, traceable, and stops before Ca
     assert.doesNotMatch(worker, /Stage 2 preliminary-code repair/);
     assert.match(worker, /advanced_preliminary_codes/);
     assert.match(worker, /p_input_tokens: 0/);
-    assert.match(api, /processNextAdvancedPreliminaryAnalysis[\s\S]*processNextCrossCaseCodeRefinement/);
-    assert.match(html, /without[\s\S]*a per-case approval bottleneck/);
+    assert.match(api, /processNextAdvancedPreliminaryAnalysis/);
+    assert.doesNotMatch(api, /processNextCrossCaseCodeRefinement/);
+    assert.match(html, /separate researcher-selected operation/);
+    assert.match(html, /without a per-case approval[\s\S]*bottleneck/);
     assert.match(html, /Phase 2B · Cross-Case Category Refinement — locked/);
     assert.match(html, /Phase 2C · Cross-Case Theme Development — locked/);
     assert.match(dashboard, /Case ID/);

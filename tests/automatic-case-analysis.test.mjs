@@ -874,7 +874,7 @@ test("historical FIFO case pipeline remains preserved but is no longer triggered
     assert.match(chat, /scheduleCompletedTranscriptTranslation/);
     const design = await readFile(new URL("../api/loadDesign.js", import.meta.url), "utf8");
     assert.doesNotMatch(design, /scheduleAutomaticCaseAnalysis/);
-    assert.match(design, /scheduleStagedAnalysis/);
+    assert.doesNotMatch(design, /scheduleStagedAnalysis/);
 });
 
 test("future reports preserve MU to CO to CA to TH lineage and unsynthesized findings", async () => {
@@ -1234,7 +1234,7 @@ test("historical translations run from a durable queue independent of analysis",
     assert.match(worker, /ensureEnglishTranslations/);
     assert.match(endpoint, /translation_independent_from_case_analysis/);
     assert.match(endpoint, /req\.body\?\.worker === "translation"/);
-    assert.match(loadDesign, /scheduleTranscriptTranslationBackfill/);
+    assert.doesNotMatch(loadDesign, /scheduleTranscriptTranslationBackfill/);
 });
 
 test("new English demographics replace old display values without losing provenance", async () => {

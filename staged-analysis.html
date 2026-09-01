@@ -147,8 +147,9 @@
             preliminary Codes. Later cross-case Category and Theme stages remain locked.
         </p>
         <p>
-            Original transcripts and translations remain preserved. Rejected GPT-5.1
-            analysis is not used, audited, repaired, or supplied to the new model.
+            Original completed transcripts are the authoritative source. Earlier analytical
+            outputs are preserved as history but are never silently used, audited, repaired,
+            continued, or supplied to a newly selected model.
         </p>
         <div id="automaticAnalysisTokenGate">
             <label>
@@ -168,26 +169,35 @@
                 <h3 id="advancedPreliminaryHeading">Phase 1 · Complete Preliminary Case-Based Analysis</h3>
                 <p>
                     Each completed Sleeping habits transcript is read independently.
-                    One GPT-5.6 call produces the complete case-grounded chain:
+                    One call to the researcher-selected provider and exact model produces the complete case-grounded chain:
                     Meaning Units, preliminary Codes, preliminary Categories, and
                     preliminary Tentative Themes. No earlier analysis is an input.
                 </p>
                 <ol class="automaticReanalysisPanel" aria-label="Staged qualitative analysis workflow">
                     <li><strong>Phase 1 · Independent complete preliminary case reports</strong> — available now</li>
-                    <li><button type="button" disabled>Phase 2A · Cross-Case Code Refinement — automatic after Phase 1</button></li>
+                    <li><button type="button" disabled>Phase 2A · Cross-Case Code Refinement — separate researcher-selected operation</button></li>
                     <li><button type="button" disabled>Phase 2B · Cross-Case Category Refinement — locked</button></li>
                     <li><button type="button" disabled>Phase 2C · Cross-Case Theme Development — locked</button></li>
                 </ol>
                 <p class="muted">
-                    The full preliminary case reports and refined-Code output run without
-                    a per-case approval bottleneck. Researchers inspect completed results.
+                    A reviewed run may continue case by case without a per-case approval
+                    bottleneck. Cross-case work never starts automatically.
+                </p>
+                <label for="advancedPreliminaryProvider">
+                    Analysis provider
+                    <select id="advancedPreliminaryProvider" aria-describedby="advancedPreliminaryProviderHelp">
+                        <option value="">Choose a provider</option>
+                    </select>
+                </label>
+                <p id="advancedPreliminaryProviderHelp" class="muted">
+                    Only server-configured providers appear. Credentials remain server-side and are never shown here.
                 </p>
                 <label for="advancedPreliminaryModel">
                     Preliminary case-analysis model
                     <input id="advancedPreliminaryModel" type="text"
                         list="advancedPreliminaryModelSuggestions"
                         autocomplete="off" spellcheck="false"
-                        placeholder="Enter an exact model ID, for example gpt-5.6-sol"
+                        placeholder="Enter the provider's exact model ID"
                         aria-describedby="advancedPreliminaryModelHelp">
                     <datalist id="advancedPreliminaryModelSuggestions"></datalist>
                 </label>
@@ -198,11 +208,14 @@
                     resolved model identifiers are recorded permanently in provenance.
                 </p>
                 <div class="actionRow">
-                    <button id="advancedPreliminaryStartButton" type="button">Start independent preliminary case analysis</button>
+                    <button id="advancedPreliminaryStartButton" type="button">Preview exact execution plan</button>
+                    <button id="advancedPreliminaryExecuteButton" type="button" hidden disabled>Start exactly this plan</button>
+                    <button id="advancedPreliminaryCancelButton" type="button" hidden disabled>Stop active run</button>
                     <button id="advancedPreliminaryRefreshButton" type="button">Refresh preliminary run</button>
                     <button id="advancedPreliminaryDownloadButton" type="button" disabled>Download preliminary-analysis provenance CSV</button>
                     <button id="advancedPreliminaryLockButton" type="button">Lock analysis access</button>
                 </div>
+                <div id="advancedPreliminaryExecutionPlan" aria-live="polite"></div>
                 <p id="advancedPreliminaryStatus" class="automaticReviewScopeSummary" role="status">
                     Loading Stage 1 access…
                 </p>
@@ -240,7 +253,7 @@
                 <section id="crossCaseCodeRefinement" class="automaticReanalysisPanel" aria-labelledby="crossCaseCodeHeading">
                     <h3 id="crossCaseCodeHeading">Phase 2A · Cross-Case Code Refinement</h3>
                     <p id="crossCaseCodeStatus" class="automaticReviewScopeSummary">
-                        Waiting for Stage 1 to finish. Stage 2 will start automatically.
+                        No cross-case operation is active. It requires a separate researcher-selected operation.
                     </p>
                     <p id="crossCaseCodeProvenance" class="muted"></p>
                     <div class="actionRow">

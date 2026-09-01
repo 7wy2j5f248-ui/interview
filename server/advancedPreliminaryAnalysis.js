@@ -1,20 +1,22 @@
-import { ensureEnglishTranslations } from "./messageTranslation.js";
 import {
     isConversationalCourtesy,
     prepareParticipantMessages
 } from "./stagedTranscript.js";
 import { loadParticipantCodeMap } from "./participantCodes.js";
-import { normalizeOpenAIModel } from "./modelConfiguration.js";
+import { normalizeAnalysisModel } from "./modelConfiguration.js";
+import { createAnalysisProviderClient } from "./analysisProvider.js";
 
-export const ADVANCED_PRELIMINARY_PROVIDER = "openai";
-export const ADVANCED_PRELIMINARY_MODEL = "gpt-5.6-sol";
 export const ADVANCED_PRELIMINARY_REASONING_EFFORT = "high";
 export const ADVANCED_PRELIMINARY_ANALYSIS_VERSION =
-    "preliminary-case-analysis-v3-fresh-single-pass-complete";
+    "preliminary-case-analysis-v4-researcher-controlled-independent";
 export const ADVANCED_PRELIMINARY_PROMPT_VERSION =
-    "preliminary-case-analysis-prompt-v3-transcript-only-single-pass";
+    "preliminary-case-analysis-prompt-v4-explicit-run-contract";
 export const ADVANCED_PRELIMINARY_STOP_LAYER = "preliminary_tentative_themes";
 export const SLEEPING_HABITS_PROJECT_CODE = "SLEEPING-HABITS";
+export const FRESH_ANALYSIS_OPERATION = "fresh_independent_analysis";
+export const AUTHORITATIVE_SOURCE = "original_completed_transcripts";
+export const LEGACY_ANALYSIS_INPUT = "excluded";
+export const EXECUTION_CONTRACT_VERSION = "researcher-operation-contract-v1";
 
 const analysisSchema = {
     type: "object",
@@ -305,9 +307,15 @@ function transcriptForModel(messages) {
     })));
 }
 
-function analysisInstruction({ projectName, researchTopic }) {
+function analysisInstruction({
+    projectName,
+    researchTopic,
+    operationType = FRESH_ANALYSIS_OPERATION,
+    rulesSnapshot = null
+}) {
     const scope = researchTopic || "Sleeping habits";
     return [
+        `Execution operation: ${operationType}. Authoritative source: ${AUTHORITATIVE_SOURCE}. Legacy analytical inputs: ${LEGACY_ANALYSIS_INPUT}.`,
         "Perform one complete Preliminary Case-Based Analysis for exactly one completed interview independently from its original transcript. No prior meaning unit, code, category, theme, report, model output, corpus vocabulary, or codebook is supplied or permitted as analytical input.",
         `Research project: ${projectName || "Historical sleeping-habits dataset"}. Research topic/scope: ${scope}. Include an activity only when the participant or transcript makes its connection to the research topic explicit.`,
         "Complete this case upward in this order: Transcript → Meaning Units → Preliminary Codes → Preliminary Categories → Preliminary Tentative Themes. Do not compare this participant with any other case. Do not use frequencies, refined cross-case concepts, or a predetermined global codebook.",
@@ -319,7 +327,10 @@ function analysisInstruction({ projectName, researchTopic }) {
         "Create case-specific Preliminary Categories as broader descriptive groupings of supported codes. Link them by code_numbers. Relationships are many-to-many: a code may contribute to more than one justified category. Do not force unrelated codes together and do not require exclusive or unshared children.",
         "Create Preliminary Tentative Themes that express the patterned meaning supported by the case's categories. Link them by category_numbers. Relationships are many-to-many. A tentative theme is not a cross-case final theme and must not claim prevalence beyond this participant.",
         "Use English for code, category, tentative-theme, definition, rationale, and case-summary text. Preserve exact_source_text in the original transcript language. If a higher layer is genuinely unsupported, leave that array empty and explain the unsynthesized result in case_summary; never invent support merely to fill a form.",
-        "Return the complete structured case report. This is the only AI analysis pass for this case. The application assigns stable MU, CO, CA, and TH positions and performs only local deterministic checks of exact transcript spans and relationship references. No previous analysis, second AI audit, repair call, or human approval gate will be used."
+        "Return the complete structured case report. This is the only AI analysis pass for this case. The application assigns stable MU, CO, CA, and TH positions and performs only local deterministic checks of exact transcript spans and relationship references. No previous analysis, second AI audit, repair call, or human approval gate will be used.",
+        rulesSnapshot
+            ? `Researcher-selected rules frozen for this run (JSON):\n${JSON.stringify(rulesSnapshot)}`
+            : "No additional researcher-selected rule snapshot was supplied."
     ].join("\n\n");
 }
 
@@ -340,16 +351,16 @@ function responseOptions(model, reasoningEffort, schema, name, input) {
 }
 
 export async function probeAdvancedPreliminaryModel(
-    openaiClient,
+    analysisClient,
     {
-        model = process.env.ADVANCED_PRELIMINARY_ANALYSIS_MODEL
-            || ADVANCED_PRELIMINARY_MODEL,
+        provider,
+        model,
         reasoningEffort = process.env.ADVANCED_PRELIMINARY_REASONING_EFFORT
             || ADVANCED_PRELIMINARY_REASONING_EFFORT
     } = {}
 ) {
-    const normalizedModel = normalizeOpenAIModel(model);
-    const response = await openaiClient.responses.create(responseOptions(
+    const normalizedModel = normalizeAnalysisModel(model);
+    const response = await analysisClient.responses.create(responseOptions(
         normalizedModel,
         reasoningEffort,
         modelProbeSchema,
@@ -364,7 +375,7 @@ export async function probeAdvancedPreliminaryModel(
         throw new Error("The configured advanced model failed its capability probe.");
     }
     return {
-        provider: ADVANCED_PRELIMINARY_PROVIDER,
+        provider,
         model: normalizedModel,
         resolvedModel: normalizedText(response?.model) || normalizedModel,
         reasoningEffort
@@ -372,14 +383,15 @@ export async function probeAdvancedPreliminaryModel(
 }
 
 export async function generateAdvancedPreliminaryAnalysis(
-    openaiClient,
+    analysisClient,
     messages,
     context,
     {
-        model = ADVANCED_PRELIMINARY_MODEL,
+        model,
         reasoningEffort = ADVANCED_PRELIMINARY_REASONING_EFFORT
     } = {}
 ) {
+    const normalizedModel = normalizeAnalysisModel(model);
     const input = [
         { role: "system", content: analysisInstruction(context) },
         {
@@ -387,8 +399,8 @@ export async function generateAdvancedPreliminaryAnalysis(
             content: `Original participant transcript (JSON):\n${transcriptForModel(messages)}`
         }
     ];
-    const response = await openaiClient.responses.create(responseOptions(
-        model,
+    const response = await analysisClient.responses.create(responseOptions(
+        normalizedModel,
         reasoningEffort,
         analysisSchema,
         "advanced_preliminary_case_analysis",
@@ -415,14 +427,14 @@ export async function generateAdvancedPreliminaryAnalysis(
             codeCount: analysis.codes.length,
             categoryCount: analysis.categories.length,
             tentativeThemeCount: analysis.tentativeThemes.length,
-            overallSummary: "Generated independently from the original transcript in one 5.6 analysis pass. No prior-model analysis, AI audit, repair call, or per-case approval was used."
+            overallSummary: `Generated independently from the original transcript in one ${normalizedModel} analysis pass. No prior-model analysis, AI audit, repair call, or per-case approval was used.`
         },
         inputTokenCount: response?.usage?.input_tokens || null,
         outputTokenCount: response?.usage?.output_tokens || null
     };
 }
 
-async function loadClaimedTranscript(supabase, openaiClient, claim) {
+async function loadClaimedTranscript(supabase, claim) {
     const [{ data: session, error: sessionError }, messagesResult, projectResult] =
         await Promise.all([
             supabase
@@ -453,12 +465,6 @@ async function loadClaimedTranscript(supabase, openaiClient, claim) {
         throw new Error("The research-project topic could not be loaded.");
     }
     const sourceRows = messagesResult.data || [];
-    await ensureEnglishTranslations(
-        supabase,
-        openaiClient,
-        sourceRows,
-        { concurrency: 4, failOnError: true }
-    );
     const prepared = prepareParticipantMessages(sourceRows).messages;
     if (!prepared.length) {
         throw new Error("The completed transcript has no participant evidence.");
@@ -475,7 +481,9 @@ async function loadClaimedTranscript(supabase, openaiClient, claim) {
             projectName: projectResult.data?.project_name
                 || "Historical sleeping-habits dataset",
             researchTopic: projectResult.data?.research_topic
-                || "Sleeping habits"
+                || "Sleeping habits",
+            operationType: claim.operation_type,
+            rulesSnapshot: claim.rules_snapshot || null
         }
     };
 }
@@ -496,7 +504,10 @@ async function failJob(supabase, jobId, error, retryable = false) {
 
 export async function processNextAdvancedPreliminaryAnalysis(
     supabase,
-    openaiClient
+    {
+        providerClientFactory = provider =>
+            createAnalysisProviderClient(provider).client
+    } = {}
 ) {
     const { data, error } = await supabase.rpc(
         "claim_next_advanced_preliminary_analysis"
@@ -510,9 +521,10 @@ export async function processNextAdvancedPreliminaryAnalysis(
     if (!claim) return { claimed: false };
 
     try {
-        const source = await loadClaimedTranscript(supabase, openaiClient, claim);
+        const analysisClient = providerClientFactory(claim.provider);
+        const source = await loadClaimedTranscript(supabase, claim);
         const analysis = await generateAdvancedPreliminaryAnalysis(
-            openaiClient,
+            analysisClient,
             source.messages,
             source.context,
             {

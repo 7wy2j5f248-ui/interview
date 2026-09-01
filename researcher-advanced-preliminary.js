@@ -21,9 +21,13 @@
     const stage2Provenance = document.getElementById("crossCaseCodeProvenance");
     const stage2Host = document.getElementById("crossCaseCodeTable");
     const stage2DownloadButton = document.getElementById("crossCaseCodeDownloadButton");
+    const providerSelect = document.getElementById("advancedPreliminaryProvider");
     const modelSelect = document.getElementById("advancedPreliminaryModel");
     const modelSuggestions = document.getElementById("advancedPreliminaryModelSuggestions");
     const startButton = document.getElementById("advancedPreliminaryStartButton");
+    const executionPlanHost = document.getElementById("advancedPreliminaryExecutionPlan");
+    const executeButton = document.getElementById("advancedPreliminaryExecuteButton");
+    const cancelButton = document.getElementById("advancedPreliminaryCancelButton");
     const refreshButton = document.getElementById("advancedPreliminaryRefreshButton");
     const downloadButton = document.getElementById("advancedPreliminaryDownloadButton");
     const lockButton = document.getElementById("advancedPreliminaryLockButton");
@@ -43,6 +47,7 @@
     let page = 1;
     let loading = false;
     let refreshTimer = null;
+    let preparedExecution = null;
 
     function token() {
         return sessionStorage.getItem(TOKEN_STORAGE_KEY) || "";
@@ -116,11 +121,76 @@
             option.value = model;
             modelSuggestions?.appendChild(option);
         });
-        // Suggestions never constrain the researcher. Keep every manually typed
-        // model ID intact and only supply a default before the field is edited.
-        if (!currentValue) {
-            modelSelect.value = payload.defaultModel || models[0] || "";
-        }
+        if (currentValue) modelSelect.value = currentValue;
+    }
+
+    function renderProviders() {
+        const currentValue = providerSelect.value;
+        providerSelect.replaceChildren();
+        const placeholder = document.createElement("option");
+        placeholder.value = "";
+        placeholder.textContent = "Choose a provider";
+        providerSelect.appendChild(placeholder);
+        (payload.availableProviders || []).forEach(provider => {
+            const option = document.createElement("option");
+            option.value = provider.id;
+            option.textContent = `${provider.label}${provider.configured ? "" : " (not configured)"}`;
+            option.disabled = !provider.configured;
+            providerSelect.appendChild(option);
+        });
+        if (currentValue) providerSelect.value = currentValue;
+    }
+
+    function invalidateExecutionPlan() {
+        preparedExecution = null;
+        executionPlanHost.replaceChildren();
+        executeButton.hidden = true;
+        executeButton.disabled = true;
+        startButton.disabled = !providerSelect.value || !modelSelect.value.trim();
+    }
+
+    function renderExecutionPlan(result) {
+        const plan = result.plan;
+        preparedExecution = {
+            operation: plan.operation,
+            provider: plan.provider,
+            model: plan.model,
+            executionPlanHash: result.executionPlanHash
+        };
+        const panel = document.createElement("section");
+        panel.className = "automaticReanalysisPanel";
+        panel.appendChild(heading("Exact execution plan — review before spending"));
+        const items = [
+            ["Operation", plan.operation],
+            ["Provider and exact model", `${plan.provider} / ${plan.model}`],
+            ["Authoritative source", plan.authoritativeSource],
+            ["Eligible completed transcripts", plan.sourceCaseCount],
+            ["Participant source messages", plan.participantMessageCount],
+            ["Stored translations available", plan.storedTranslationCount],
+            ["Stored translations missing", plan.missingStoredTranslationCount],
+            ["Earlier analytical outputs used", plan.legacyAnalyticalOutputsUsed ? "yes" : "no"],
+            ["Existing outputs changed", plan.existingOutputsAffected],
+            ["New output location", plan.newOutputs],
+            ["Paid analysis calls per case", plan.analysisCallsPerCase],
+            ["Maximum paid analysis calls", plan.maximumAnalysisCalls],
+            ["Automatic continuation of this run", plan.automaticContinuation ? "yes" : "no"],
+            ["Automatic cross-case analysis", plan.automaticCrossCaseAnalysis ? "yes" : "no"],
+            ["Stop layer", plan.stopLayer],
+            ["Rules snapshot", JSON.stringify(plan.analysisRules)],
+            ["Execution plan hash", result.executionPlanHash]
+        ];
+        const list = document.createElement("dl");
+        items.forEach(([label, value]) => {
+            const term = document.createElement("dt");
+            term.textContent = label;
+            const description = document.createElement("dd");
+            description.textContent = String(value ?? "—");
+            list.append(term, description);
+        });
+        panel.appendChild(list);
+        executionPlanHost.replaceChildren(panel);
+        executeButton.hidden = false;
+        executeButton.disabled = false;
     }
 
     function render() {
@@ -129,6 +199,7 @@
         legacyHost?.replaceChildren();
         stage2Host?.replaceChildren();
         renderModels();
+        renderProviders();
         const run = payload.run;
         [
             ["advancedPreliminaryPending", run?.pending_count || 0],
@@ -142,9 +213,12 @@
 
         if (!run) {
             provenance.textContent = "No independent preliminary case-analysis run has been created yet.";
-            setStatus("Enter an exact model ID, then start the complete preliminary case analysis for the Sleeping habits project.");
-            startButton.disabled = !modelSelect.value;
+            setStatus("Choose an operation provider and exact model ID, then preview the complete execution plan. No model call is made during preview.");
+            startButton.disabled = !providerSelect.value || !modelSelect.value.trim();
+            providerSelect.disabled = false;
             modelSelect.disabled = false;
+            cancelButton.hidden = true;
+            cancelButton.disabled = true;
             downloadButton.disabled = true;
             previousButton.disabled = true;
             nextButton.disabled = true;
@@ -162,10 +236,19 @@
             `analysis ${run.analysis_version}`,
             `prompt ${run.prompt_version}`,
             `stop layer ${run.stop_layer}`,
+            `operation ${run.operation_type || "historical contract"}`,
+            `authoritative source ${run.authoritative_source || "historical contract"}`,
+            `legacy analysis input ${run.legacy_analysis_input || "historical contract"}`,
+            `contract ${run.execution_contract_version || "historical contract"}`,
+            `plan ${run.execution_plan_hash || "historical unverified plan"}`,
+            `maximum calls ${run.maximum_analysis_calls ?? run.source_case_count}`,
             `model verified ${run.model_verified_at || "not verified"}`
         ].join(" · ");
-        startButton.disabled = active || !modelSelect.value;
+        startButton.disabled = active || !providerSelect.value || !modelSelect.value.trim();
+        providerSelect.disabled = active;
         modelSelect.disabled = active;
+        cancelButton.hidden = !active;
+        cancelButton.disabled = !active;
         downloadButton.disabled = run.completed_count < 1;
         setStatus(
             `Stage 1 run ${run.run_number}: ${run.status.replaceAll("_", " ")}. `
@@ -243,7 +326,7 @@
         const stage2 = payload.stage2 || { run: null, mappings: [] };
         if (!stage2.run) {
             stage2Status.textContent =
-                "Waiting for Stage 1 to finish. Stage 2 will start automatically without a researcher approval gate.";
+                "No cross-case operation is active. It requires a separate researcher-selected operation and will never start automatically from Stage 1.";
             stage2Provenance.textContent =
                 "Categories and Themes remain locked.";
             stage2DownloadButton.disabled = true;
@@ -590,33 +673,85 @@
     }
 
     startButton.addEventListener("click", async () => {
+        const selectedProvider = providerSelect.value;
         const selectedModel = modelSelect.value.trim();
-        if (!selectedModel) return;
-        const confirmed = window.confirm(
-            `Start independent complete preliminary case analysis for all eligible completed Sleeping habits transcripts using ${selectedModel}? `
-            + "Each case is analyzed once from its original transcript into Meaning Units, preliminary Codes, preliminary Categories, and preliminary Tentative Themes. No previous model output, audit call, repair call, or per-case approval is used."
-        );
-        if (!confirmed) return;
+        if (!selectedProvider || !selectedModel) return;
+        invalidateExecutionPlan();
         startButton.disabled = true;
-        modelSelect.disabled = true;
-        setStatus(`Verifying ${selectedModel} against the production API…`);
+        setStatus("Preparing an exact source, rules, provider, model, and maximum-call plan. This preview makes no model call.");
         try {
             const result = await request(API_PATH, {
                 method: "POST",
-                body: JSON.stringify({ action: "start", model: selectedModel })
+                body: JSON.stringify({
+                    action: "preflight",
+                    operation: "fresh_independent_analysis",
+                    provider: selectedProvider,
+                    model: selectedModel
+                })
             });
+            renderExecutionPlan(result);
+            setStatus("Execution plan prepared. Review every field, then choose Start exactly this plan if it is correct.");
+        } catch (error) {
+            setStatus(error.message, true);
+            invalidateExecutionPlan();
+        }
+    });
+
+    executeButton.addEventListener("click", async () => {
+        if (!preparedExecution) return;
+        executeButton.disabled = true;
+        startButton.disabled = true;
+        providerSelect.disabled = true;
+        modelSelect.disabled = true;
+        setStatus(`Capability-testing ${preparedExecution.provider} / ${preparedExecution.model}, then starting only the reviewed plan…`);
+        try {
+            const result = await request(API_PATH, {
+                method: "POST",
+                body: JSON.stringify({
+                    action: "start",
+                    ...preparedExecution
+                })
+            });
+            preparedExecution = null;
+            executionPlanHost.replaceChildren();
+            executeButton.hidden = true;
             setStatus(
-                `Model verified: ${result.provider} ${result.resolvedModel}, reasoning ${result.reasoningEffort}. `
-                + `The ${result.project.project_name} Stage 1 run is queued in source-completion order and stops at ${result.stopLayer}.`
+                `Started the reviewed plan. Provider ${result.provider}; requested ${result.model}; resolved ${result.resolvedModel}; plan ${result.executionPlanHash}.`
             );
             page = 1;
             await load({ quiet: true });
         } catch (error) {
             setStatus(error.message, true);
-            startButton.disabled = false;
+            providerSelect.disabled = false;
             modelSelect.disabled = false;
+            executeButton.disabled = false;
+            startButton.disabled = false;
         }
     });
+
+    cancelButton.addEventListener("click", async () => {
+        if (!payload.run?.id) return;
+        const reason = window.prompt(
+            `Why should run ${payload.run.run_number} be stopped?`,
+            "Stopped by the researcher."
+        )?.trim();
+        if (!reason) return;
+        cancelButton.disabled = true;
+        setStatus("Stopping the active run and cancelling every uncompleted case…");
+        try {
+            await request(API_PATH, {
+                method: "POST",
+                body: JSON.stringify({ action: "cancel", runId: payload.run.id, reason })
+            });
+            await load({ quiet: true });
+        } catch (error) {
+            setStatus(error.message, true);
+            cancelButton.disabled = false;
+        }
+    });
+
+    providerSelect.addEventListener("change", invalidateExecutionPlan);
+    modelSelect.addEventListener("input", invalidateExecutionPlan);
 
     downloadButton.addEventListener("click", async () => {
         downloadButton.disabled = true;

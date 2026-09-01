@@ -1,21 +1,25 @@
-import OpenAI from "openai";
+import { createHash } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import {
     ADVANCED_PRELIMINARY_ANALYSIS_VERSION,
-    ADVANCED_PRELIMINARY_MODEL,
     ADVANCED_PRELIMINARY_PROMPT_VERSION,
-    ADVANCED_PRELIMINARY_PROVIDER,
     ADVANCED_PRELIMINARY_REASONING_EFFORT,
     ADVANCED_PRELIMINARY_STOP_LAYER,
+    AUTHORITATIVE_SOURCE,
+    EXECUTION_CONTRACT_VERSION,
+    FRESH_ANALYSIS_OPERATION,
+    LEGACY_ANALYSIS_INPUT,
     SLEEPING_HABITS_PROJECT_CODE,
     probeAdvancedPreliminaryModel
 } from "./advancedPreliminaryAnalysis.js";
 import { scheduleStagedAnalysis } from "./stagedAnalysisWorker.js";
+import { configuredStage1Models } from "./analysisModelCatalog.js";
+import { normalizeAnalysisModel } from "./modelConfiguration.js";
 import {
-    configuredStage1DefaultModel,
-    configuredStage1Models
-} from "./analysisModelCatalog.js";
-import { normalizeOpenAIModel } from "./modelConfiguration.js";
+    createAnalysisProviderClient,
+    normalizeAnalysisProviderId,
+    publicAnalysisProviderCatalog
+} from "./analysisProvider.js";
 import { authorizeResearcher } from "./researcherAuth.js";
 
 export const config = { maxDuration: 300 };
@@ -23,15 +27,6 @@ export const config = { maxDuration: 300 };
 const PAGE_SIZE = 50;
 function availableModels() {
     return configuredStage1Models();
-}
-
-function defaultModel(models) {
-    return configuredStage1DefaultModel(models, {
-        ...process.env,
-        ADVANCED_PRELIMINARY_ANALYSIS_MODEL:
-            process.env.ADVANCED_PRELIMINARY_ANALYSIS_MODEL
-            || ADVANCED_PRELIMINARY_MODEL
-    });
 }
 
 function client() {
@@ -51,7 +46,7 @@ async function requireData(query, message) {
 async function latestRun(supabase, requestedRunId = null) {
     let query = supabase
         .from("advanced_preliminary_analysis_runs")
-        .select("id, run_number, status, source_scope, provider, model, resolved_model, reasoning_effort, analysis_version, prompt_version, prior_analysis_role, stop_layer, project_snapshot, source_case_count, pending_count, processing_count, completed_count, failed_count, requested_by, requested_at, model_verified_at, started_at, completed_at, updated_at, last_error");
+        .select("id, run_number, status, source_scope, provider, model, resolved_model, reasoning_effort, analysis_version, prompt_version, prior_analysis_role, stop_layer, project_snapshot, source_case_count, pending_count, processing_count, completed_count, failed_count, requested_by, requested_at, model_verified_at, started_at, completed_at, cancelled_at, cancellation_reason, updated_at, last_error, operation_type, authoritative_source, legacy_analysis_input, execution_contract_version, execution_plan_hash, rules_snapshot, automatic_continuation, maximum_analysis_calls");
     query = requestedRunId
         ? query.eq("id", requestedRunId)
         : query.order("requested_at", { ascending: false }).limit(1);
@@ -130,6 +125,7 @@ async function loadStage2Summary(supabase, stage1RunId) {
 
 async function loadSummary(supabase, req) {
     const models = availableModels();
+    const providers = publicAnalysisProviderCatalog();
     const run = await latestRun(
         supabase,
         typeof req.query?.runId === "string" ? req.query.runId : null
@@ -139,8 +135,9 @@ async function loadSummary(supabase, req) {
         page: 1,
         pageSize: PAGE_SIZE,
         cases: [],
+        availableProviders: providers,
         availableModels: models,
-        defaultModel: defaultModel(models)
+        requiredOperation: FRESH_ANALYSIS_OPERATION
     };
     const page = Math.max(1, Number.parseInt(req.query?.page, 10) || 1);
     const from = (page - 1) * PAGE_SIZE;
@@ -264,8 +261,9 @@ async function loadSummary(supabase, req) {
         run,
         page,
         pageSize: PAGE_SIZE,
+        availableProviders: providers,
         availableModels: models,
-        defaultModel: defaultModel(models),
+        requiredOperation: FRESH_ANALYSIS_OPERATION,
         stage2,
         attentionCount: attentionJobs.length,
         attentionCases: attentionJobs.map(job =>
@@ -283,6 +281,81 @@ async function loadSummary(supabase, req) {
                 themes: themeCount
             }))
     };
+}
+
+function executionPlanHash(plan) {
+    return createHash("sha256").update(JSON.stringify(plan)).digest("hex");
+}
+
+async function buildExecutionPlan(supabase, req) {
+    const operation = typeof req.body?.operation === "string"
+        ? req.body.operation.trim() : "";
+    if (operation !== FRESH_ANALYSIS_OPERATION) {
+        throw Object.assign(
+            new Error("This endpoint only performs a fresh independent analysis. Audit, repair, migration, comparison, and continuation require separate researcher-selected operations."),
+            { status: 400 }
+        );
+    }
+    const provider = normalizeAnalysisProviderId(req.body?.provider);
+    const model = normalizeAnalysisModel(req.body?.model);
+    const providerRecord = publicAnalysisProviderCatalog()
+        .find(candidate => candidate.id === provider);
+    if (!providerRecord?.configured) {
+        throw Object.assign(
+            new Error(`Provider ${provider} is not configured for production analysis.`),
+            { status: 422 }
+        );
+    }
+    const { data: project, error: projectError } = await supabase
+        .from("research_projects")
+        .select("id, project_code, project_name, research_topic")
+        .eq("project_code", SLEEPING_HABITS_PROJECT_CODE)
+        .maybeSingle();
+    if (projectError || !project?.id) {
+        throw Object.assign(
+            new Error("The Sleeping habits research project could not be resolved."),
+            { status: 500 }
+        );
+    }
+    const { data: preview, error: previewError } = await supabase.rpc(
+        "preview_fresh_independent_analysis_run",
+        { p_project_id: project.id }
+    );
+    if (previewError || !preview) {
+        throw Object.assign(
+            new Error("The source and rules execution plan could not be prepared."),
+            { status: 500 }
+        );
+    }
+    const plan = {
+        operation: FRESH_ANALYSIS_OPERATION,
+        provider,
+        model,
+        authoritativeSource: AUTHORITATIVE_SOURCE,
+        legacyAnalyticalOutputsUsed: false,
+        legacyAnalysisInput: LEGACY_ANALYSIS_INPUT,
+        analysisRules: preview.rules_snapshot,
+        project,
+        sourceCaseCount: preview.source_case_count,
+        participantMessageCount: preview.participant_message_count,
+        storedTranslationCount: preview.stored_translation_count,
+        missingStoredTranslationCount: preview.missing_stored_translation_count,
+        analysisCallsPerCase: 1,
+        maximumAnalysisCalls: preview.source_case_count,
+        automaticContinuation: true,
+        automaticCrossCaseAnalysis: false,
+        existingOutputsAffected: "none",
+        newOutputs: "new isolated versioned run",
+        executionContractVersion: EXECUTION_CONTRACT_VERSION,
+        analysisVersion: ADVANCED_PRELIMINARY_ANALYSIS_VERSION,
+        promptVersion: ADVANCED_PRELIMINARY_PROMPT_VERSION,
+        stopLayer: ADVANCED_PRELIMINARY_STOP_LAYER
+    };
+    return { plan, executionPlanHash: executionPlanHash(plan) };
+}
+
+async function previewRun(supabase, req) {
+    return buildExecutionPlan(supabase, req);
 }
 
 async function loadCase(supabase, req) {
@@ -612,53 +685,45 @@ async function downloadStage2Csv(supabase, req, res) {
 }
 
 async function startRun(supabase, req) {
-    const openaiKey = process.env.OPENAI_API_KEY;
-    if (!openaiKey) {
-        throw Object.assign(new Error("The production OpenAI configuration is incomplete."), { status: 500 });
+    const prepared = await buildExecutionPlan(supabase, req);
+    if (req.body?.executionPlanHash !== prepared.executionPlanHash) {
+        throw Object.assign(
+            new Error("The execution plan changed or was not explicitly confirmed. Preview it again before starting."),
+            { status: 409 }
+        );
     }
-    const models = availableModels();
-    const requestedModel = typeof req.body?.model === "string"
-        ? normalizeOpenAIModel(req.body.model)
-        : defaultModel(models);
-    const model = requestedModel;
+    const { plan } = prepared;
     const reasoningEffort = process.env.ADVANCED_PRELIMINARY_REASONING_EFFORT
         || ADVANCED_PRELIMINARY_REASONING_EFFORT;
     let capability;
     try {
+        const configuredProvider = createAnalysisProviderClient(plan.provider);
         capability = await probeAdvancedPreliminaryModel(
-            new OpenAI({ apiKey: openaiKey }),
-            { model, reasoningEffort }
+            configuredProvider.client,
+            { provider: plan.provider, model: plan.model, reasoningEffort }
         );
     } catch (error) {
         console.error("Stage 1 model capability probe failed:", error);
         throw Object.assign(
             new Error(
-                `${model} is not currently available or does not support the required Stage 1 capabilities. Enter another model ID.`
+                `${plan.provider} / ${plan.model} is not currently available or does not support the required Stage 1 capabilities. Enter another exact provider or model ID.`
             ),
             { status: 422 }
         );
     }
-    const { data: project, error: projectError } = await supabase
-        .from("research_projects")
-        .select("id, project_code, project_name, research_topic")
-        .eq("project_code", SLEEPING_HABITS_PROJECT_CODE)
-        .maybeSingle();
-    if (projectError || !project?.id) {
-        throw Object.assign(
-            new Error("The Sleeping habits research project could not be resolved."),
-            { status: 500 }
-        );
-    }
     const { data: runId, error } = await supabase.rpc(
-        "create_stage1_meaning_unit_run",
+        "create_fresh_independent_analysis_run",
         {
-            p_project_id: project.id,
-            p_provider: ADVANCED_PRELIMINARY_PROVIDER,
+            p_project_id: plan.project.id,
+            p_provider: capability.provider,
             p_model: capability.model,
             p_resolved_model: capability.resolvedModel,
             p_reasoning_effort: capability.reasoningEffort,
             p_analysis_version: ADVANCED_PRELIMINARY_ANALYSIS_VERSION,
             p_prompt_version: ADVANCED_PRELIMINARY_PROMPT_VERSION,
+            p_execution_contract_version: EXECUTION_CONTRACT_VERSION,
+            p_execution_plan_hash: prepared.executionPlanHash,
+            p_rules_snapshot: plan.analysisRules,
             p_requested_by: "researcher-dashboard"
         }
     );
@@ -680,9 +745,37 @@ async function startRun(supabase, req) {
         resolvedModel: capability.resolvedModel,
         reasoningEffort: capability.reasoningEffort,
         stopLayer: ADVANCED_PRELIMINARY_STOP_LAYER,
-        project,
+        project: plan.project,
+        operation: plan.operation,
+        executionPlanHash: prepared.executionPlanHash,
         scheduled
     };
+}
+
+async function cancelRun(supabase, req) {
+    const runId = typeof req.body?.runId === "string" ? req.body.runId.trim() : "";
+    const reason = typeof req.body?.reason === "string" ? req.body.reason.trim() : "";
+    if (!runId || !reason) {
+        throw Object.assign(
+            new Error("A run ID and researcher-visible cancellation reason are required."),
+            { status: 400 }
+        );
+    }
+    const { data, error } = await supabase.rpc(
+        "cancel_advanced_preliminary_analysis_run",
+        {
+            p_run_id: runId,
+            p_cancellation_reason: reason,
+            p_cancelled_by: "researcher-dashboard"
+        }
+    );
+    if (error || !data) {
+        throw Object.assign(
+            new Error("The analysis run could not be stopped."),
+            { status: 500 }
+        );
+    }
+    return data;
 }
 
 async function markLegacyCase(supabase, req) {
@@ -712,7 +805,6 @@ async function markLegacyCase(supabase, req) {
             { status: 500 }
         );
     }
-    scheduleStagedAnalysis(req);
     return { jobId, disposition: "legacy_unusable", reason };
 }
 
@@ -741,6 +833,12 @@ export async function handleAdvancedPreliminaryDashboard(req, res) {
         }
         if (req.method === "POST" && req.body?.action === "start") {
             return res.status(202).json(await startRun(supabase, req));
+        }
+        if (req.method === "POST" && req.body?.action === "preflight") {
+            return res.status(200).json(await previewRun(supabase, req));
+        }
+        if (req.method === "POST" && req.body?.action === "cancel") {
+            return res.status(200).json(await cancelRun(supabase, req));
         }
         if (req.method === "POST" && req.body?.action === "mark-legacy") {
             return res.status(200).json(await markLegacyCase(supabase, req));
