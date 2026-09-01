@@ -202,7 +202,7 @@ async function loadCase(supabase, req) {
     if (report.source_report_id) {
         const { data: previousReport } = await supabase
             .from("qualitative_case_reports")
-            .select("id, analysis_version, model, case_interpretation, completed_at")
+            .select("id, analysis_version, model, demographics, case_interpretation, completed_at")
             .eq("id", report.source_report_id)
             .maybeSingle();
         if (previousReport) {

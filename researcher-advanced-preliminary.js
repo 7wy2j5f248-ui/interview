@@ -212,6 +212,128 @@
         return container;
     }
 
+    function codeColorSlot(codeNumber) {
+        const numeric = Number.parseInt(codeNumber, 10);
+        return Number.isFinite(numeric) && numeric > 0
+            ? ((numeric - 1) % 12) + 1
+            : 1;
+    }
+
+    function displayValue(value) {
+        if (value === null || value === undefined || value === "") return "—";
+        if (typeof value === "object") {
+            return Object.entries(value)
+                .filter(([, nested]) => nested !== null && nested !== "")
+                .map(([key, nested]) => `${key.replaceAll("_", " ")}: ${nested}`)
+                .join("; ") || "—";
+        }
+        return String(value).replaceAll("_", " ");
+    }
+
+    function demographicsText(demographics) {
+        return Object.entries(demographics || {})
+            .filter(([, value]) => value !== null && value !== ""
+                && !(typeof value === "object" && !Object.keys(value).length))
+            .map(([key, value]) => `${key.replaceAll("_", " ")}: ${displayValue(value)}`)
+            .join("; ") || "Not recorded";
+    }
+
+    function advancedHighlightedText(message, report, codeById, codeIdsByUnit) {
+        const text = message.Message || "";
+        const highlights = report.meaningUnits
+            .filter(unit => unit.message_id === message.id)
+            .map(unit => ({
+                ...unit,
+                codes: [...new Set(codeIdsByUnit.get(unit.id) || [])]
+                    .map(codeId => codeById.get(codeId))
+                    .filter(Boolean)
+            }))
+            .sort((left, right) => left.start_offset - right.start_offset
+                || right.end_offset - left.end_offset);
+        const fragment = document.createDocumentFragment();
+        let cursor = 0;
+
+        highlights.forEach(unit => {
+            if (unit.start_offset < cursor || unit.end_offset > text.length) return;
+            fragment.append(document.createTextNode(text.slice(cursor, unit.start_offset)));
+            const annotation = document.createElement("span");
+            annotation.className = "meaningUnitAnnotation";
+            const label = document.createElement("span");
+            label.className = "meaningUnitCodeLabel";
+            const codeLabels = unit.codes.map(code =>
+                `CO${code.code_number}: ${code.code_label}`
+            );
+            label.textContent = `MU${unit.unit_number}`
+                + (codeLabels.length ? ` · ${codeLabels.join(" · ")}` : "");
+            const mark = document.createElement("mark");
+            const firstCode = unit.codes[0];
+            mark.className = `keywordColor${codeColorSlot(firstCode?.code_number)}`;
+            mark.textContent = text.slice(unit.start_offset, unit.end_offset);
+            mark.title = codeLabels.join(" · ") || `MU${unit.unit_number}`;
+            annotation.append(label, mark);
+            fragment.append(annotation);
+            cursor = unit.end_offset;
+        });
+
+        fragment.append(document.createTextNode(text.slice(cursor)));
+        return fragment;
+    }
+
+    function advancedAnnotatedTranscript(detail, report, codeById, codeIdsByUnit) {
+        const section = document.createElement("section");
+        section.className = "automaticReanalysisPanel";
+        section.appendChild(heading("Advanced annotated transcript (review format)"));
+        section.appendChild(paragraph(
+            `Participant code: ${report.participant_code || "—"} · `
+            + `Participant ID: ${report.participant_id || "—"} · `
+            + `Session ID: ${report.session_id || detail.job.session_id || "—"} · linked match`,
+            "transcriptIdentity"
+        ));
+        section.appendChild(paragraph(
+            `Demographic data: ${demographicsText(detail.previous?.demographics)}`
+        ));
+        section.appendChild(paragraph(
+            "Demographics are shown from the preserved prior report for review only; they were not used as analytical input for this new transcript-only run.",
+            "muted"
+        ));
+
+        const legend = document.createElement("div");
+        legend.setAttribute("aria-label", "Advanced code colour legend");
+        report.codes.forEach(code => {
+            const item = document.createElement("span");
+            item.className = `keywordLegend keywordColor${codeColorSlot(code.code_number)}`;
+            item.textContent = `CO${code.code_number}: ${code.code_label}`;
+            item.title = code.rationale;
+            legend.appendChild(item);
+        });
+        section.appendChild(legend);
+
+        detail.transcript.forEach(message => {
+            const article = document.createElement("article");
+            article.className = "message";
+            const source = document.createElement("p");
+            const speaker = document.createElement("strong");
+            const language = String(message.Language || "").toLowerCase();
+            speaker.textContent = language === "en"
+                ? `${message.Speaker || "Speaker"} · English original: `
+                : `${message.Speaker || "Speaker"} · Original (${language || "language not recorded"}): `;
+            source.appendChild(speaker);
+            source.appendChild(advancedHighlightedText(
+                message, report, codeById, codeIdsByUnit
+            ));
+            article.appendChild(source);
+            if (message.EnglishTranslation
+                && message.EnglishTranslation !== message.Message) {
+                article.appendChild(paragraph(
+                    `English translation: ${message.EnglishTranslation}`,
+                    "englishTranslation"
+                ));
+            }
+            section.appendChild(article);
+        });
+        return section;
+    }
+
     async function openCase(caseNumber) {
         dialogHeading.textContent = `${caseNumber} · Advanced preliminary case report`;
         dialogProvenance.textContent = "Loading traceability…";
@@ -281,6 +403,10 @@
             }, new Map());
             const assignedCodeIds = new Set(report.categoryCodes.map(link => link.code_id));
 
+            dialogContent.appendChild(advancedAnnotatedTranscript(
+                detail, report, codeById, muIdsByCode
+            ));
+
             report.categories.forEach(category => {
                 const categorySection = document.createElement("section");
                 categorySection.className = "automaticReanalysisPanel";
@@ -349,23 +475,6 @@
                 "muted"
             ));
 
-            const transcriptDetails = document.createElement("details");
-            const transcriptSummary = document.createElement("summary");
-            transcriptSummary.textContent = "Open complete preserved transcript";
-            transcriptDetails.appendChild(transcriptSummary);
-            detail.transcript.forEach(message => {
-                transcriptDetails.appendChild(paragraph(
-                    `${message.Speaker || "Speaker"}: ${message.Message || ""}`
-                ));
-                if (message.EnglishTranslation
-                    && message.EnglishTranslation !== message.Message) {
-                    transcriptDetails.appendChild(paragraph(
-                        `English: ${message.EnglishTranslation}`,
-                        "muted"
-                    ));
-                }
-            });
-            dialogContent.appendChild(transcriptDetails);
         } catch (error) {
             dialogContent.appendChild(paragraph(error.message, "errorMessage"));
         }

@@ -150,11 +150,16 @@ test("advanced schema preserves previous reports and stable MU to code to catego
 test("researcher UI exposes model provenance, progress, comparison, and traceability", async () => {
     const html = await source("researcher.html");
     const script = await source("researcher-advanced-preliminary.js");
+    const dashboard = await source("server/advancedPreliminaryDashboard.js");
     assert.match(html, /New Advanced-Model Preliminary Analysis/);
     assert.match(html, /Meaning Units → Preliminary Analytical Codes → Preliminary Categories/);
     assert.match(html, /researcher-advanced-preliminary\.js/);
     assert.match(script, /Previous preliminary analysis \(preserved comparison\)/);
     assert.match(script, /Inspect MU → Code → Category/);
     assert.match(script, /Stable code ID/);
-    assert.match(script, /Open complete preserved transcript/);
+    assert.match(script, /Advanced annotated transcript \(review format\)/);
+    assert.match(script, /advancedHighlightedText/);
+    assert.match(script, /meaningUnitAnnotation/);
+    assert.match(script, /Demographics are shown from the preserved prior report for review only/);
+    assert.match(dashboard, /model, demographics, case_interpretation/);
 });
