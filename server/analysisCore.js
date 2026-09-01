@@ -3,11 +3,11 @@ import { DEFAULT_OPENAI_MODEL } from "./modelConfiguration.js";
 import { analysisFrameworkInstruction } from "./analysisFramework.js";
 
 export const QUALITATIVE_ANALYSIS_MODEL = DEFAULT_OPENAI_MODEL;
-export const QUALITATIVE_ANALYSIS_VERSION = "task-014-v7-complete-cases-before-summary";
+export const QUALITATIVE_ANALYSIS_VERSION = "task-014-v8-invalid-analysis-reset";
 export const AUTOMATIC_CASE_ANALYSIS_VERSION =
-    "case-analysis-v5-meaning-units-categories-completed";
+    "case-analysis-v6-overlapping-hierarchy";
 export const AUTOMATIC_CASE_REANALYSIS_VERSION =
-    "case-reanalysis-v5-meaning-units-categories-proposed";
+    "case-reanalysis-v6-overlapping-hierarchy-proposed";
 export const DEFAULT_ANALYSIS_BATCH_SIZE = 40;
 export const MAX_ANALYTIC_LABEL_WORDS = 8;
 export const MAX_ANALYTIC_LABEL_LENGTH = 100;
@@ -666,8 +666,9 @@ function exactTextOccurrences(source, phrase) {
 function validateAutomaticHierarchy(rawCategories, rawThemes, codes) {
     const categories = [];
     const themes = [];
-    const assignedCodeNumbers = new Set();
-    const assignedCategoryNumbers = new Set();
+    // Coverage trackers only: an existing link never invalidates another link.
+    const groupedCodeNumbers = new Set();
+    const groupedCategoryNumbers = new Set();
     const invalidLabels = [];
     const rejectedCategoryAssignments = [];
     const rejectedThemeAssignments = [];
@@ -687,14 +688,9 @@ function validateAutomaticHierarchy(rawCategories, rawThemes, codes) {
                 && number <= codes.length
             )
         )];
-        const duplicatedCodeNumbers = codeNumbers.filter(
-            number => assignedCodeNumbers.has(number)
-        );
-
         if (!isCategoryLabelShape(label)
             || !rationale
             || codeNumbers.length < 2
-            || duplicatedCodeNumbers.length > 0
         ) {
             invalidCategories += 1;
             if (!isCategoryLabelShape(label)) {
@@ -703,16 +699,14 @@ function validateAutomaticHierarchy(rawCategories, rawThemes, codes) {
             rejectedCategoryAssignments.push({
                 label: label || "",
                 codeNumbers,
-                reason: duplicatedCodeNumbers.length
-                    ? `Codes ${duplicatedCodeNumbers.join(", ")} already belong to an earlier category; every code must have at most one category parent.`
-                    : codeNumbers.length < 2
+                reason: codeNumbers.length < 2
                     ? "A category requires at least two related codes describing the same broader phenomenon."
                     : "The proposed category label or rationale failed structural validation."
             });
             return;
         }
 
-        codeNumbers.forEach(number => assignedCodeNumbers.add(number));
+        codeNumbers.forEach(number => groupedCodeNumbers.add(number));
         categories.push({ label, rationale, codeNumbers });
     });
 
@@ -729,14 +723,9 @@ function validateAutomaticHierarchy(rawCategories, rawThemes, codes) {
                 && number <= categories.length
             )
         )];
-        const duplicatedCategoryNumbers = categoryNumbers.filter(
-            number => assignedCategoryNumbers.has(number)
-        );
-
         if (!isThemePatternLabelShape(label)
             || !rationale
             || categoryNumbers.length < 2
-            || duplicatedCategoryNumbers.length > 0
         ) {
             invalidThemes += 1;
             if (!isThemePatternLabelShape(label)) {
@@ -745,25 +734,23 @@ function validateAutomaticHierarchy(rawCategories, rawThemes, codes) {
             rejectedThemeAssignments.push({
                 label: label || "",
                 categoryNumbers,
-                reason: duplicatedCategoryNumbers.length
-                    ? `Categories ${duplicatedCategoryNumbers.join(", ")} already belong to an earlier theme; every category must have at most one theme parent.`
-                    : categoryNumbers.length < 2
+                reason: categoryNumbers.length < 2
                     ? "A theme requires at least two categories whose patterned meaning can be interpreted together."
                     : "The proposed theme label or rationale failed structural validation."
             });
             return;
         }
 
-        categoryNumbers.forEach(number => assignedCategoryNumbers.add(number));
+        categoryNumbers.forEach(number => groupedCategoryNumbers.add(number));
         themes.push({ label, rationale, categoryNumbers });
     });
 
     const unassignedCodeNumbers = codes
         .map((_, index) => index + 1)
-        .filter(number => !assignedCodeNumbers.has(number));
+        .filter(number => !groupedCodeNumbers.has(number));
     const unassignedCategoryNumbers = categories
         .map((_, index) => index + 1)
-        .filter(number => !assignedCategoryNumbers.has(number));
+        .filter(number => !groupedCategoryNumbers.has(number));
 
     return {
         categories,
@@ -1827,8 +1814,8 @@ export async function generateAutomaticCaseAnalysis(
         "A meaning unit is an exact passage containing one reasonably coherent idea. It may be part of a sentence, one sentence, or several sentences; its boundary follows meaning rather than punctuation. Select enough context to keep the idea understandable. Return optional anchor_expressions as exact words or phrases inside the meaning unit.",
         "Never select greetings, thanks, farewells, interviewer courtesies, or other phatic language as meaning units or codes.",
         "A code names the specific phenomenon expressed by one or more meaning units. Prefer one ordinary English word; use two or three words only when they form one familiar natural phrase. Never use underscores, a clause, a sentence, or a bag of descriptors. Every code must be supportable by its text. Do not add an unsupported cause, motive, diagnosis, social structure, evaluation, consequence, or theoretical explanation.",
-        "A category answers: What is being described? Group at least two related codes into one broader descriptive phenomenon. Categories must be firm, coherent, and evidence-grounded. Assign every code to at most one category; never duplicate a code across categories.",
-        "A theme answers: What patterned meaning links these observations? Interpret at least two categories together and state the resulting patterned meaning. Assign every category to at most one theme; never duplicate a category across themes. A theme is interpretive, but it is still part of the completed analytical result; do not pause or ask for researcher confirmation.",
+        "A category answers: What is being described? Group at least two related codes into one broader descriptive phenomenon. Categories must be firm, coherent, and evidence-grounded.",
+        "A theme answers: What patterned meaning links these observations? Interpret at least two categories together and state the resulting patterned meaning. A theme is interpretive, but it is still part of the completed analytical result; do not pause or ask for researcher confirmation.",
         "Cover every analytically distinct, research-relevant participant meaning in the completed transcript. Do not reduce a substantive interview to one convenient code merely to pass validation. A transcript with six or more substantive participant turns must normally retain at least four supported codes, two valid categories, and one theme that links those categories; if the evidence cannot support that structure, the case must fail transparently rather than submit a thin proposal.",
         "If a firm code or category lacks enough related material for a defensible higher level, retain it as unsynthesized. Do not manufacture a category or theme, and do not label the result as waiting for researcher review.",
         "Complete and return the whole case outcome. The researcher reviews completed work afterward and may provide feedback that starts a new version.",

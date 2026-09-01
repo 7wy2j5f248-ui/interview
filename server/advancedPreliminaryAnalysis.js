@@ -10,9 +10,9 @@ export const ADVANCED_PRELIMINARY_PROVIDER = "openai";
 export const ADVANCED_PRELIMINARY_MODEL = "gpt-5.6-sol";
 export const ADVANCED_PRELIMINARY_REASONING_EFFORT = "high";
 export const ADVANCED_PRELIMINARY_ANALYSIS_VERSION =
-    "advanced-preliminary-v2-full-transcript-coverage";
+    "advanced-preliminary-v3-overlapping-categories";
 export const ADVANCED_PRELIMINARY_PROMPT_VERSION =
-    "advanced-preliminary-prompt-v2-coverage-audited-concepts";
+    "advanced-preliminary-prompt-v3-many-to-many-categories";
 
 const analysisSchema = {
     type: "object",
@@ -295,31 +295,30 @@ export function validateAdvancedPreliminaryAnalysis(value, messages) {
 
     const categories = [];
     const categoryLabels = new Set();
-    const assignedCodes = new Set();
+    // Coverage tracker only: an existing link never invalidates another link.
+    const groupedCodeNumbers = new Set();
     (Array.isArray(value?.categories) ? value.categories : [])
         .forEach((raw, index) => {
             const label = normalizedText(raw?.label)?.replace(/\s+/gu, " ");
             const definition = normalizedText(raw?.definition);
             const rationale = normalizedText(raw?.rationale);
             const codeNumbers = uniqueIntegers(raw?.code_numbers, codes.length);
-            const overlaps = codeNumbers.filter(number => assignedCodes.has(number));
             const labelKey = label?.toLocaleLowerCase();
             if (!labelIsAnalytical(label, 8) || !definition || !rationale
-                || codeNumbers.length < 2 || overlaps.length
-                || categoryLabels.has(labelKey)) {
+                || codeNumbers.length < 2 || categoryLabels.has(labelKey)) {
                 invalidReasons.push(
-                    `CA${index + 1} does not form a distinct higher-order grouping of at least two unshared codes.`
+                    `CA${index + 1} does not form a distinct higher-order grouping of at least two valid codes with a label, definition, and rationale.`
                 );
                 return;
             }
             categoryLabels.add(labelKey);
-            codeNumbers.forEach(number => assignedCodes.add(number));
+            codeNumbers.forEach(number => groupedCodeNumbers.add(number));
             categories.push({ label, definition, rationale, codeNumbers });
         });
 
     const unassignedCodeNumbers = codes
         .map((_, index) => index + 1)
-        .filter(number => !assignedCodes.has(number));
+        .filter(number => !groupedCodeNumbers.has(number));
     const caseSummary = normalizedText(value?.case_summary);
     const categoriesRequired = codes.length >= 2;
     const complete = Boolean(
@@ -476,7 +475,7 @@ function analysisInstruction({ projectName, researchTopic }) {
         "First segment the participant transcript into research-relevant Meaning Units. Each Meaning Unit must be the smallest sufficient coherent span that preserves its meaning in context. Copy exact_source_text verbatim from original_text, never from analysis_text or a prior report. Use occurrence_index to identify a repeated span. Do not standardize Meaning Units and do not include greetings, thanks, farewells, or other conversational courtesies.",
         "Then generate preliminary analytical codes. A code identifies the concept expressed by one or more Meaning Units; it is not a shortened retelling of a participant sentence. Make each label concise, conceptually meaningful, potentially reusable, and specific enough to preserve genuine distinctions. Prefer a familiar one-to-five-word concept such as Late bedtime. Do not include a participant-specific clock time, personal circumstance, pronoun, sentence, or compound list merely because it appears in one Meaning Unit.",
         "One Meaning Unit may support multiple codes only when it contains multiple analytically distinct concepts. One code may govern multiple Meaning Units when they express the same concept. Do not manufacture codes or collapse different meanings.",
-        "After coding within this case, derive preliminary categories only from relationships among the generated codes. Each category must group at least two related codes into one coherent higher-order descriptive concept. A code may belong to at most one category in this run. Leave a firm code unassigned when no justified category exists. Categories remain case-based and need not match another case.",
+        "After coding within this case, derive preliminary categories only from relationships among the generated codes. Each category must group at least two related codes into one coherent higher-order descriptive concept. Leave a firm code unassigned when no justified category exists. Categories remain case-based and need not match another case.",
         "Preserve complete Category → Code → Meaning Unit → original transcript-message traceability. C01 and CA01 are presentation positions only; the database will assign stable object IDs.",
         "Frequency never determines analytical meaning or code order. Keep codes in case-grounded analytical order; do not rank or renumber them by frequency. Frequency remains separately calculable metadata.",
         "Full-transcript coverage is mandatory. Before returning, reread every participant message from beginning to end. Every substantive meaning explicitly relevant to the research topic must appear as an exact Meaning Unit and link to at least one code. Do not stop coding because similar evidence appeared earlier. Exclude greetings, phatic text, and substantively unrelated material, but never omit relevant later evidence such as a stated preference, desired change, problem, condition, routine, consequence, or evaluation.",
