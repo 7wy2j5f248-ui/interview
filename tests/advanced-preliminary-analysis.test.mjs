@@ -267,6 +267,17 @@ test("the server resumes durable analysis without recursive function calls", asy
     assert.match(migration, /spend_guard_status = 'active'/);
 });
 
+test("run-level spend includes completed, orphaned, and uncertain usage", async () => {
+    const migration = await source(
+        "supabase/migrations/20260901225000_include_uncertain_usage_in_run_spend.sql"
+    );
+    assert.match(migration, /recorded_total/);
+    assert.match(migration, /orphan_job_total/);
+    assert.match(migration, /reserve_total/);
+    assert.match(migration, /orphan_job_total \+ reserve_total/);
+    assert.match(migration, /unverified_spend_reserve_usd/);
+});
+
 test("analysis providers are server-configured and never expose credentials", () => {
     const environment = {
         OPENAI_API_KEY: "server-secret",
