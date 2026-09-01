@@ -160,6 +160,8 @@ test("researcher UI exposes model provenance, progress, comparison, and traceabi
     assert.match(script, /Advanced annotated transcript \(review format\)/);
     assert.match(script, /advancedHighlightedText/);
     assert.match(script, /meaningUnitAnnotation/);
+    assert.match(script, /meaningUnitCodeLabel \$\{colorClass\}/);
+    assert.match(script, /mark\.className = colorClass/);
     assert.match(script, /Demographics are shown from the preserved prior report for review only/);
     assert.match(dashboard, /model, demographics, case_interpretation/);
 });

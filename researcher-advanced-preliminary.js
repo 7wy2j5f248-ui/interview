@@ -258,16 +258,18 @@
             fragment.append(document.createTextNode(text.slice(cursor, unit.start_offset)));
             const annotation = document.createElement("span");
             annotation.className = "meaningUnitAnnotation";
+            const firstCode = unit.codes[0];
+            const colorClass = `keywordColor${codeColorSlot(firstCode?.code_number)}`;
             const label = document.createElement("span");
-            label.className = "meaningUnitCodeLabel";
+            label.className = `meaningUnitCodeLabel ${colorClass}`;
             const codeLabels = unit.codes.map(code =>
                 `CO${code.code_number}: ${code.code_label}`
             );
-            label.textContent = `MU${unit.unit_number}`
-                + (codeLabels.length ? ` · ${codeLabels.join(" · ")}` : "");
+            label.textContent = codeLabels.length
+                ? `${codeLabels.join(" · ")} · MU${unit.unit_number}`
+                : `MU${unit.unit_number}`;
             const mark = document.createElement("mark");
-            const firstCode = unit.codes[0];
-            mark.className = `keywordColor${codeColorSlot(firstCode?.code_number)}`;
+            mark.className = colorClass;
             mark.textContent = text.slice(unit.start_offset, unit.end_offset);
             mark.title = codeLabels.join(" · ") || `MU${unit.unit_number}`;
             annotation.append(label, mark);
