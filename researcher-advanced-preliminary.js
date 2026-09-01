@@ -171,13 +171,15 @@
             `Stage 1 run ${run.run_number}: ${run.status.replaceAll("_", " ")}. `
             + `${run.completed_count} of ${run.source_case_count} cases completed using `
             + `${run.resolved_model || run.model}. Codes, Categories, and Themes are locked. `
-            + "All earlier reports remain preserved and current."
+            + (run.status === "cancelled"
+                ? "This run is stopped and cannot make further model calls."
+                : "This run analyzes original transcripts without using earlier analysis as input.")
         );
 
         const renderCaseTable = (items, host, mode = "active") => {
         const built = table([
             "Case ID", "Project lineage", "Status", "Meaning Units",
-            "Coverage audit", "Inspect"
+            "Generation", "Inspect"
         ]);
         const body = document.createElement("tbody");
         items.forEach(item => {
@@ -189,15 +191,17 @@
                 ? `Legacy unusable · ${item.disposition_reason || "Historical interview data is not analytically usable."}`
                 : mode === "attention"
                 ? item.report
-                    ? "Needs attention · Stage 1 audit issues"
+                    ? "Historical stopped-run output"
                     : `Needs attention${item.last_error ? `: ${item.last_error}` : ""}`
                 : item.status === "failed"
                 ? `Needs attention${item.last_error ? `: ${item.last_error}` : ""}`
                 : item.status.replaceAll("_", " "));
             cell(row, item.report?.meaningUnitCount ?? "—");
             cell(row, item.report
-                ? item.report.analytical_audit?.fullTranscriptCoverage
-                    ? "Verified" : "Not verified"
+                ? item.report.analytical_audit?.aiAnalysisPassCount === 1
+                    && item.report.analytical_audit?.priorAnalysisUsed === false
+                    ? "One pass · original transcript"
+                    : "Historical stopped workflow"
                 : "—");
             const action = document.createElement("td");
             const button = document.createElement("button");
@@ -449,18 +453,22 @@
             ].join(" · ");
             dialogContent.appendChild(paragraph(report.case_summary));
             dialogContent.appendChild(annotatedTranscript(detail, report));
-            dialogContent.appendChild(heading("Independent Stage 1 coverage audit"));
+            const singlePass = report.analytical_audit?.aiAnalysisPassCount === 1
+                && report.analytical_audit?.priorAnalysisUsed === false;
+            dialogContent.appendChild(heading(singlePass
+                ? "Independent analysis provenance"
+                : "Historical stopped-run provenance"));
             dialogContent.appendChild(paragraph(
-                report.analytical_audit?.overallSummary || "No audit summary was recorded."
+                report.analytical_audit?.overallSummary
+                    || "This report belongs to the stopped historical workflow."
             ));
-            dialogContent.appendChild(paragraph(
-                `Accepted Meaning Units: ${(report.analytical_audit?.meaningUnitChecks || [])
-                    .filter(check => check.accepted).length}/${report.meaningUnits.length}; `
-                + `full-transcript coverage: ${report.analytical_audit?.fullTranscriptCoverage ? "verified" : "not verified"}; `
-                + `Stage 1 only: ${report.analytical_audit?.stage1Only ? "verified" : "not verified"}.`,
-                report.analytical_audit?.fullTranscriptCoverage
-                    && report.analytical_audit?.stage1Only ? "muted" : "errorMessage"
-            ));
+            if (singlePass) {
+                dialogContent.appendChild(paragraph(
+                    `AI analysis passes: 1; prior analysis used: no; `
+                    + `local exact-transcript validation: completed; Meaning Units: ${report.meaningUnits.length}.`,
+                    "muted"
+                ));
+            }
             const gaps = report.analytical_audit?.omittedRelevantEvidence || [];
             const rejectedUnits = (report.analytical_audit?.meaningUnitChecks || [])
                 .filter(check => !check.accepted);

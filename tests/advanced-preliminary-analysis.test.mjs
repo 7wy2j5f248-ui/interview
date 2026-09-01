@@ -7,10 +7,8 @@ import {
     ADVANCED_PRELIMINARY_PROMPT_VERSION,
     ADVANCED_PRELIMINARY_REASONING_EFFORT,
     ADVANCED_PRELIMINARY_STOP_LAYER,
-    SOURCE_ELIGIBILITY_GUARD_VERSION,
-    coverageGapIsReviewable,
-    validateAdvancedPreliminaryAnalysis,
-    validateAdvancedPreliminaryAudit
+    generateAdvancedPreliminaryAnalysis,
+    validateAdvancedPreliminaryAnalysis
 } from "../server/advancedPreliminaryAnalysis.js";
 import {
     configuredStage1DefaultModel,
@@ -58,29 +56,6 @@ function validDraft() {
     };
 }
 
-function acceptedAudit(analysis, overrides = {}) {
-    return {
-        meaning_unit_checks: analysis.meaningUnits.map((unit, index) => ({
-            unit_number: index + 1,
-            message_id: unit.messageId,
-            exact_source_match: true,
-            research_relevant: true,
-            smallest_sufficient_span: true,
-            context_preserved: true,
-            explanation: "Accepted exact Meaning Unit."
-        })),
-        full_transcript_coverage: true,
-        omitted_relevant_evidence: [],
-        stage1_only: true,
-        source_qualifies_for_framework: true,
-        source_qualification_reason:
-            "The transcript contains sufficient sleeping-habits evidence.",
-        source_evidence_message_ids: [messages[0].id],
-        overall_summary: "Full transcript coverage verified at Meaning Units only.",
-        ...overrides
-    };
-}
-
 test("Stage 1 preserves exact Meaning Units and generates no higher layers", () => {
     const result = validateAdvancedPreliminaryAnalysis(validDraft(), messages);
     assert.equal(result.complete, true);
@@ -108,116 +83,49 @@ test("Stage 1 rejects rewritten, courtesy, duplicate, and overlapping evidence",
     assert.match(result.invalidReasons.join(" "), /overlaps another Meaning Unit/);
 });
 
-test("independent Stage 1 audit requires exact MU checks, coverage, and no higher layer", () => {
-    const analysis = validateAdvancedPreliminaryAnalysis(validDraft(), messages);
-    const accepted = validateAdvancedPreliminaryAudit(analysis, acceptedAudit(analysis));
-    assert.equal(accepted.complete, true);
-    assert.equal(accepted.meaningUnitChecks.length, 4);
-
-    const rejected = validateAdvancedPreliminaryAudit(analysis, acceptedAudit(analysis, {
-        full_transcript_coverage: false,
-        omitted_relevant_evidence: [{
-            message_id: messages[1].id,
-            exact_source_text: "I want a quieter environment",
-            explanation: "Relevant later evidence was omitted."
-        }],
-        stage1_only: false
-    }));
-    assert.equal(rejected.complete, false);
-    assert.equal(rejected.omittedRelevantEvidence.length, 1);
-    assert.equal(rejected.stage1Only, false);
-});
-
-test("source-content ineligibility is distinct from an analysis defect", () => {
-    const analysis = validateAdvancedPreliminaryAnalysis(validDraft(), messages);
-    const sourceIneligible = acceptedAudit(analysis, {
-        source_qualifies_for_framework: false,
-        source_qualification_reason:
-            "The interview did not elicit enough clear topic-relevant content.",
-        source_evidence_message_ids: [],
-        full_transcript_coverage: false
-    });
-    sourceIneligible.meaning_unit_checks.forEach(check => {
-        check.research_relevant = false;
-        check.explanation = "The exact span is outside the research topic.";
-    });
-    const audit = validateAdvancedPreliminaryAudit(analysis, sourceIneligible);
-    assert.equal(audit.complete, false);
-    assert.equal(audit.sourceQualifiesForFramework, false);
-    assert.equal(audit.declaredSourceQualifiesForFramework, false);
-    assert.equal(audit.sourceQualificationOverrideApplied, false);
-    assert.match(audit.sourceQualificationReason, /did not elicit enough/);
-});
-
-test("coverage defects can never disqualify a transcript containing relevant evidence", () => {
-    const analysis = validateAdvancedPreliminaryAnalysis(validDraft(), messages);
-    const audit = validateAdvancedPreliminaryAudit(analysis, acceptedAudit(analysis, {
-        source_qualifies_for_framework: false,
-        source_qualification_reason:
-            "The draft is too incomplete to support analysis.",
-        source_evidence_message_ids: [],
-        full_transcript_coverage: false,
-        omitted_relevant_evidence: [{
-            message_id: messages[1].id,
-            exact_source_text: "I want a quieter environment",
-            explanation: "Relevant evidence was omitted from the draft."
-        }]
-    }));
-    assert.equal(audit.declaredSourceQualifiesForFramework, false);
-    assert.equal(audit.sourceQualifiesForFramework, true);
-    assert.equal(audit.sourceQualificationOverrideApplied, true);
-    assert.equal(
-        audit.sourceEligibilityGuardVersion,
-        SOURCE_ELIGIBILITY_GUARD_VERSION
+test("Stage 1 performs one fresh model call from the original transcript only", async () => {
+    const calls = [];
+    const openaiClient = {
+        responses: {
+            create: async options => {
+                calls.push(options);
+                return {
+                    model: "gpt-5.6-sol",
+                    output_text: JSON.stringify(validDraft()),
+                    usage: { input_tokens: 100, output_tokens: 50 }
+                };
+            }
+        }
+    };
+    const result = await generateAdvancedPreliminaryAnalysis(
+        openaiClient,
+        messages,
+        { projectName: "Sleeping habits", researchTopic: "Sleeping habits" }
     );
-    assert.deepEqual(audit.sourceEvidenceMessageIds, [
-        messages[0].id,
-        messages[1].id
-    ]);
-    assert.match(audit.sourceQualificationReason, /coverage audit itself/);
-    assert.equal(coverageGapIsReviewable(audit), true);
-});
-
-test("exact audit coverage gaps remain reviewable instead of becoming terminal failures", () => {
-    const analysis = validateAdvancedPreliminaryAnalysis(validDraft(), messages);
-    const audit = validateAdvancedPreliminaryAudit(analysis, acceptedAudit(analysis, {
-        full_transcript_coverage: false,
-        omitted_relevant_evidence: [{
-            message_id: messages[1].id,
-            exact_source_text: "quieter environment",
-            explanation: "Relevant preference omitted from the proposal."
-        }]
-    }));
-    assert.equal(audit.complete, false);
-    assert.equal(coverageGapIsReviewable(audit), true);
-});
-
-test("a smallest-span audit disagreement remains inspectable instead of blocking the case", () => {
-    const analysis = validateAdvancedPreliminaryAnalysis(validDraft(), messages);
-    const value = acceptedAudit(analysis);
-    value.meaning_unit_checks[0].smallest_sufficient_span = false;
-    value.meaning_unit_checks[0].explanation =
-        "The exact passage contains two separable substantive statements.";
-    const audit = validateAdvancedPreliminaryAudit(analysis, value);
-    assert.equal(audit.complete, false);
-    assert.equal(audit.meaningUnitChecks[0].accepted, false);
-    assert.equal(coverageGapIsReviewable(audit), true);
+    assert.equal(calls.length, 1);
+    assert.match(calls[0].input[1].content, /Original participant transcript/);
+    assert.doesNotMatch(calls[0].input[1].content, /Proposed preliminary analysis/);
+    assert.equal(result.audit.priorAnalysisUsed, false);
+    assert.equal(result.audit.aiAnalysisPassCount, 1);
+    assert.equal(result.audit.validationType,
+        "local_deterministic_exact_transcript_traceability");
 });
 
 test("Stage 1 is versioned, stronger-model capable, and stops at Meaning Units", async () => {
     assert.equal(ADVANCED_PRELIMINARY_MODEL, "gpt-5.6-sol");
     assert.equal(ADVANCED_PRELIMINARY_REASONING_EFFORT, "high");
     assert.equal(ADVANCED_PRELIMINARY_STOP_LAYER, "meaning_units");
-    assert.match(ADVANCED_PRELIMINARY_ANALYSIS_VERSION, /stage1-v1-meaning-units-only/);
-    assert.match(ADVANCED_PRELIMINARY_PROMPT_VERSION, /stage1-prompt-v1-exact-coverage/);
+    assert.match(ADVANCED_PRELIMINARY_ANALYSIS_VERSION, /v2-fresh-single-pass/);
+    assert.match(ADVANCED_PRELIMINARY_PROMPT_VERSION, /v2-transcript-only-single-pass/);
     const worker = await source("server/advancedPreliminaryAnalysis.js");
     assert.match(worker, /Stop at Meaning Units/);
     assert.match(worker, /Do not generate, name, imply, copy, or evaluate codes, categories, themes/);
     assert.match(worker, /Full-transcript coverage is mandatory/);
-    assert.match(worker, /source_qualifies_for_framework=false/);
-    assert.match(worker, /Coverage and source eligibility are logically independent/);
-    assert.match(worker, /defects in the proposed analysis, not in the interview data/);
-    assert.match(worker, /stage1-source-content-audit/);
+    assert.match(worker, /This is the only AI analysis pass for this case/);
+    assert.match(worker, /No previous analysis and no second AI audit will be used/);
+    assert.doesNotMatch(worker, /auditAnalysis\(/);
+    assert.doesNotMatch(worker, /advanced_preliminary_analysis_audit/);
+    assert.doesNotMatch(worker, /stage1-source-content-audit/);
     assert.doesNotMatch(worker, /sharedVocabulary/);
 });
 
@@ -244,7 +152,7 @@ test("database migration scopes Stage 1 to one project and preserves all prior a
     assert.doesNotMatch(migration, /update public\.qualitative_case_reports/i);
 });
 
-test("researcher UI locks later stages and exposes model, audit, evidence, and export provenance", async () => {
+test("researcher UI locks later stages and exposes single-pass source provenance", async () => {
     const html = await source("staged-analysis.html");
     const access = await source("researcher-staged-access.js");
     const vercel = await source("vercel.json");
@@ -284,9 +192,9 @@ test("researcher UI locks later stages and exposes model, audit, evidence, and e
     assert.match(script, /Inspect Meaning Units/);
     assert.match(script, /Stage 1 annotated transcript/);
     assert.match(script, /meaningUnitAnnotation/);
-    assert.match(script, /Full-transcript coverage/iu);
-    assert.match(script, /Needs attention · Stage 1 audit issues/);
-    assert.match(script, /Draft Meaning Units requiring review/);
+    assert.match(script, /One pass · original transcript/);
+    assert.match(script, /Independent analysis provenance/);
+    assert.match(script, /prior analysis used: no/);
     assert.match(html, /analytically ambiguous or unverified Stage 1 cases/);
     assert.match(html, /They are not automatically archived/);
     assert.match(html, /These are not researcher archives/);
@@ -294,9 +202,7 @@ test("researcher UI locks later stages and exposes model, audit, evidence, and e
     assert.match(script, /attentionCases/);
     assert.match(script, /Move to Legacy cases/);
     assert.match(script, /mark-legacy/);
-    assert.match(dashboard, /coverageReviewRequired: true/);
     assert.match(dashboard, /set_advanced_preliminary_case_disposition/);
-    assert.match(script, /Exact transcript passages requiring coverage review/);
     assert.match(script, /download=stage1-csv/);
     assert.match(dashboard, /configuredStage1Models/);
     assert.match(dashboard, /probeAdvancedPreliminaryModel/);

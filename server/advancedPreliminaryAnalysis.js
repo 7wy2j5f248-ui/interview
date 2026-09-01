@@ -10,11 +10,9 @@ export const ADVANCED_PRELIMINARY_PROVIDER = "openai";
 export const ADVANCED_PRELIMINARY_MODEL = "gpt-5.6-sol";
 export const ADVANCED_PRELIMINARY_REASONING_EFFORT = "high";
 export const ADVANCED_PRELIMINARY_ANALYSIS_VERSION =
-    "staged-analysis-stage1-v1-meaning-units-only";
+    "staged-analysis-stage1-v2-fresh-single-pass-meaning-units";
 export const ADVANCED_PRELIMINARY_PROMPT_VERSION =
-    "staged-analysis-stage1-prompt-v1-exact-coverage";
-export const SOURCE_ELIGIBILITY_GUARD_VERSION =
-    "source-eligibility-guard-v1-analysis-defects-cannot-disqualify-source";
+    "staged-analysis-stage1-prompt-v2-transcript-only-single-pass";
 export const ADVANCED_PRELIMINARY_STOP_LAYER = "meaning_units";
 export const SLEEPING_HABITS_PROJECT_CODE = "SLEEPING-HABITS";
 
@@ -42,63 +40,6 @@ const analysisSchema = {
         }
     },
     required: ["meaning_units"],
-    additionalProperties: false
-};
-
-const auditSchema = {
-    type: "object",
-    properties: {
-        meaning_unit_checks: {
-            type: "array",
-            items: {
-                type: "object",
-                properties: {
-                    unit_number: { type: "integer" },
-                    message_id: { type: "string" },
-                    exact_source_match: { type: "boolean" },
-                    research_relevant: { type: "boolean" },
-                    smallest_sufficient_span: { type: "boolean" },
-                    context_preserved: { type: "boolean" },
-                    explanation: { type: "string" }
-                },
-                required: [
-                    "unit_number", "message_id", "exact_source_match",
-                    "research_relevant", "smallest_sufficient_span",
-                    "context_preserved", "explanation"
-                ],
-                additionalProperties: false
-            }
-        },
-        full_transcript_coverage: { type: "boolean" },
-        omitted_relevant_evidence: {
-            type: "array",
-            items: {
-                type: "object",
-                properties: {
-                    message_id: { type: "string" },
-                    exact_source_text: { type: "string" },
-                    explanation: { type: "string" }
-                },
-                required: ["message_id", "exact_source_text", "explanation"],
-                additionalProperties: false
-            }
-        },
-        stage1_only: { type: "boolean" },
-        source_qualifies_for_framework: { type: "boolean" },
-        source_qualification_reason: { type: "string" },
-        source_evidence_message_ids: {
-            type: "array",
-            items: { type: "string" }
-        },
-        overall_summary: { type: "string" }
-    },
-    required: [
-        "meaning_unit_checks", "full_transcript_coverage",
-        "omitted_relevant_evidence", "stage1_only",
-        "source_qualifies_for_framework", "source_qualification_reason",
-        "source_evidence_message_ids",
-        "overall_summary"
-    ],
     additionalProperties: false
 };
 
@@ -229,116 +170,6 @@ export function validateAdvancedPreliminaryAnalysis(value, messages) {
     };
 }
 
-export function validateAdvancedPreliminaryAudit(analysis, value) {
-    const checksByNumber = new Map();
-    (Array.isArray(value?.meaning_unit_checks) ? value.meaning_unit_checks : [])
-        .forEach(check => {
-            if (Number.isInteger(check?.unit_number)) {
-                checksByNumber.set(check.unit_number, check);
-            }
-        });
-    const meaningUnitChecks = analysis.meaningUnits.map((unit, index) => {
-        const check = checksByNumber.get(index + 1);
-        const accepted = Boolean(
-            check?.message_id === unit.messageId
-            && check?.exact_source_match
-            && check?.research_relevant
-            && check?.smallest_sufficient_span
-            && check?.context_preserved
-        );
-        return {
-            unitNumber: index + 1,
-            messageId: unit.messageId,
-            exactSourceMatch: Boolean(check?.exact_source_match),
-            researchRelevant: Boolean(check?.research_relevant),
-            smallestSufficientSpan: Boolean(check?.smallest_sufficient_span),
-            contextPreserved: Boolean(check?.context_preserved),
-            explanation: normalizedText(check?.explanation)
-                || "The independent audit did not return this Meaning Unit.",
-            accepted
-        };
-    });
-    const omittedRelevantEvidence = (Array.isArray(value?.omitted_relevant_evidence)
-        ? value.omitted_relevant_evidence : []).map(item => ({
-        messageId: normalizedText(item?.message_id),
-        exactSourceText: normalizedText(item?.exact_source_text),
-        explanation: normalizedText(item?.explanation)
-            || "Substantive research-relevant transcript evidence was omitted."
-    })).filter(item => item.messageId && item.exactSourceText);
-    const fullTranscriptCoverage = Boolean(value?.full_transcript_coverage);
-    const stage1Only = Boolean(value?.stage1_only);
-    const declaredSourceQualifiesForFramework =
-        Boolean(value?.source_qualifies_for_framework);
-    const declaredSourceEvidenceMessageIds = [...new Set(
-        (Array.isArray(value?.source_evidence_message_ids)
-            ? value.source_evidence_message_ids : [])
-            .map(normalizedText)
-            .filter(Boolean)
-    )];
-    const auditProvenRelevantMessageIds = [...new Set([
-        ...meaningUnitChecks
-            .filter(check => check.exactSourceMatch && check.researchRelevant)
-            .map(check => check.messageId),
-        ...omittedRelevantEvidence.map(item => item.messageId)
-    ].filter(Boolean))];
-    // A coverage audit cannot coherently say both that study-relevant evidence
-    // exists and that the source transcript is unusable. Coverage and span
-    // problems are defects in the proposed analysis, not in the interview data.
-    const sourceQualificationOverrideApplied = Boolean(
-        !declaredSourceQualifiesForFramework
-        && auditProvenRelevantMessageIds.length
-    );
-    const sourceQualifiesForFramework = Boolean(
-        declaredSourceQualifiesForFramework
-        || auditProvenRelevantMessageIds.length
-    );
-    const sourceQualificationReason = sourceQualificationOverrideApplied
-        ? "The coverage audit itself identified study-relevant transcript evidence. The source remains eligible; coverage or segmentation defects must be repaired in the analysis output and cannot disqualify the interview."
-        : normalizedText(value?.source_qualification_reason)
-            || (sourceQualifiesForFramework
-                ? "The respondent content contains sufficient study-relevant evidence."
-                : "The respondent content does not provide sufficient usable evidence for this analysis framework.");
-    const sourceEvidenceMessageIds = [...new Set([
-        ...declaredSourceEvidenceMessageIds,
-        ...auditProvenRelevantMessageIds
-    ])];
-    return {
-        meaningUnitChecks,
-        fullTranscriptCoverage,
-        omittedRelevantEvidence,
-        stage1Only,
-        sourceQualifiesForFramework,
-        declaredSourceQualifiesForFramework,
-        sourceQualificationReason,
-        sourceEvidenceMessageIds,
-        sourceQualificationOverrideApplied,
-        sourceEligibilityGuardVersion: SOURCE_ELIGIBILITY_GUARD_VERSION,
-        overallSummary: normalizedText(value?.overall_summary)
-            || "No audit summary was supplied.",
-        complete: Boolean(
-            meaningUnitChecks.length === checksByNumber.size
-            && meaningUnitChecks.every(check => check.accepted)
-            && fullTranscriptCoverage
-            && !omittedRelevantEvidence.length
-            && stage1Only
-            && sourceQualifiesForFramework
-        )
-    };
-}
-
-export function coverageGapIsReviewable(audit) {
-    return Boolean(
-        audit
-        && audit.stage1Only
-        && audit.meaningUnitChecks?.length
-        && (
-            !audit.fullTranscriptCoverage
-            || audit.meaningUnitChecks.some(check => !check.accepted)
-            || audit.omittedRelevantEvidence?.length
-        )
-    );
-}
-
 function transcriptForModel(messages) {
     return JSON.stringify(messages.map(message => ({
         message_id: message.id,
@@ -347,16 +178,6 @@ function transcriptForModel(messages) {
         english_translation: message.englishTranslation,
         analysis_text: message.analysisText
     })));
-}
-
-function draftForAudit(analysis) {
-    return {
-        meaning_units: analysis.meaningUnits.map(unit => ({
-            message_id: unit.messageId,
-            exact_source_text: unit.exactSourceText,
-            context_note: unit.contextNote
-        }))
-    };
 }
 
 function analysisInstruction({ projectName, researchTopic }) {
@@ -369,7 +190,7 @@ function analysisInstruction({ projectName, researchTopic }) {
         "Meaning Units remain case-grounded and must not be standardized. A Meaning Unit is an evidence segment, not an analytical label. Do not include interviewer text, greetings, thanks, farewells, consent formalities, or other conversational courtesies unless they contain substantive evidence relevant to the study topic.",
         "Full-transcript coverage is mandatory. Do not stop because similar evidence appeared earlier. Do not omit later or low-frequency evidence such as a stated preference, desired change, problem, condition, routine, consequence, evaluation, uncertainty, or contradiction when its connection to the study topic is explicit.",
         "Do not create overlapping Meaning Units. When adjacent words belong to the same coherent meaning, preserve them in one smallest sufficient span. When one participant passage contains analytically separable meanings, use separate non-overlapping exact spans.",
-        "Return only the complete meaning_units array. The application assigns stable MU numbers and database identifiers and will separately audit exact grounding and full-transcript coverage."
+        "Return only the complete meaning_units array. This is the only AI analysis pass for this case. The application assigns stable MU numbers and performs only local deterministic checks that each quoted span exists exactly in the original transcript. No previous analysis and no second AI audit will be used."
     ].join("\n\n");
 }
 
@@ -421,50 +242,6 @@ export async function probeAdvancedPreliminaryModel(
     };
 }
 
-async function auditAnalysis(
-    openaiClient,
-    messages,
-    analysis,
-    context,
-    model,
-    reasoningEffort
-) {
-    const response = await openaiClient.responses.create(responseOptions(
-        model,
-        reasoningEffort,
-        auditSchema,
-        "advanced_preliminary_analysis_audit",
-        [{
-            role: "system",
-            content: [
-                "Act as an independent Stage 1 Meaning Unit auditor for exactly one case.",
-                "Return one meaning_unit_check for every numbered Meaning Unit, with no missing or extra checks. Match both its number and transcript message ID.",
-                "Accept a Meaning Unit only when it is an exact original-language transcript span, is substantively relevant to the named research topic, is the smallest sufficient coherent span, and preserves enough context to retain the participant's meaning.",
-                "Perform a separate full-transcript coverage pass. Read every participant message from beginning to end and compare it against all proposed Meaning Units. Set full_transcript_coverage=true only when every substantive study-relevant meaning is represented. Put every omitted relevant span in omitted_relevant_evidence with its message ID, exact original text, and explanation. Later, low-frequency, contradictory, evaluative, or aspirational evidence still counts.",
-                "Separately decide whether the respondent's own content qualifies for this project's analysis framework. Set source_qualifies_for_framework=false only when the transcript itself is outside the topic, too vague, or too incomplete to support a defensible case analysis because the interview failed to elicit usable evidence. Do not disqualify a case merely because the draft omitted evidence or used an over-broad Meaning Unit; those are analysis defects, not source-content defects. Record a concise human-readable reason and the transcript message IDs supporting the source decision.",
-                "Coverage and source eligibility are logically independent. If any proposed Meaning Unit is exact and research-relevant, or if omitted_relevant_evidence contains any item, then the transcript demonstrably contains study-relevant evidence and source_qualifies_for_framework MUST be true. A thin, incomplete, or defective draft is never evidence that the source interview is unusable.",
-                "Set stage1_only=true only when the draft contains Meaning Units alone and neither the draft nor your audit generates, names, implies, copies, or evaluates any code, category, or theme.",
-                "Audit only the supplied transcript and Meaning Unit draft. Do not compare cases and do not invent a replacement analysis in the audit response.",
-                analysisInstruction(context)
-            ].join("\n\n")
-        }, {
-            role: "user",
-            content: [
-                `Original participant transcript (JSON):\n${transcriptForModel(messages)}`,
-                `Proposed preliminary analysis (JSON):\n${JSON.stringify(draftForAudit(analysis))}`
-            ].join("\n\n")
-        }]
-    ));
-    return {
-        audit: validateAdvancedPreliminaryAudit(
-            analysis,
-            parseResponse(response, "Advanced preliminary analysis audit")
-        ),
-        inputTokens: response?.usage?.input_tokens || 0,
-        outputTokens: response?.usage?.output_tokens || 0
-    };
-}
-
 export async function generateAdvancedPreliminaryAnalysis(
     openaiClient,
     messages,
@@ -474,162 +251,42 @@ export async function generateAdvancedPreliminaryAnalysis(
         reasoningEffort = ADVANCED_PRELIMINARY_REASONING_EFFORT
     } = {}
 ) {
-    const createDraft = async (additionalInput = null) => {
-        const input = [
-            { role: "system", content: analysisInstruction(context) },
-            {
-                role: "user",
-                content: [
-                    `Original participant transcript (JSON):\n${transcriptForModel(messages)}`,
-                    additionalInput
-                ].filter(Boolean).join("\n\n")
-            }
-        ];
-        const response = await openaiClient.responses.create(responseOptions(
-            model,
-            reasoningEffort,
-            analysisSchema,
-            "advanced_preliminary_case_analysis",
-            input
-        ));
-        return {
-            response,
-            analysis: validateAdvancedPreliminaryAnalysis(
-                parseResponse(response, "Advanced preliminary case analysis"),
-                messages
-            )
-        };
-    };
-
-    let generated = await createDraft();
-    let totalInputTokens = generated.response?.usage?.input_tokens || 0;
-    let totalOutputTokens = generated.response?.usage?.output_tokens || 0;
-    if (!generated.analysis.complete) {
-        generated = await createDraft([
-            "The previous draft failed deterministic traceability validation.",
-            `Validation problems (JSON): ${JSON.stringify(generated.analysis.invalidReasons)}`,
-            "Create a complete replacement directly from the original transcript. Return exact non-overlapping Meaning Units only. Do not generate codes, categories, or themes."
-        ].join("\n"));
-        totalInputTokens += generated.response?.usage?.input_tokens || 0;
-        totalOutputTokens += generated.response?.usage?.output_tokens || 0;
-    }
-    if (!generated.analysis.complete) {
-        throw new Error(
-            `The advanced draft failed traceability validation: ${generated.analysis.invalidReasons.join(" | ")}`
-        );
-    }
-
-    let audited = await auditAnalysis(
-        openaiClient,
-        messages,
-        generated.analysis,
-        context,
-        model,
-        reasoningEffort
-    );
-    totalInputTokens += audited.inputTokens;
-    totalOutputTokens += audited.outputTokens;
-
-    if (!audited.audit.sourceQualifiesForFramework) {
-        return {
-            ...generated.analysis,
-            caseSummary: `${generated.analysis.caseSummary} The independent source-content check classified this historical interview as unsuitable for the current analysis framework.`,
-            audit: {
-                ...audited.audit,
-                coverageReviewRequired: false,
-                reviewStatus: "legacy_unusable_source_content"
-            },
-            legacyDisposition: {
-                reason: audited.audit.sourceQualificationReason,
-                evidenceMessageIds: audited.audit.sourceEvidenceMessageIds
-            },
-            inputTokenCount: totalInputTokens || null,
-            outputTokenCount: totalOutputTokens || null
-        };
-    }
-
-    if (!audited.audit.complete) {
-        generated = await createDraft([
-            `Audited draft requiring replacement (JSON): ${JSON.stringify(draftForAudit(generated.analysis))}`,
-            `Independent audit (JSON): ${JSON.stringify(audited.audit)}`,
-            "Repair every rejected Meaning Unit and add every omitted substantive research-relevant span as an exact original-language Meaning Unit. Recheck the full transcript from beginning to end. Return Meaning Units only; do not generate codes, categories, or themes."
-        ].join("\n\n"));
-        totalInputTokens += generated.response?.usage?.input_tokens || 0;
-        totalOutputTokens += generated.response?.usage?.output_tokens || 0;
-        if (!generated.analysis.complete) {
-            throw new Error(
-                `The audit repair failed traceability validation: ${generated.analysis.invalidReasons.join(" | ")}`
-            );
+    const input = [
+        { role: "system", content: analysisInstruction(context) },
+        {
+            role: "user",
+            content: `Original participant transcript (JSON):\n${transcriptForModel(messages)}`
         }
-        audited = await auditAnalysis(
-            openaiClient,
-            messages,
-            generated.analysis,
-            context,
-            model,
-            reasoningEffort
-        );
-        totalInputTokens += audited.inputTokens;
-        totalOutputTokens += audited.outputTokens;
-    }
-
-    if (!audited.audit.sourceQualifiesForFramework) {
-        return {
-            ...generated.analysis,
-            caseSummary: `${generated.analysis.caseSummary} The independent source-content check classified this historical interview as unsuitable for the current analysis framework.`,
-            audit: {
-                ...audited.audit,
-                coverageReviewRequired: false,
-                reviewStatus: "legacy_unusable_source_content"
-            },
-            legacyDisposition: {
-                reason: audited.audit.sourceQualificationReason,
-                evidenceMessageIds: audited.audit.sourceEvidenceMessageIds
-            },
-            inputTokenCount: totalInputTokens || null,
-            outputTokenCount: totalOutputTokens || null
-        };
-    }
-
-    if (!audited.audit.complete && !coverageGapIsReviewable(audited.audit)) {
-        const failures = [
-            ...audited.audit.meaningUnitChecks.filter(check => !check.accepted)
-                .map(check => `MU${check.unitNumber}: ${check.explanation}`),
-            ...(!audited.audit.fullTranscriptCoverage
-                ? ["Full-transcript coverage failed: substantive research-relevant evidence was omitted."]
-                : []),
-            ...audited.audit.omittedRelevantEvidence.map(item =>
-                `Omitted evidence in message ${item.messageId}: ${item.exactSourceText} (${item.explanation})`
-            ),
-            ...(!audited.audit.stage1Only
-                ? ["The Stage 1 result improperly introduced a code, category, or theme."]
-                : [])
-        ];
+    ];
+    const response = await openaiClient.responses.create(responseOptions(
+        model,
+        reasoningEffort,
+        analysisSchema,
+        "advanced_preliminary_case_analysis",
+        input
+    ));
+    const analysis = validateAdvancedPreliminaryAnalysis(
+        parseResponse(response, "Advanced preliminary case analysis"),
+        messages
+    );
+    if (!analysis.complete) {
         throw new Error(
-            `The Stage 1 Meaning Unit analysis failed its independent coverage audit: ${failures.join(" | ")}`
+            `The single-pass analysis failed deterministic transcript traceability validation: ${analysis.invalidReasons.join(" | ")}`
         );
     }
-
-    const coverageReviewRequired = coverageGapIsReviewable(audited.audit);
-    const auditIssueCount = audited.audit.meaningUnitChecks
-        .filter(check => !check.accepted).length
-        + audited.audit.omittedRelevantEvidence.length;
-    const audit = {
-        ...audited.audit,
-        coverageReviewRequired,
-        reviewStatus: coverageReviewRequired
-            ? "stage1_audit_issues_need_researcher_review"
-            : "verified"
-    };
-
     return {
-        ...generated.analysis,
-        caseSummary: coverageReviewRequired
-            ? `${generated.analysis.caseSummary} The independent audit identified ${auditIssueCount} Stage 1 issue${auditIssueCount === 1 ? "" : "s"} for researcher review; the proposal is preserved and is not represented as fully verified.`
-            : generated.analysis.caseSummary,
-        audit,
-        inputTokenCount: totalInputTokens || null,
-        outputTokenCount: totalOutputTokens || null
+        ...analysis,
+        audit: {
+            reviewStatus: "single_pass_from_original_transcript",
+            validationType: "local_deterministic_exact_transcript_traceability",
+            priorAnalysisUsed: false,
+            aiAnalysisPassCount: 1,
+            stage1Only: true,
+            meaningUnitCount: analysis.meaningUnits.length,
+            overallSummary: "Generated from the original transcript in one 5.6 analysis pass. No prior-model analysis and no second AI audit were used."
+        },
+        inputTokenCount: response?.usage?.input_tokens || null,
+        outputTokenCount: response?.usage?.output_tokens || null
     };
 }
 
@@ -731,39 +388,6 @@ export async function processNextAdvancedPreliminaryAnalysis(
                 reasoningEffort: claim.reasoning_effort
             }
         );
-        if (analysis.legacyDisposition) {
-            const { data: moved, error: dispositionError } = await supabase.rpc(
-                "set_advanced_preliminary_case_disposition",
-                {
-                    p_job_id: claim.job_id,
-                    p_disposition: "legacy_unusable",
-                    p_reason: analysis.legacyDisposition.reason,
-                    p_actor: "stage1-source-content-audit",
-                    p_evidence: {
-                        messageIds: analysis.legacyDisposition.evidenceMessageIds,
-                        audit: analysis.audit,
-                        model: claim.model,
-                        reasoningEffort: claim.reasoning_effort
-                    }
-                }
-            );
-            if (dispositionError || !moved) {
-                throw new Error("The legacy source-content disposition was not saved.", {
-                    cause: dispositionError || undefined
-                });
-            }
-            console.log("Advanced preliminary case classified as legacy unusable", {
-                runId: claim.run_id,
-                caseNumber: claim.case_number
-            });
-            return {
-                claimed: true,
-                completed: true,
-                disposition: "legacy_unusable",
-                runId: claim.run_id,
-                caseNumber: claim.case_number
-            };
-        }
         const payload = {
             meaningUnits: analysis.meaningUnits,
             codes: analysis.codes,

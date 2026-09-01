@@ -366,7 +366,8 @@ async function downloadStage1Csv(supabase, req, res) {
         "Participant code", "Report ID", "Report completed at",
         "Meaning Unit", "Stable MU ID", "Message ID", "Exact source text",
         "Source language", "Start offset", "End offset", "Occurrence",
-        "Context note", "Full transcript coverage", "Stage 1 only"
+        "Context note", "Analysis source", "AI analysis passes",
+        "Local exact-transcript validation"
     ];
     const rows = meaningUnits.map(unit => {
         const report = reportById.get(unit.report_id) || {};
@@ -380,8 +381,12 @@ async function downloadStage1Csv(supabase, req, res) {
             unit.message_id, unit.exact_source_text, unit.source_language,
             unit.start_offset, unit.end_offset, unit.occurrence_index,
             unit.context_note,
-            report.analytical_audit?.fullTranscriptCoverage ? "verified" : "not verified",
-            report.analytical_audit?.stage1Only ? "verified" : "not verified"
+            report.analytical_audit?.priorAnalysisUsed === false
+                ? "original transcript only" : "historical stopped workflow",
+            report.analytical_audit?.aiAnalysisPassCount || "historical",
+            report.analytical_audit?.validationType
+                === "local_deterministic_exact_transcript_traceability"
+                ? "passed" : "historical"
         ];
     });
     const csv = [headers, ...rows]
