@@ -1,0 +1,486 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="governance-version" content="GRG-PPR-1.0.0">
+<title>Global Research Governance / Participant Privacy Rules</title>
+<style>
+    :root {
+        color-scheme: light;
+        --ink: #17231f;
+        --muted: #52635c;
+        --paper: #ffffff;
+        --canvas: #eef3f0;
+        --forest: #123c32;
+        --forest-light: #dcece6;
+        --privacy: #7b263c;
+        --privacy-light: #fbf1f3;
+        --line: #bdccc5;
+        --gold: #c5a24a;
+        font-family: Arial, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+        background: var(--canvas);
+        color: var(--ink);
+        line-height: 1.58;
+        margin: 0;
+    }
+
+    a { color: #155f78; }
+    a:focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }
+
+    .pageHeader {
+        background: var(--forest);
+        border-block-end: 5px solid var(--gold);
+        color: #ffffff;
+        padding: 1rem max(1rem, calc((100vw - 70rem) / 2));
+    }
+
+    .pageHeader nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.55rem 1.2rem;
+        margin-block-end: 2.8rem;
+    }
+
+    .pageHeader a { color: #ffffff; }
+
+    .eyebrow {
+        font-size: 0.78rem;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        margin: 0 0 0.65rem;
+        text-transform: uppercase;
+    }
+
+    h1 {
+        font-family: Georgia, "Times New Roman", serif;
+        font-size: clamp(2.25rem, 5vw, 4.5rem);
+        letter-spacing: -0.035em;
+        line-height: 0.98;
+        margin: 0;
+        max-width: 15ch;
+    }
+
+    .headerSummary {
+        font-size: 1.08rem;
+        margin-block: 1.35rem 2rem;
+        max-width: 58rem;
+    }
+
+    main {
+        margin: 0 auto;
+        max-width: 70rem;
+        padding: 2rem 1rem 4rem;
+    }
+
+    .statusGrid {
+        display: grid;
+        gap: 1px;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        background: var(--line);
+        border: 1px solid var(--line);
+        box-shadow: 0 0.5rem 1.5rem rgba(18, 60, 50, 0.08);
+        margin-block: -3.8rem 2rem;
+        position: relative;
+    }
+
+    .statusItem {
+        background: var(--paper);
+        min-height: 6.5rem;
+        padding: 1rem;
+    }
+
+    .statusItem span {
+        color: var(--muted);
+        display: block;
+        font-size: 0.75rem;
+        font-weight: 700;
+        letter-spacing: 0.07em;
+        margin-block-end: 0.4rem;
+        text-transform: uppercase;
+    }
+
+    .statusItem strong { color: var(--forest); }
+
+    .inForce {
+        background: var(--forest-light);
+        border-radius: 999px;
+        display: inline-block;
+        padding: 0.2rem 0.65rem;
+    }
+
+    .introGrid {
+        display: grid;
+        gap: 1.5rem;
+        grid-template-columns: 1.3fr 0.7fr;
+        margin-block: 2rem;
+    }
+
+    .panel,
+    .rule,
+    .changeRecord {
+        background: var(--paper);
+        border: 1px solid var(--line);
+        border-radius: 0.45rem;
+        padding: clamp(1.1rem, 3vw, 1.75rem);
+    }
+
+    .hardConstraint {
+        background: var(--privacy-light);
+        border: 2px solid var(--privacy);
+        color: #4b1826;
+    }
+
+    h2,
+    h3 { color: var(--forest); }
+    h2 { font-family: Georgia, "Times New Roman", serif; font-size: 1.8rem; }
+    h2:first-child, h3:first-child { margin-block-start: 0; }
+
+    .sectionIntro { color: var(--muted); max-width: 64rem; }
+
+    .rules {
+        display: grid;
+        gap: 1rem;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .rule {
+        border-block-start: 4px solid var(--forest);
+        display: flex;
+        flex-direction: column;
+    }
+
+    .ruleId {
+        color: var(--privacy);
+        font-size: 0.74rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        margin: 0;
+        text-transform: uppercase;
+    }
+
+    .rule h3 { margin-block: 0.35rem 0.65rem; }
+
+    .rule dl { margin-block-end: 0; }
+    .rule dt { font-weight: 700; margin-block-start: 0.75rem; }
+    .rule dd { color: #34453e; margin-inline-start: 0; }
+
+    .auditTableWrap { overflow-x: auto; }
+    table { border-collapse: collapse; min-width: 48rem; width: 100%; }
+    th, td { border-block-end: 1px solid var(--line); padding: 0.8rem; text-align: start; vertical-align: top; }
+    th { background: var(--forest-light); color: var(--forest); }
+
+    .boundary {
+        background: var(--forest);
+        color: #ffffff;
+        margin-block: 2rem;
+    }
+
+    .boundary h2 { color: #ffffff; }
+
+    .boundary strong { color: #f4d98c; }
+
+    .changeRecord { border-inline-start: 5px solid var(--gold); }
+
+    .changeMeta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4rem 1.5rem;
+        padding: 0;
+    }
+
+    .changeMeta li { list-style: none; }
+
+    footer {
+        color: var(--muted);
+        font-size: 0.88rem;
+        margin-block-start: 2.5rem;
+    }
+
+    @media (max-width: 48rem) {
+        .statusGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .introGrid, .rules { grid-template-columns: 1fr; }
+    }
+
+    @media print {
+        body { background: #ffffff; }
+        .pageHeader { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+        .statusGrid { margin-block-start: 1rem; }
+        .rule, .panel, .changeRecord { break-inside: avoid; }
+        a { color: inherit; text-decoration: none; }
+    }
+</style>
+</head>
+<body data-governance-version="GRG-PPR-1.0.0">
+<header class="pageHeader">
+    <nav aria-label="Research governance navigation">
+        <a href="/researcher.html">Researcher workspace</a>
+        <a href="/global-analysis-rules.html">Global analysis rules</a>
+        <a href="/project-analysis-rules.html">Project analysis rules</a>
+        <a href="/design.html">Interview protocol</a>
+    </nav>
+    <p class="eyebrow">Independent platform specification</p>
+    <h1>Global Research Governance / Participant Privacy Rules</h1>
+    <p class="headerSummary">
+        The standing limits on what intervu.quest is allowed to do. Participant
+        anonymity and privacy are hard constraints that every technical,
+        analytical, and operational choice must satisfy.
+    </p>
+</header>
+
+<main>
+    <section class="statusGrid" aria-label="Governance document status">
+        <div class="statusItem"><span>Status</span><strong class="inForce">In force</strong></div>
+        <div class="statusItem"><span>Version</span><strong>GRG-PPR-1.0.0</strong></div>
+        <div class="statusItem"><span>Effective date</span><strong>September 1, 2026</strong></div>
+        <div class="statusItem"><span>Scope</span><strong>Entire intervu.quest platform</strong></div>
+    </section>
+
+    <section class="introGrid" aria-label="Purpose and authority">
+        <div class="panel">
+            <h2>Purpose and authority</h2>
+            <p>
+                This page is the platform-wide governance and participant-privacy
+                specification. It is intentionally separate from the ordinary
+                researcher dashboard, interview protocol, global analysis rules,
+                and project-specific analysis rules.
+            </p>
+            <p>
+                The dashboard shows what the system is currently doing. This page
+                states what the system is permitted and prohibited from doing.
+                Reviewers should assess implementation evidence against these rules;
+                the existence of a rule is not, by itself, a claim of compliance.
+            </p>
+        </div>
+        <aside class="panel hardConstraint" aria-labelledby="hardConstraintHeading">
+            <h2 id="hardConstraintHeading">Hard constraint</h2>
+            <p>
+                <strong>Participants remain anonymous at all times, whoever they are.</strong>
+                Privacy protection cannot be traded away for database convenience,
+                easier authentication, analytical automation, or operational speed.
+            </p>
+        </aside>
+    </section>
+
+    <section aria-labelledby="rulesHeading">
+        <h2 id="rulesHeading">Standing platform-wide rules</h2>
+        <p class="sectionIntro">
+            “Must” and “must not” are binding platform requirements. Each stable rule
+            ID is retained across versions so changes can be traced without silently
+            rewriting the historical record.
+        </p>
+
+        <div class="rules">
+            <article class="rule" id="GOV-PRIV-001">
+                <p class="ruleId">GOV-PRIV-001 · Mandatory</p>
+                <h3>Participant anonymity at all times</h3>
+                <p>Participants must remain anonymous throughout recruitment, consent, interviewing, storage, analysis, review, and export.</p>
+                <dl>
+                    <dt>Prohibited</dt>
+                    <dd>Requiring or retaining a participant’s real-world identity when it is not necessary for the approved research purpose.</dd>
+                    <dt>Review evidence</dt>
+                    <dd>Participant flow, stored identifiers, exported fields, and any protected pseudonym crosswalk.</dd>
+                </dl>
+            </article>
+
+            <article class="rule" id="GOV-PRIV-002">
+                <p class="ruleId">GOV-PRIV-002 · Mandatory</p>
+                <h3>No identity workaround for RLS</h3>
+                <p>Identity-based participant accounts or authentication must not be introduced merely to satisfy database or Row Level Security architecture.</p>
+                <dl>
+                    <dt>Required</dt>
+                    <dd>Database and application security must conform to the anonymous participation model, not redefine participants as identity-linked users.</dd>
+                    <dt>Review evidence</dt>
+                    <dd>Data-access diagram, grants and policy review, participant request path, and authentication inventory.</dd>
+                </dl>
+            </article>
+
+            <article class="rule" id="GOV-ACCESS-001">
+                <p class="ruleId">GOV-ACCESS-001 · Mandatory</p>
+                <h3>Access protection must preserve anonymity</h3>
+                <p>Participant interview data must be protected through least-privilege, session-scoped or server-mediated controls that do not reveal or require participant identity.</p>
+                <dl>
+                    <dt>Prohibited</dt>
+                    <dd>Broad client access, identity collection for convenience, or a security repair that breaks anonymous participation.</dd>
+                    <dt>Review evidence</dt>
+                    <dd>Documented read/write paths, authorization boundaries, secret handling, and access tests.</dd>
+                </dl>
+            </article>
+
+            <article class="rule" id="GOV-AI-001">
+                <p class="ruleId">GOV-AI-001 · Mandatory</p>
+                <h3>Researcher-only, explicit AI control</h3>
+                <p>AI analysis may begin only through an explicit operation selected and started by an authorized researcher.</p>
+                <dl>
+                    <dt>Prohibited</dt>
+                    <dd>Automatic analysis caused by participant activity, page loading, data refresh, design loading, navigation, or another read action.</dd>
+                    <dt>Review evidence</dt>
+                    <dd>Researcher authorization boundary, visible start action, API contract, and execution audit event.</dd>
+                </dl>
+            </article>
+
+            <article class="rule" id="GOV-AI-002">
+                <p class="ruleId">GOV-AI-002 · Mandatory</p>
+                <h3>Exact model choice and confirmed plan</h3>
+                <p>Before paid execution, the researcher must select the provider and exact model and confirm a visible execution plan describing the operation, scope, source set, and expected stages.</p>
+                <dl>
+                    <dt>Prohibited</dt>
+                    <dd>Silent provider or model substitution, ambiguous model families, or execution before plan confirmation.</dd>
+                    <dt>Review evidence</dt>
+                    <dd>Confirmed plan snapshot and the requested and resolved provider/model identifiers stored with the run.</dd>
+                </dl>
+            </article>
+
+            <article class="rule" id="GOV-AI-003">
+                <p class="ruleId">GOV-AI-003 · Mandatory</p>
+                <h3>No hidden paid processing</h3>
+                <p>Viewing, filtering, sorting, downloading, refreshing, or otherwise reading existing data must not trigger analysis, translation, synthesis, model calls, or other paid processing.</p>
+                <dl>
+                    <dt>Required</dt>
+                    <dd>Read operations and paid computational operations must have separate, inspectable contracts.</dd>
+                    <dt>Review evidence</dt>
+                    <dd>Network trace, endpoint behavior, cost/event logs, and tests showing read-only actions remain read-only.</dd>
+                </dl>
+            </article>
+
+            <article class="rule" id="GOV-METHOD-001">
+                <p class="ruleId">GOV-METHOD-001 · Mandatory</p>
+                <h3>Fresh analysis starts from original sources</h3>
+                <p>When an operation is defined as fresh independent analysis, the model must receive original source material, not prior AI analysis, labels, summaries, or conclusions.</p>
+                <dl>
+                    <dt>Prohibited</dt>
+                    <dd>Silent continuation, repair, seeding, or analytical anchoring from earlier AI output.</dd>
+                    <dt>Review evidence</dt>
+                    <dd>Recorded input manifest, source transcript IDs, prompt assembly, and exclusion of earlier analysis IDs.</dd>
+                </dl>
+            </article>
+
+            <article class="rule" id="GOV-METHOD-002">
+                <p class="ruleId">GOV-METHOD-002 · Mandatory</p>
+                <h3>Cross-case work is a separate stage</h3>
+                <p>Cross-case analysis, refinement, grouping, or synthesis must be a separately researcher-triggered operation. It must never begin automatically after case-level analysis.</p>
+                <dl>
+                    <dt>Required</dt>
+                    <dd>A new scope, plan, confirmation, run identity, and provenance record for every cross-case stage.</dd>
+                    <dt>Review evidence</dt>
+                    <dd>Stage locks, separate start controls, distinct job records, and explicit source-case selection.</dd>
+                </dl>
+            </article>
+
+            <article class="rule" id="GOV-PROV-001">
+                <p class="ruleId">GOV-PROV-001 · Mandatory</p>
+                <h3>Researcher-visible provenance</h3>
+                <p>Every computational output must retain traceable lineage to its source transcript or records, operation, input scope, rule versions, prompt or instruction version, provider, exact model, timestamps, and analytical relationships.</p>
+                <dl>
+                    <dt>Required</dt>
+                    <dd>Provenance must be accessible to researchers and reviewers, not hidden as an internal implementation detail.</dd>
+                    <dt>Review evidence</dt>
+                    <dd>On-screen lineage, exportable identifiers, run metadata, source links, and version references.</dd>
+                </dl>
+            </article>
+
+            <article class="rule" id="GOV-OPS-001">
+                <p class="ruleId">GOV-OPS-001 · Mandatory</p>
+                <h3>Active operations can be stopped</h3>
+                <p>An authorized researcher must be able to stop active analysis, translation, synthesis, or other computational operations.</p>
+                <dl>
+                    <dt>Required</dt>
+                    <dd>The stop request, observed stop point, partial effects, and final status remain recorded rather than concealed.</dd>
+                    <dt>Review evidence</dt>
+                    <dd>Visible stop control, durable cancellation state, worker behavior, and retained audit events.</dd>
+                </dl>
+            </article>
+
+            <article class="rule" id="GOV-HIST-001">
+                <p class="ruleId">GOV-HIST-001 · Mandatory</p>
+                <h3>Historical states remain distinguishable</h3>
+                <p>Current, completed, stopped, failed, partial, legacy, superseded, and withdrawn outputs must remain visibly and technically distinguishable.</p>
+                <dl>
+                    <dt>Prohibited</dt>
+                    <dd>Overwriting source analyses, presenting legacy output as current, or hiding stopped and failed attempts.</dd>
+                    <dt>Review evidence</dt>
+                    <dd>Immutable identifiers, status labels, predecessor/successor lineage, and filters that do not collapse unlike states.</dd>
+                </dl>
+            </article>
+
+            <article class="rule" id="GOV-CHANGE-001">
+                <p class="ruleId">GOV-CHANGE-001 · Mandatory</p>
+                <h3>Governance changes are traceable</h3>
+                <p>Every change to these rules must create a new version and preserve the prior wording, effective date, reason, responsible decision-maker, affected rule IDs, and implementation impact.</p>
+                <dl>
+                    <dt>Prohibited</dt>
+                    <dd>Silent edits, deletion of earlier versions, or retroactively claiming that a newer rule governed an older operation.</dd>
+                    <dt>Review evidence</dt>
+                    <dd>Append-only change record, source-control history, review decision, and rule version stored with affected future operations.</dd>
+                </dl>
+            </article>
+        </div>
+    </section>
+
+    <section class="panel boundary" aria-labelledby="boundaryHeading">
+        <h2 id="boundaryHeading">Architecture boundary for this governance version</h2>
+        <p>
+            <strong>This governance-page change does not enable Row Level Security,
+            create participant accounts, or introduce participant authentication.</strong>
+            Any future access-control repair must be designed and tested separately
+            against the anonymity requirements above. Security is mandatory; participant
+            identity is not an acceptable shortcut for achieving it.
+        </p>
+    </section>
+
+    <section class="panel" aria-labelledby="auditHeading">
+        <h2 id="auditHeading">Committee inspection map</h2>
+        <p class="sectionIntro">Suggested evidence for comparing the implemented platform with this independent specification.</p>
+        <div class="auditTableWrap">
+            <table>
+                <thead>
+                    <tr><th scope="col">Rule family</th><th scope="col">What reviewers should be able to inspect</th><th scope="col">Acceptance condition</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td>Privacy and access</td><td>Participant flow, identifiers, data-access paths, grants, exports, and authorization tests.</td><td>No identity requirement; access remains least-privilege and anonymous.</td></tr>
+                    <tr><td>Researcher control</td><td>Provider/model selector, previewed plan, confirmation action, stop action, and run audit.</td><td>No computation begins without the authorized researcher’s explicit confirmation.</td></tr>
+                    <tr><td>Analytical independence</td><td>Input manifests, transcript source links, stage boundaries, and cross-case start controls.</td><td>Fresh runs use original sources; cross-case work has a separate trigger and run.</td></tr>
+                    <tr><td>Lineage and history</td><td>Provenance views/exports, stable IDs, status taxonomy, predecessor links, and rule versions.</td><td>Every output and rule change remains attributable and historically distinguishable.</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section aria-labelledby="changeHeading">
+        <h2 id="changeHeading">Change control and version history</h2>
+        <p class="sectionIntro">
+            Governance versions are append-only. A proposed change must be reviewed
+            independently from ordinary dashboard activity and must identify its privacy,
+            methodological, operational, and implementation consequences before it takes effect.
+        </p>
+        <article class="changeRecord">
+            <h3>GRG-PPR-1.0.0 · Initial standing specification</h3>
+            <ul class="changeMeta">
+                <li><strong>Effective:</strong> September 1, 2026</li>
+                <li><strong>Status:</strong> In force</li>
+                <li><strong>Affected rules:</strong> GOV-PRIV-001 through GOV-CHANGE-001</li>
+            </ul>
+            <p>
+                Established participant anonymity and privacy as hard constraints;
+                separated platform governance from operational dashboards and configurable
+                analysis rules; codified explicit researcher control, analytical independence,
+                provenance, cancellation, historical integrity, and traceable change control.
+            </p>
+        </article>
+    </section>
+
+    <footer>
+        <p>
+            Document class: independent global governance specification. The page has no
+            analysis, translation, authentication, or database action. It is safe to inspect
+            as a read-only policy document.
+        </p>
+    </footer>
+</main>
+</body>
+</html>
