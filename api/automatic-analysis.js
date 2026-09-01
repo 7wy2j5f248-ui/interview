@@ -10,6 +10,9 @@ import {
     processNextAdvancedPreliminaryAnalysis
 } from "../server/advancedPreliminaryAnalysis.js";
 import {
+    processNextCrossCaseCodeRefinement
+} from "../server/crossCaseCodeRefinement.js";
+import {
     continueTranscriptTranslation,
     processTranscriptTranslation,
     transcriptTranslationBaseUrl,
@@ -34,10 +37,17 @@ async function processStagedAndContinue(req) {
         auth: { persistSession: false, autoRefreshToken: false }
     });
     const openaiClient = new OpenAI({ apiKey: openaiKey });
-    const result = await processNextAdvancedPreliminaryAnalysis(
+    let result = await processNextAdvancedPreliminaryAnalysis(
         supabaseClient,
         openaiClient
     );
+
+    if (!result.claimed) {
+        result = await processNextCrossCaseCodeRefinement(
+            supabaseClient,
+            openaiClient
+        );
+    }
 
     if (result.claimed) {
         if (!result.completed) {
@@ -86,6 +96,20 @@ export default async function handler(req, res) {
         return handleAdvancedPreliminaryDashboard(req, res);
     }
 
+    if (req.method === "GET" && req.query?.cron === "staged") {
+        if (!stagedAnalysisWorkerRequestIsAuthorized(req)) {
+            return res.status(401).json({ error: "Unauthorized." });
+        }
+        waitUntil(processStagedAndContinue(req).catch(error => {
+            console.error("Scheduled staged-analysis worker stopped:", error);
+        }));
+        return res.status(202).json({
+            accepted: true,
+            processing: "staged_meaning_units_then_cross_case_codes",
+            trigger: "independent_schedule"
+        });
+    }
+
     if (req.method === "GET") return res.status(410).json({
         error: "The legacy analysis endpoint is retired. Use the staged researcher dashboard."
     });
@@ -127,7 +151,7 @@ export default async function handler(req, res) {
 
     return res.status(202).json({
         accepted: true,
-        processing: "staged_meaning_units",
+        processing: "staged_meaning_units_then_cross_case_codes",
         processingOrder: "earliest_completed_first"
     });
 }

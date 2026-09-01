@@ -142,8 +142,8 @@
         <h2 id="workflowHeading">Staged Qualitative Analysis</h2>
         <p class="automaticPipelineNote">
             <strong>Active sequence:</strong> Meaning Units → Codes → Categories → Themes.
-            Only Stage 1 Meaning Units is available now. Each later layer remains
-            researcher-controlled and locked until the preceding layer is inspected.
+            Stage 1 Meaning Units and Stage 2 Cross-Case Code Refinement run automatically
+            in sequence. Categories and Themes remain locked and are not generated.
         </p>
         <p>
             Historical transcripts, reports, jobs, and failures remain preserved in
@@ -172,13 +172,13 @@
                 </p>
                 <ol class="automaticReanalysisPanel" aria-label="Staged qualitative analysis workflow">
                     <li><strong>Stage 1 · Meaning Units</strong> — available now</li>
-                    <li><button type="button" disabled>Stage 2 · Cross-Case Code Refinement — locked</button></li>
+                    <li><button type="button" disabled>Stage 2 · Cross-Case Code Refinement — automatic after Stage 1</button></li>
                     <li><button type="button" disabled>Stage 3 · Category Development — locked</button></li>
                     <li><button type="button" disabled>Stage 4 · Theme Development — locked</button></li>
                 </ol>
                 <p class="muted">
-                    Approval freezes the refined Code vocabulary at the end of Stage 2;
-                    it is an approval gate, not a separate analytical layer.
+                    Researcher inspection happens after the completed Stage 2 output.
+                    No approval is required to keep Stage 1 or Stage 2 moving.
                 </p>
                 <label for="advancedPreliminaryModel">
                     Stage 1 analysis model
@@ -236,6 +236,19 @@
                     </p>
                     <div id="advancedPreliminaryLegacyTable"></div>
                 </details>
+                <section id="crossCaseCodeRefinement" class="automaticReanalysisPanel" aria-labelledby="crossCaseCodeHeading">
+                    <h3 id="crossCaseCodeHeading">Stage 2 · Cross-Case Code Refinement</h3>
+                    <p id="crossCaseCodeStatus" class="automaticReviewScopeSummary">
+                        Waiting for Stage 1 to finish. Stage 2 will start automatically.
+                    </p>
+                    <p id="crossCaseCodeProvenance" class="muted"></p>
+                    <div class="actionRow">
+                        <button id="crossCaseCodeDownloadButton" type="button" disabled>
+                            Download final refined-code mapping CSV
+                        </button>
+                    </div>
+                    <div id="crossCaseCodeTable"></div>
+                </section>
             </section>
         </div>
     </section>
@@ -248,7 +261,7 @@
     <div id="advancedPreliminaryDialogContent"></div>
 </dialog>
 
-<script src="researcher-staged-access.js?version=20260901-staged-page-v1"></script>
-<script src="researcher-advanced-preliminary.js?version=20260901-staged-page-v1"></script>
+<script src="researcher-staged-access.js?version=20260901-stage2-code-v1"></script>
+<script src="researcher-advanced-preliminary.js?version=20260901-stage2-code-v1"></script>
 </body>
 </html>

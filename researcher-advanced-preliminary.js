@@ -17,6 +17,10 @@
     const tableHost = document.getElementById("advancedPreliminaryTable");
     const attentionHost = document.getElementById("advancedPreliminaryAttentionTable");
     const legacyHost = document.getElementById("advancedPreliminaryLegacyTable");
+    const stage2Status = document.getElementById("crossCaseCodeStatus");
+    const stage2Provenance = document.getElementById("crossCaseCodeProvenance");
+    const stage2Host = document.getElementById("crossCaseCodeTable");
+    const stage2DownloadButton = document.getElementById("crossCaseCodeDownloadButton");
     const modelSelect = document.getElementById("advancedPreliminaryModel");
     const modelSuggestions = document.getElementById("advancedPreliminaryModelSuggestions");
     const startButton = document.getElementById("advancedPreliminaryStartButton");
@@ -33,6 +37,7 @@
     let payload = {
         run: null, cases: [], attentionCases: [], attentionCount: 0,
         legacyCases: [], legacyCount: 0,
+        stage2: { run: null, mappings: [] },
         page: 1, pageSize: 50
     };
     let page = 1;
@@ -122,6 +127,7 @@
         tableHost.replaceChildren();
         attentionHost?.replaceChildren();
         legacyHost?.replaceChildren();
+        stage2Host?.replaceChildren();
         renderModels();
         const run = payload.run;
         [
@@ -219,10 +225,86 @@
         renderCaseTable(payload.cases, tableHost);
         renderCaseTable(payload.attentionCases || [], attentionHost, "attention");
         renderCaseTable(payload.legacyCases || [], legacyHost, "legacy");
+        renderStage2();
         pageLabel.textContent = `Page ${payload.page}`;
         previousButton.disabled = payload.page <= 1;
         nextButton.disabled = payload.page * payload.pageSize >= run.source_case_count;
     }
+
+    function renderStage2() {
+        const stage2 = payload.stage2 || { run: null, mappings: [] };
+        if (!stage2.run) {
+            stage2Status.textContent =
+                "Waiting for Stage 1 to finish. Stage 2 will start automatically without a researcher approval gate.";
+            stage2Provenance.textContent =
+                "Categories and Themes remain locked.";
+            stage2DownloadButton.disabled = true;
+            return;
+        }
+        stage2Status.textContent =
+            `Stage 2 is ${stage2.run.status.replaceAll("_", " ")}. `
+            + `${stage2.run.preliminary_completed_count}/${stage2.run.source_case_count} cases have preliminary Codes; `
+            + `${stage2.run.refinement_completed_count} preliminary Codes have cross-case assignments; `
+            + `${stage2.run.preliminary_failed_count + stage2.run.refinement_failed_count} terminal failures are retained for review.`;
+        stage2Provenance.textContent = [
+            `Stage 1 run ${stage2.run.stage1_run_id}`,
+            `${stage2.run.provider} / ${stage2.run.resolved_model || stage2.run.model}`,
+            `reasoning ${stage2.run.reasoning_effort}`,
+            stage2.run.analysis_version,
+            stage2.run.prompt_version,
+            "stop layer: refined Codes"
+        ].join(" · ");
+        stage2DownloadButton.disabled = !["completed", "completed_with_failures"]
+            .includes(stage2.run.status);
+        if (!stage2.mappings?.length) return;
+        const built = table([
+            "Case ID", "Supporting MU / transcript", "Preliminary Code",
+            "Refined Code", "Semantic decision"
+        ]);
+        const body = document.createElement("tbody");
+        stage2.mappings.forEach(mapping => {
+            const row = document.createElement("tr");
+            cell(row, mapping.preliminaryCode?.case_number);
+            cell(row, (mapping.meaningUnits || []).map(unit =>
+                `MU${unit.unit_number} · message ${unit.message_id}: ${unit.exact_source_text}`
+            ).join(" | "));
+            cell(row, `CO${mapping.preliminaryCode?.code_number} · ${mapping.preliminaryCode?.code_label}`);
+            cell(row, `RCO${mapping.refinedCode?.refined_code_number} · ${mapping.refinedCode?.refined_code_label}`);
+            cell(row, `${mapping.decision}: ${mapping.semanticRationale}`);
+            body.appendChild(row);
+        });
+        built.element.appendChild(body);
+        stage2Host.appendChild(built.scroll);
+    }
+
+    stage2DownloadButton.addEventListener("click", async () => {
+        if (!payload.stage2?.run?.id) return;
+        stage2DownloadButton.disabled = true;
+        setStatus("Preparing the final Stage 2 refined-code mapping…");
+        try {
+            const response = await fetch(
+                `${API_PATH}&download=stage2-csv&runId=${encodeURIComponent(payload.run.id)}&_=${Date.now()}`,
+                { headers: { Authorization: `Bearer ${token()}` }, cache: "no-store" }
+            );
+            if (!response.ok) {
+                const body = await response.json().catch(() => ({}));
+                throw new Error(body.error || "The Stage 2 export could not be prepared.");
+            }
+            const blob = await response.blob();
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = `sleeping-habits-stage2-refined-codes-${payload.stage2.run.id}.csv`;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            URL.revokeObjectURL(url);
+            render();
+        } catch (error) {
+            setStatus(error.message, true);
+            stage2DownloadButton.disabled = false;
+        }
+    });
 
     async function load({ quiet = false } = {}) {
         if (loading || !token() || workspace?.hidden) return;

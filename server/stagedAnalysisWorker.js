@@ -15,9 +15,13 @@ function requestBaseUrl(req) {
 }
 
 export function stagedAnalysisWorkerRequestIsAuthorized(req) {
-    const secret = configuredWorkerSecret();
-    return Boolean(secret)
-        && req?.headers?.authorization === `Bearer ${secret}`;
+    const authorization = req?.headers?.authorization;
+    const workerSecret = configuredWorkerSecret();
+    const cronSecret = process.env.CRON_SECRET || null;
+    return (Boolean(workerSecret)
+        && authorization === `Bearer ${workerSecret}`)
+        || (Boolean(cronSecret)
+            && authorization === `Bearer ${cronSecret}`);
 }
 
 export function scheduleStagedAnalysis(req) {

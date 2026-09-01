@@ -219,14 +219,14 @@ test("researcher UI locks later stages and exposes model, audit, evidence, and e
     assert.match(script, /choose Lock workspace and unlock again/);
     assert.match(script, /advancedPreliminaryLockButton/);
     assert.match(script, /sessionStorage\.removeItem\(TOKEN_STORAGE_KEY\)/);
-    assert.match(html, /Stage 2 · Cross-Case Code Refinement — locked/);
+    assert.match(html, /Stage 2 · Cross-Case Code Refinement — automatic after Stage 1/);
     assert.match(html, /Stage 3 · Category Development — locked/);
     assert.match(html, /Stage 4 · Theme Development — locked/);
     assert.doesNotMatch(html, /Stage 5 · Theme Development/);
     assert.match(html, /Meaning Units →[\s\S]*Codes → Categories → Themes/);
     assert.match(html, /Historical transcripts, reports, jobs, and failures remain preserved in[\s\S]*protected audit storage/);
     assert.match(html, /retired Forms 1–4 are not loaded or displayed/);
-    assert.match(html, /approval gate, not a separate analytical layer/);
+    assert.match(html, /No approval is required to keep Stage 1 or Stage 2 moving/);
     assert.match(html, /advancedPreliminaryModel/);
     assert.match(html, /list="advancedPreliminaryModelSuggestions"/);
     assert.match(html, /Enter any exact model identifier/);
