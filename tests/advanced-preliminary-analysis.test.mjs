@@ -199,6 +199,22 @@ test("resumed Stage 1 work has a durable incremental spending guard", async () =
     assert.doesNotMatch(migration, /delete from public\./i);
 });
 
+test("a stopped GPT-5.6 run can continue only after its preserved reports prove independence", async () => {
+    const migration = await source(
+        "supabase/migrations/20260901202500_verify_and_resume_stopped_gpt56_run.sql"
+    );
+    assert.match(migration, /contract_transitions/);
+    assert.match(migration, /independently_verified_count/);
+    assert.match(migration, /priorAnalysisUsed/);
+    assert.match(migration, /aiAnalysisPassCount/);
+    assert.match(migration, /local_deterministic_source_and_relationship_integrity/);
+    assert.match(migration, /previousAnalysisVersion/);
+    assert.match(migration, /previousPromptVersion/);
+    assert.match(migration, /p_execution_plan_hash/);
+    assert.match(migration, /preliminary-case-analysis-v4-researcher-controlled-independent/);
+    assert.doesNotMatch(migration, /delete from public\./i);
+});
+
 test("analysis providers are server-configured and never expose credentials", () => {
     const environment = {
         OPENAI_API_KEY: "server-secret",
