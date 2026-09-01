@@ -170,7 +170,7 @@
             cell(row, item.project_binding_status === "project_bound"
                 ? "Sleeping habits" : "Out of scope");
             cell(row, item.report?.analytical_audit?.coverageReviewRequired
-                ? "Completed · coverage gaps need review"
+                ? "Completed · Stage 1 audit issues need review"
                 : item.status === "failed"
                 ? `Needs attention${item.last_error ? `: ${item.last_error}` : ""}`
                 : item.status.replaceAll("_", " "));
@@ -343,6 +343,23 @@
                     && report.analytical_audit?.stage1Only ? "muted" : "errorMessage"
             ));
             const gaps = report.analytical_audit?.omittedRelevantEvidence || [];
+            const rejectedUnits = (report.analytical_audit?.meaningUnitChecks || [])
+                .filter(check => !check.accepted);
+            if (rejectedUnits.length) {
+                dialogContent.appendChild(heading("Draft Meaning Units requiring review"));
+                dialogContent.appendChild(paragraph(
+                    "These exact transcript highlights remain visible as a proposal, but the independent audit did not verify them as final Stage 1 Meaning Units."
+                ));
+                rejectedUnits.forEach(check => {
+                    const block = document.createElement("blockquote");
+                    block.appendChild(paragraph(
+                        `MU${check.unitNumber} · message ${check.messageId}`,
+                        "muted"
+                    ));
+                    block.appendChild(paragraph(check.explanation));
+                    dialogContent.appendChild(block);
+                });
+            }
             if (gaps.length) {
                 dialogContent.appendChild(heading("Exact transcript passages requiring coverage review"));
                 dialogContent.appendChild(paragraph(

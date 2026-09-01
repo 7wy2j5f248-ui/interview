@@ -197,7 +197,7 @@ test("database preserves project, framework, proposal, and approval lineage", as
     );
 });
 
-test("global framework queue creates one auditable proposal per case", async () => {
+test("historical global framework proposals remain auditable but their worker is retired", async () => {
     const [worker, processor, migration, reviewUi, dashboard] = await Promise.all([
         readFile(new URL("../api/automatic-analysis.js", import.meta.url), "utf8"),
         readFile(new URL("../server/frameworkReanalysis.js", import.meta.url), "utf8"),
@@ -205,7 +205,9 @@ test("global framework queue creates one auditable proposal per case", async () 
         readFile(new URL("../researcher-automatic-review.js", import.meta.url), "utf8"),
         readFile(new URL("../server/caseAnalysisDashboard.js", import.meta.url), "utf8")
     ]);
-    assert.match(worker, /processOldestFrameworkReanalysis/);
+    assert.doesNotMatch(worker, /processOldestFrameworkReanalysis/);
+    assert.match(worker, /processNextAdvancedPreliminaryAnalysis/);
+    assert.match(worker, /requested legacy analysis worker is retired/);
     assert.match(processor, /generateAutomaticCaseReanalysis/);
     assert.match(processor, /relevance_audit: analysis\.relevanceAudit/);
     assert.match(processor, /source_quality_flags: sourceQualityFlags/);

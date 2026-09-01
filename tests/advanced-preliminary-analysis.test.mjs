@@ -137,6 +137,18 @@ test("exact audit coverage gaps remain reviewable instead of becoming terminal f
     assert.equal(coverageGapIsReviewable(audit), true);
 });
 
+test("a smallest-span audit disagreement remains inspectable instead of blocking the case", () => {
+    const analysis = validateAdvancedPreliminaryAnalysis(validDraft(), messages);
+    const value = acceptedAudit(analysis);
+    value.meaning_unit_checks[0].smallest_sufficient_span = false;
+    value.meaning_unit_checks[0].explanation =
+        "The exact passage contains two separable substantive statements.";
+    const audit = validateAdvancedPreliminaryAudit(analysis, value);
+    assert.equal(audit.complete, false);
+    assert.equal(audit.meaningUnitChecks[0].accepted, false);
+    assert.equal(coverageGapIsReviewable(audit), true);
+});
+
 test("Stage 1 is versioned, stronger-model capable, and stops at Meaning Units", async () => {
     assert.equal(ADVANCED_PRELIMINARY_MODEL, "gpt-5.6-sol");
     assert.equal(ADVANCED_PRELIMINARY_REASONING_EFFORT, "high");
@@ -214,7 +226,8 @@ test("researcher UI locks later stages and exposes model, audit, evidence, and e
     assert.match(script, /Stage 1 annotated transcript/);
     assert.match(script, /meaningUnitAnnotation/);
     assert.match(script, /Full-transcript coverage/iu);
-    assert.match(script, /coverage gaps need review/);
+    assert.match(script, /Stage 1 audit issues need review/);
+    assert.match(script, /Draft Meaning Units requiring review/);
     assert.match(script, /Exact transcript passages requiring coverage review/);
     assert.match(script, /download=stage1-csv/);
     assert.match(dashboard, /configuredStage1Models/);

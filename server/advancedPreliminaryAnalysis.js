@@ -2,7 +2,7 @@ import { ensureEnglishTranslations } from "./messageTranslation.js";
 import {
     isConversationalCourtesy,
     prepareParticipantMessages
-} from "./analysisCore.js";
+} from "./stagedTranscript.js";
 import { loadParticipantCodeMap } from "./participantCodes.js";
 import { normalizeOpenAIModel } from "./modelConfiguration.js";
 
@@ -278,10 +278,12 @@ export function coverageGapIsReviewable(audit) {
     return Boolean(
         audit
         && audit.stage1Only
-        && !audit.fullTranscriptCoverage
         && audit.meaningUnitChecks?.length
-        && audit.meaningUnitChecks.every(check => check.accepted)
-        && audit.omittedRelevantEvidence?.length
+        && (
+            !audit.fullTranscriptCoverage
+            || audit.meaningUnitChecks.some(check => !check.accepted)
+            || audit.omittedRelevantEvidence?.length
+        )
     );
 }
 
@@ -519,18 +521,21 @@ export async function generateAdvancedPreliminaryAnalysis(
     }
 
     const coverageReviewRequired = coverageGapIsReviewable(audited.audit);
+    const auditIssueCount = audited.audit.meaningUnitChecks
+        .filter(check => !check.accepted).length
+        + audited.audit.omittedRelevantEvidence.length;
     const audit = {
         ...audited.audit,
         coverageReviewRequired,
         reviewStatus: coverageReviewRequired
-            ? "coverage_gaps_need_researcher_review"
+            ? "stage1_audit_issues_need_researcher_review"
             : "verified"
     };
 
     return {
         ...generated.analysis,
         caseSummary: coverageReviewRequired
-            ? `${generated.analysis.caseSummary} The independent audit identified ${audit.omittedRelevantEvidence.length} exact transcript passage${audit.omittedRelevantEvidence.length === 1 ? "" : "s"} for coverage review; the proposal is preserved and is not represented as fully verified.`
+            ? `${generated.analysis.caseSummary} The independent audit identified ${auditIssueCount} Stage 1 issue${auditIssueCount === 1 ? "" : "s"} for researcher review; the proposal is preserved and is not represented as fully verified.`
             : generated.analysis.caseSummary,
         audit,
         inputTokenCount: totalInputTokens || null,

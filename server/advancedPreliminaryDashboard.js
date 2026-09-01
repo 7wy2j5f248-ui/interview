@@ -10,7 +10,7 @@ import {
     SLEEPING_HABITS_PROJECT_CODE,
     probeAdvancedPreliminaryModel
 } from "./advancedPreliminaryAnalysis.js";
-import { scheduleAutomaticCaseAnalysis } from "./automaticCaseAnalysis.js";
+import { scheduleStagedAnalysis } from "./stagedAnalysisWorker.js";
 import {
     configuredStage1DefaultModel,
     configuredStage1Models
@@ -315,7 +315,7 @@ async function startRun(supabase, req) {
             { status: message.includes("already active") ? 409 : 500 }
         );
     }
-    const scheduled = scheduleAutomaticCaseAnalysis(req);
+    const scheduled = scheduleStagedAnalysis(req);
     return {
         runId,
         modelVerified: true,

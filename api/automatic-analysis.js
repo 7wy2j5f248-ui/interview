@@ -2,16 +2,10 @@ import { waitUntil } from "@vercel/functions";
 import OpenAI from "openai";
 import { createClient } from "@supabase/supabase-js";
 import {
-    handleCaseAnalysisDashboard,
-    handleCaseArchiveMutation
-} from "../server/caseAnalysisDashboard.js";
-import {
-    automaticCaseAnalysisBaseUrl,
-    continueAutomaticCaseAnalysis,
-    processOldestAutomaticCase,
-    workerRequestIsAuthorized
-} from "../server/automaticCaseAnalysis.js";
-import { processOldestFrameworkReanalysis } from "../server/frameworkReanalysis.js";
+    continueStagedAnalysis,
+    stagedAnalysisBaseUrl,
+    stagedAnalysisWorkerRequestIsAuthorized
+} from "../server/stagedAnalysisWorker.js";
 import {
     processNextAdvancedPreliminaryAnalysis
 } from "../server/advancedPreliminaryAnalysis.js";
@@ -27,44 +21,30 @@ import {
 
 export const config = { maxDuration: 300 };
 
-async function processAndContinue(req) {
+async function processStagedAndContinue(req) {
     const supabaseUrl = process.env.SUPABASE_URL;
     const secretKey = process.env.SUPABASE_SECRET_KEY;
     const openaiKey = process.env.OPENAI_API_KEY;
 
     if (!supabaseUrl || !secretKey || !openaiKey) {
-        throw new Error("Automatic case-analysis configuration is incomplete.");
+        throw new Error("Staged-analysis configuration is incomplete.");
     }
 
     const supabaseClient = createClient(supabaseUrl, secretKey, {
         auth: { persistSession: false, autoRefreshToken: false }
     });
     const openaiClient = new OpenAI({ apiKey: openaiKey });
-    let result = await processOldestAutomaticCase(
+    const result = await processNextAdvancedPreliminaryAnalysis(
         supabaseClient,
         openaiClient
     );
-
-    if (!result.claimed) {
-        result = await processOldestFrameworkReanalysis(
-            supabaseClient,
-            openaiClient
-        );
-    }
-
-    if (!result.claimed) {
-        result = await processNextAdvancedPreliminaryAnalysis(
-            supabaseClient,
-            openaiClient
-        );
-    }
 
     if (result.claimed) {
         if (!result.completed) {
             await new Promise(resolve => setTimeout(resolve, 12000));
         }
-        await continueAutomaticCaseAnalysis(
-            automaticCaseAnalysisBaseUrl(req)
+        await continueStagedAnalysis(
+            stagedAnalysisBaseUrl(req)
         );
     }
 }
@@ -106,17 +86,13 @@ export default async function handler(req, res) {
         return handleAdvancedPreliminaryDashboard(req, res);
     }
 
-    if (req.method === "GET") {
-        return handleCaseAnalysisDashboard(req, res);
-    }
+    if (req.method === "GET") return res.status(410).json({
+        error: "The legacy analysis endpoint is retired. Use the staged researcher dashboard."
+    });
 
     if (req.method !== "POST") {
         res.setHeader("Allow", "GET, POST");
         return res.status(405).json({ error: "Method not allowed." });
-    }
-
-    if (["archive", "restore"].includes(req.body?.action)) {
-        return handleCaseArchiveMutation(req, res);
     }
 
     if (req.body?.worker === "translation") {
@@ -134,16 +110,24 @@ export default async function handler(req, res) {
         });
     }
 
-    if (!workerRequestIsAuthorized(req)) {
+    if (!["staged-analysis", "staged-analysis-continuation"]
+        .includes(req.body?.worker)) {
+        return res.status(410).json({
+            error: "The requested legacy analysis worker is retired."
+        });
+    }
+
+    if (!stagedAnalysisWorkerRequestIsAuthorized(req)) {
         return res.status(401).json({ error: "Unauthorized." });
     }
 
-    waitUntil(processAndContinue(req).catch(error => {
-        console.error("Automatic case-analysis worker stopped:", error);
+    waitUntil(processStagedAndContinue(req).catch(error => {
+        console.error("Staged-analysis worker stopped:", error);
     }));
 
     return res.status(202).json({
         accepted: true,
+        processing: "staged_meaning_units",
         processingOrder: "earliest_completed_first"
     });
 }

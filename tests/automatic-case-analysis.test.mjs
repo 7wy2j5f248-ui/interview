@@ -860,7 +860,7 @@ test("automatic demographics retain only exact participant evidence and provenan
     assert.equal(result.descriptorSources.age.basis, "stated");
 });
 
-test("formal completion enqueues a strict FIFO atomic case pipeline", async () => {
+test("historical FIFO case pipeline remains preserved but is no longer triggered", async () => {
     const migration = await readFile(migrationUrl, "utf8");
     const chat = await readFile(new URL("../api/chat.js", import.meta.url), "utf8");
 
@@ -870,7 +870,8 @@ test("formal completion enqueues a strict FIFO atomic case pipeline", async () =
     assert.match(migration, /complete_automatic_case_analysis/);
     assert.match(migration, /for update/);
     assert.match(migration, /enable row level security/);
-    assert.match(chat, /if \(finalQuestionAnswered\)[\s\S]*scheduleAutomaticCaseAnalysis\(req\)/);
+    assert.doesNotMatch(chat, /scheduleAutomaticCaseAnalysis/);
+    assert.match(chat, /scheduleCompletedTranscriptTranslation/);
 });
 
 test("future reports preserve MU to CO to CA to TH lineage and unsynthesized findings", async () => {
@@ -1024,7 +1025,7 @@ test("Needs attention keeps incomplete transcripts separate from the four analys
     assert.match(timeoutMigration, /session_status = 'timed_out'/);
 });
 
-test("researcher archive is durable, auditable, and excluded from future claims", async () => {
+test("historical researcher archive remains durable after its active route is retired", async () => {
     const migration = await readFile(archiveMigrationUrl, "utf8");
     const dashboard = await readFile(
         new URL("../server/caseAnalysisDashboard.js", import.meta.url),
@@ -1048,7 +1049,8 @@ test("researcher archive is durable, auditable, and excluded from future claims"
     assert.match(migration, /https:\/\/intervu\.quest\/api\/loadDesign/);
     assert.match(dashboard, /scope === "archived"/);
     assert.match(dashboard, /set_automatic_case_archive/);
-    assert.match(api, /\["archive", "restore"\]/);
+    assert.doesNotMatch(api, /\["archive", "restore"\]/);
+    assert.match(api, /legacy analysis endpoint is retired/);
 });
 
 test("v2 preserves superseded reports and restarts the FIFO queue", async () => {
@@ -1166,7 +1168,7 @@ test("new automatic reports use English while preserving original meaning units"
     assert.match(core, /exact_text in the participant's original language/);
 });
 
-test("formal completion automatically translates before case analysis", async () => {
+test("formal completion automatically translates while legacy analysis stays dormant", async () => {
     const migration = await readFile(automaticTranslationMigrationUrl, "utf8");
     const worker = await readFile(
         new URL("../server/automaticCaseAnalysis.js", import.meta.url),
@@ -1193,10 +1195,7 @@ test("formal completion automatically translates before case analysis", async ()
     assert.match(migration, /message\."EnglishTranslation"/);
     assert.doesNotMatch(migration, /qualitative_case_reports/);
     assert.match(chat, /scheduleCompletedTranscriptTranslation/);
-    assert.ok(
-        chat.indexOf("scheduleCompletedTranscriptTranslation")
-        < chat.indexOf("scheduleAutomaticCaseAnalysis(req)")
-    );
+    assert.doesNotMatch(chat, /scheduleAutomaticCaseAnalysis/);
     assert.match(translation, /\/api\/automatic-analysis/);
     assert.match(translation, /worker: "translation"/);
     assert.match(translation, /waitUntil\(fetch\(url/);
