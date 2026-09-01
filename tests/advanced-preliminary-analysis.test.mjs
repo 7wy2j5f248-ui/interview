@@ -251,6 +251,22 @@ test("long GPT-5.6 cases use one durable background response and poll by ID", as
     assert.doesNotMatch(migration, /delete from public\./i);
 });
 
+test("the server resumes durable analysis without recursive function calls", async () => {
+    const endpoint = await source("api/automatic-analysis.js");
+    const migration = await source(
+        "supabase/migrations/20260901224500_schedule_durable_stage1_ticks.sql"
+    );
+    assert.match(endpoint, /authorized-run-tick/);
+    assert.match(endpoint, /consume_authorized_analysis_server_tick/);
+    assert.match(endpoint, /one_durable_stage1_tick/);
+    assert.doesNotMatch(endpoint, /await continueStagedAnalysis/);
+    assert.match(migration, /last_server_tick_at/);
+    assert.match(migration, /interval '20 seconds'/);
+    assert.match(migration, /\* \* \* \* \*/);
+    assert.match(migration, /authorized-run-tick/);
+    assert.match(migration, /spend_guard_status = 'active'/);
+});
+
 test("analysis providers are server-configured and never expose credentials", () => {
     const environment = {
         OPENAI_API_KEY: "server-secret",

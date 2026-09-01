@@ -1,8 +1,6 @@
 import { waitUntil } from "@vercel/functions";
 import { createClient } from "@supabase/supabase-js";
 import {
-    continueStagedAnalysis,
-    stagedAnalysisBaseUrl,
     stagedAnalysisWorkerRequestIsAuthorized
 } from "../server/stagedAnalysisWorker.js";
 import {
@@ -34,14 +32,7 @@ async function processStagedAndContinue(req) {
     });
     const result = await processNextAdvancedPreliminaryAnalysis(supabaseClient);
 
-    if (result.claimed) {
-        if (!result.completed) {
-            await new Promise(resolve => setTimeout(resolve, 12000));
-        }
-        await continueStagedAnalysis(
-            stagedAnalysisBaseUrl(req)
-        );
-    }
+    return result;
 }
 
 async function processTranslationAndContinue(req) {
@@ -135,6 +126,38 @@ export default async function handler(req, res) {
             runId,
             processing: "fresh_independent_preliminary_case_analysis_only",
             authorization: "single_use_researcher_authorized_run_wake"
+        });
+    }
+
+    if (req.body?.worker === "authorized-run-tick") {
+        const supabaseUrl = process.env.SUPABASE_URL;
+        const secretKey = process.env.SUPABASE_SECRET_KEY;
+        if (!supabaseUrl || !secretKey) {
+            return res.status(500).json({
+                error: "Staged-analysis configuration is incomplete."
+            });
+        }
+        const supabaseClient = createClient(supabaseUrl, secretKey, {
+            auth: { persistSession: false, autoRefreshToken: false }
+        });
+        const { data: runId, error } = await supabaseClient.rpc(
+            "consume_authorized_analysis_server_tick"
+        );
+        if (error) {
+            console.error("Authorized server tick could not be consumed:", error);
+            return res.status(500).json({ error: "The authorized run tick failed." });
+        }
+        if (!runId) {
+            return res.status(204).end();
+        }
+        waitUntil(processStagedAndContinue(req).catch(workerError => {
+            console.error("Authorized staged-analysis tick stopped:", workerError);
+        }));
+        return res.status(202).json({
+            accepted: true,
+            runId,
+            processing: "one_durable_stage1_tick",
+            authorization: "database_verified_researcher_authorized_run"
         });
     }
 
