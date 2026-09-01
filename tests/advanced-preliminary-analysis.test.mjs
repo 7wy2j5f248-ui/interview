@@ -190,7 +190,7 @@ test("researcher UI locks later stages and exposes model, audit, evidence, and e
     assert.doesNotMatch(html, /researcher-automatic-analysis/);
     assert.match(access, /Enter the researcher dashboard token/);
     assert.match(access, /workspace\.hidden = false/);
-    assert.match(vercel, /"source": "\/researcher\.html"[\s\S]*"destination": "\/staged-analysis\.html"/);
+    assert.match(vercel, /"source": "\/researcher\.html"[\s\S]*"destination": "\/staged-analysis\.html"[\s\S]*"permanent": false/);
     assert.match(script, /payload\.availableModels/);
     assert.match(script, /modelSelect\.value\.trim\(\)/);
     assert.match(script, /Keep every manually typed/);

@@ -265,11 +265,13 @@ test("active export excludes archived jobs and legacy URL redirects to the canon
         highlightSources,
         /select\("id, Language, EnglishTranslation"\)/
     );
-    assert.deepEqual(vercelConfig.redirects, [{
+    assert.deepEqual(vercelConfig.redirects.find(item =>
+        item.source === "/api/automatic-analysis-export"
+    ), {
         source: "/api/automatic-analysis-export",
         destination: "/api/automatic-analysis-ranked-export",
         permanent: true
-    }]);
+    });
 });
 
 test("Vercel function entries remain within the Hobby deployment limit", async () => {

@@ -1,15 +1,14 @@
 {
     "redirects": [
         {
+            "source": "/researcher.html",
+            "destination": "/staged-analysis.html",
+            "permanent": false
+        },
+        {
             "source": "/api/automatic-analysis-export",
             "destination": "/api/automatic-analysis-ranked-export",
             "permanent": true
-        }
-    ],
-    "rewrites": [
-        {
-            "source": "/researcher.html",
-            "destination": "/staged-analysis.html"
         }
     ],
     "headers": [
