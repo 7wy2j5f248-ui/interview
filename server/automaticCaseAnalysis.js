@@ -126,13 +126,18 @@ async function loadCompletedCase(supabaseClient, openaiClient, job) {
     };
 }
 
-async function markCaseFailed(supabaseClient, sessionId, error) {
+async function markCaseFailed(
+    supabaseClient,
+    sessionId,
+    error,
+    retryable = true
+) {
     const { error: persistenceError } = await supabaseClient.rpc(
         "fail_automatic_case_analysis",
         {
             p_session_id: sessionId,
             p_error: error instanceof Error ? error.message : String(error),
-            p_retryable: true
+            p_retryable: retryable
         }
     );
 
@@ -169,9 +174,11 @@ export async function processOldestAutomaticCase(
             job.session_id
         );
         if (!analysisFramework) {
-            throw new Error(
+            const frameworkError = new Error(
                 "No project-bound Analysis Framework was frozen for this case. Create a framework for this research project before analysis continues."
             );
+            frameworkError.retryable = false;
+            throw frameworkError;
         }
         const sharedVocabulary = await loadSharedAnalysisVocabulary(
             supabaseClient,
@@ -276,7 +283,12 @@ export async function processOldestAutomaticCase(
             reportId
         };
     } catch (error) {
-        await markCaseFailed(supabaseClient, job.session_id, error);
+        await markCaseFailed(
+            supabaseClient,
+            job.session_id,
+            error,
+            error?.retryable !== false
+        );
         console.error("Automatic case analysis failed", {
             caseNumber: job.case_number,
             error: error instanceof Error ? error.message : String(error)

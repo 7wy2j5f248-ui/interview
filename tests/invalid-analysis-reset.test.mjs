@@ -92,3 +92,56 @@ test("new advanced runs cannot retain discarded report links", async () => {
     assert.doesNotMatch(researcherUi, /preserved comparison/);
     assert.match(researcherUi, /transcripts and stored translations only/);
 });
+
+test("clean queue binds only recorded projects and quarantines unbound legacy cases", async () => {
+    const migration = await source(
+        "supabase/migrations/20260901024932_bind_clean_analysis_frameworks.sql"
+    );
+
+    assert.match(migration, /from public\.active_analysis_frameworks as active/);
+    assert.match(migration, /active\.project_id = job\.project_id/);
+    assert.match(migration, /analysis_framework_id = active\.framework_id/);
+    assert.match(migration, /framework_bound_job_count/);
+    assert.match(migration, /quarantined_unbound_job_count/);
+    assert.match(migration, /status = 'failed'/);
+    assert.match(migration, /has no research project or research-design lineage/);
+    assert.doesNotMatch(migration, /update public\.interview_sessions/i);
+    assert.doesNotMatch(migration, /update public\.interview_messages/i);
+    assert.doesNotMatch(migration, /update public\.research_projects/i);
+    assert.doesNotMatch(migration, /update public\.research_designs/i);
+});
+
+test("unbound cases have an unclaimable version and framework failures do not retry", async () => {
+    const migration = await source(
+        "supabase/migrations/20260901025112_quarantine_unbound_analysis_jobs.sql"
+    );
+    const worker = await source("server/automaticCaseAnalysis.js");
+
+    assert.match(migration, /case-analysis-quarantined-missing-project/);
+    assert.match(migration, /job\.project_id is null/);
+    assert.match(migration, /job\.analysis_framework_id is null/);
+    assert.match(migration, /status = 'failed'/);
+    assert.doesNotMatch(migration, /update public\.interview_sessions/i);
+    assert.doesNotMatch(migration, /update public\.interview_messages/i);
+    assert.match(worker, /frameworkError\.retryable = false/);
+    assert.match(worker, /error\?\.retryable !== false/);
+    assert.match(worker, /p_retryable: retryable/);
+});
+
+test("researcher-confirmed legacy cases join the same Sleeping Habits protocol", async () => {
+    const migration = await source(
+        "supabase/migrations/20260901025307_assign_legacy_cases_to_sleeping_habits.sql"
+    );
+
+    assert.match(migration, /project\.project_code = 'SLEEPING-HABITS'/);
+    assert.match(migration, /count\(session\.session_id\) as completed_session_count/);
+    assert.match(migration, /active_analysis_frameworks as active/);
+    assert.match(migration, /quarantined_case_count <> 6/);
+    assert.match(migration, /research_design_id = target_design_id/);
+    assert.match(migration, /project_id = target_project_id/);
+    assert.match(migration, /analysis_framework_id = target_framework_id/);
+    assert.match(migration, /analysis_version = 'case-analysis-v6-overlapping-hierarchy'/);
+    assert.match(migration, /researcher_assigned_legacy_job_count/);
+    assert.doesNotMatch(migration, /update public\.interview_messages/i);
+    assert.doesNotMatch(migration, /update public\.participant_descriptors/i);
+});
