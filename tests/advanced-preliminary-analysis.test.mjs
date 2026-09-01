@@ -135,7 +135,7 @@ test("Stage 1 is versioned, stronger-model capable, and stops at Meaning Units",
     assert.doesNotMatch(worker, /sharedVocabulary/);
 });
 
-test("model selector is driven by a server catalog or configured allowlist", () => {
+test("model suggestions are server-configurable without constraining manual model entry", () => {
     const configured = configuredStage1Models({
         ADVANCED_PRELIMINARY_ANALYSIS_MODELS: "gpt-5.6-sol,gpt-5.5,gpt-5.6-sol"
     });
@@ -159,14 +159,15 @@ test("database migration scopes Stage 1 to one project and preserves all prior a
 });
 
 test("researcher UI locks later stages and exposes model, audit, evidence, and export provenance", async () => {
-    const html = await source("researcher.html");
+    const html = await source("staged-analysis.html");
+    const access = await source("researcher-staged-access.js");
+    const vercel = await source("vercel.json");
     const script = await source("researcher-advanced-preliminary.js");
     const dashboard = await source("server/advancedPreliminaryDashboard.js");
     assert.match(html, /Stage 1 · Meaning Units/);
     assert.match(html, /Unlock and show Stage 1/);
-    assert.match(html, /retired[\s\S]*framework is not loaded or displayed here/);
+    assert.match(html, /retired Forms 1–4 are not loaded or displayed/);
     assert.match(html, /data-staged-only="true"/);
-    assert.match(html, /#automaticAnalysisWorkspace\[data-staged-only="true"\][\s\S]*:not\(#advancedPreliminaryAnalysis\)[\s\S]*display: none/);
     assert.match(script, /workspace\?\.prepend\(section\)/);
     assert.match(script, /stagedAnalysisPrimary/);
     assert.match(script, /choose Lock workspace and unlock again/);
@@ -177,11 +178,22 @@ test("researcher UI locks later stages and exposes model, audit, evidence, and e
     assert.match(html, /Stage 4 · Theme Development — locked/);
     assert.doesNotMatch(html, /Stage 5 · Theme Development/);
     assert.match(html, /Meaning Units →[\s\S]*Codes → Categories → Themes/);
-    assert.match(html, /Historical preliminary reports and jobs remain preserved in protected[\s\S]*audit storage/);
-    assert.match(html, /retired Forms 1–4[\s\S]*not part of this active dashboard/);
+    assert.match(html, /Historical transcripts, reports, jobs, and failures remain preserved in[\s\S]*protected audit storage/);
+    assert.match(html, /retired Forms 1–4 are not loaded or displayed/);
     assert.match(html, /approval gate, not a separate analytical layer/);
     assert.match(html, /advancedPreliminaryModel/);
+    assert.match(html, /list="advancedPreliminaryModelSuggestions"/);
+    assert.match(html, /Enter any exact model identifier/);
+    assert.match(html, /never silently replaced/);
+    assert.doesNotMatch(html, /Form 1 · Cases/);
+    assert.doesNotMatch(html, /Legacy analysis failures/);
+    assert.doesNotMatch(html, /researcher-automatic-analysis/);
+    assert.match(access, /Enter the researcher dashboard token/);
+    assert.match(access, /workspace\.hidden = false/);
+    assert.match(vercel, /"source": "\/researcher\.html"[\s\S]*"destination": "\/staged-analysis\.html"/);
     assert.match(script, /payload\.availableModels/);
+    assert.match(script, /modelSelect\.value\.trim\(\)/);
+    assert.match(script, /Keep every manually typed/);
     assert.match(script, /modelSelect\.disabled = active/);
     assert.match(script, /Inspect Meaning Units/);
     assert.match(script, /Stage 1 annotated transcript/);
@@ -190,6 +202,8 @@ test("researcher UI locks later stages and exposes model, audit, evidence, and e
     assert.match(script, /download=stage1-csv/);
     assert.match(dashboard, /configuredStage1Models/);
     assert.match(dashboard, /probeAdvancedPreliminaryModel/);
+    assert.doesNotMatch(dashboard, /models\.includes\(requestedModel\)/);
+    assert.match(dashboard, /normalizeOpenAIModel\(req\.body\.model\)/);
     assert.match(dashboard, /Requested model/);
     assert.match(dashboard, /Exact source text/);
 });

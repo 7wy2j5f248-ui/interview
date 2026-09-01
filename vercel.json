@@ -6,9 +6,33 @@
             "permanent": true
         }
     ],
+    "rewrites": [
+        {
+            "source": "/researcher.html",
+            "destination": "/staged-analysis.html"
+        }
+    ],
     "headers": [
         {
             "source": "/researcher.html",
+            "headers": [
+                {
+                    "key": "Cache-Control",
+                    "value": "no-store, no-cache, must-revalidate, max-age=0"
+                }
+            ]
+        },
+        {
+            "source": "/staged-analysis.html",
+            "headers": [
+                {
+                    "key": "Cache-Control",
+                    "value": "no-store, no-cache, must-revalidate, max-age=0"
+                }
+            ]
+        },
+        {
+            "source": "/researcher-staged-access.js",
             "headers": [
                 {
                     "key": "Cache-Control",

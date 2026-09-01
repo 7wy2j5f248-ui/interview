@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Researcher Dashboard · Staged Qualitative Analysis</title>
+    <style>
+        :root {
+            color-scheme: light;
+            font-family: Arial, sans-serif;
+        }
+        body {
+            background: #f5f7fb;
+            color: #172033;
+            line-height: 1.5;
+            margin: 0;
+        }
+        main {
+            margin: 2rem auto;
+            max-width: 72rem;
+            padding: 0 1rem 3rem;
+        }
+        .panel,
+        .analysisDiscussion {
+            background: #ffffff;
+            border: 1px solid #b9cce6;
+            border-radius: 0.7rem;
+            box-shadow: 0 0.35rem 1rem rgba(23, 57, 104, 0.1);
+            margin-block: 1rem;
+            padding: 1rem;
+        }
+        .stagedAnalysisPrimary {
+            border: 3px solid #245fbd;
+        }
+        .automaticPipelineNote,
+        .automaticReviewScopeSummary {
+            background: #eef5ff;
+            border-inline-start: 4px solid #245fbd;
+            padding: 0.75rem;
+        }
+        .muted { color: #52657f; }
+        .errorMessage {
+            background: #fff1f1;
+            border-inline-start: 4px solid #b42318;
+            color: #8b1e17;
+            padding: 0.75rem;
+        }
+        .actionRow {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+            margin-block: 0.75rem;
+        }
+        label { display: grid; gap: 0.3rem; }
+        button,
+        input,
+        select {
+            font: inherit;
+            padding: 0.55rem 0.7rem;
+        }
+        button { cursor: pointer; }
+        button:disabled { cursor: not-allowed; }
+        .analysisOverview {
+            display: grid;
+            gap: 0.75rem;
+            grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+            margin-block: 1rem;
+        }
+        .analysisMetric {
+            background: #f7f9fc;
+            border: 1px solid #d7dfeb;
+            border-radius: 0.5rem;
+            padding: 0.8rem 1rem;
+        }
+        .analysisMetric strong {
+            color: #193a70;
+            display: block;
+            font-size: 1.45rem;
+        }
+        .automaticReanalysisPanel {
+            background: #f8fafc;
+            border: 1px solid #d7dfeb;
+            border-radius: 0.5rem;
+            padding: 1rem 1rem 1rem 2rem;
+        }
+        .tableScroll { overflow-x: auto; }
+        table { border-collapse: collapse; width: 100%; }
+        th, td {
+            border-block-end: 1px solid #d7dfeb;
+            padding: 0.7rem;
+            text-align: start;
+            vertical-align: top;
+        }
+        th { background: #edf3fb; }
+        .meaningUnitAnnotation {
+            display: inline-flex;
+            flex-direction: column;
+            margin-block: 0.15rem;
+        }
+        .meaningUnitCodeLabel {
+            font-size: 0.72rem;
+            font-weight: 700;
+            padding: 0.12rem 0.2rem;
+        }
+        .keywordLegend {
+            border-radius: 999px;
+            display: inline-block;
+            margin: 0.25rem;
+            padding: 0.3rem 0.65rem;
+        }
+        mark[class^="keywordColor"] { padding: 0.05rem 0.15rem; }
+        .keywordColor1 { background: #ffe08a; }
+        .keywordColor2 { background: #bdebd2; }
+        .keywordColor3 { background: #bcd9ff; }
+        .keywordColor4 { background: #f7c4df; }
+        .keywordColor5 { background: #d9c7ff; }
+        .keywordColor6 { background: #ffc6ad; }
+        .keywordColor7 { background: #c9eb8e; }
+        .keywordColor8 { background: #9ce5e3; }
+        .keywordColor9 { background: #f7b7b7; }
+        .keywordColor10 { background: #d6d6d6; }
+        .keywordColor11 { background: #e5c39b; }
+        .keywordColor12 { background: #c8c4ef; }
+        dialog {
+            border: 1px solid #9db3d1;
+            max-height: 85vh;
+            max-width: 64rem;
+            overflow: auto;
+            width: calc(100% - 2rem);
+        }
+        .message p { white-space: pre-wrap; }
+        .englishTranslation {
+            border-inline-start: 3px solid #cccccc;
+            padding-inline-start: 0.75rem;
+        }
+    </style>
+</head>
+<body>
+<main>
+    <h1>Researcher Dashboard</h1>
+    <section class="panel" aria-labelledby="workflowHeading">
+        <h2 id="workflowHeading">Staged Qualitative Analysis</h2>
+        <p class="automaticPipelineNote">
+            <strong>Active sequence:</strong> Meaning Units → Codes → Categories → Themes.
+            Only Stage 1 Meaning Units is available now. Each later layer remains
+            researcher-controlled and locked until the preceding layer is inspected.
+        </p>
+        <p>
+            Historical transcripts, reports, jobs, and failures remain preserved in
+            protected audit storage. The retired Forms 1–4 are not loaded or displayed.
+        </p>
+        <div id="automaticAnalysisTokenGate">
+            <label>
+                Researcher dashboard token
+                <input id="automaticAnalysisToken" type="password" autocomplete="current-password">
+            </label>
+            <div class="actionRow">
+                <button id="automaticAnalysisUnlockButton" type="button">Unlock and show Stage 1</button>
+            </div>
+            <p id="automaticAnalysisGateStatus" class="muted" role="status">
+                Enter the researcher token to load model suggestions and Stage 1 status.
+            </p>
+        </div>
+
+        <div id="automaticAnalysisWorkspace" data-staged-only="true" hidden>
+            <section id="advancedPreliminaryAnalysis" class="analysisDiscussion" aria-labelledby="advancedPreliminaryHeading">
+                <h3 id="advancedPreliminaryHeading">Stage 1 · Meaning Units</h3>
+                <p>
+                    Each completed Sleeping habits transcript is read independently.
+                    Stage 1 stores exact original-transcript evidence only and generates
+                    no Codes, Categories, or Themes.
+                </p>
+                <ol class="automaticReanalysisPanel" aria-label="Staged qualitative analysis workflow">
+                    <li><strong>Stage 1 · Meaning Units</strong> — available now</li>
+                    <li><button type="button" disabled>Stage 2 · Cross-Case Code Refinement — locked</button></li>
+                    <li><button type="button" disabled>Stage 3 · Category Development — locked</button></li>
+                    <li><button type="button" disabled>Stage 4 · Theme Development — locked</button></li>
+                </ol>
+                <p class="muted">
+                    Approval freezes the refined Code vocabulary at the end of Stage 2;
+                    it is an approval gate, not a separate analytical layer.
+                </p>
+                <label for="advancedPreliminaryModel">
+                    Stage 1 analysis model
+                    <input id="advancedPreliminaryModel" type="text"
+                        list="advancedPreliminaryModelSuggestions"
+                        autocomplete="off" spellcheck="false"
+                        placeholder="Enter an exact model ID, for example gpt-5.6-sol"
+                        aria-describedby="advancedPreliminaryModelHelp">
+                    <datalist id="advancedPreliminaryModelSuggestions"></datalist>
+                </label>
+                <p id="advancedPreliminaryModelHelp" class="muted">
+                    Enter any exact model identifier. Suggestions are optional. The server
+                    capability-tests the exact identifier before launch; unavailable models
+                    stop with an error and are never silently replaced. The requested and
+                    resolved model identifiers are recorded permanently in provenance.
+                </p>
+                <div class="actionRow">
+                    <button id="advancedPreliminaryStartButton" type="button">Start Stage 1 Meaning Unit run</button>
+                    <button id="advancedPreliminaryRefreshButton" type="button">Refresh Stage 1 run</button>
+                    <button id="advancedPreliminaryDownloadButton" type="button" disabled>Download Stage 1 provenance CSV</button>
+                    <button id="advancedPreliminaryLockButton" type="button">Lock Stage 1 access</button>
+                </div>
+                <p id="advancedPreliminaryStatus" class="automaticReviewScopeSummary" role="status">
+                    Loading Stage 1 access…
+                </p>
+                <div class="analysisOverview" aria-label="Stage 1 progress">
+                    <div class="analysisMetric"><strong id="advancedPreliminaryPending">0</strong>Waiting</div>
+                    <div class="analysisMetric"><strong id="advancedPreliminaryProcessing">0</strong>Processing</div>
+                    <div class="analysisMetric"><strong id="advancedPreliminaryCompleted">0</strong>Completed</div>
+                    <div class="analysisMetric"><strong id="advancedPreliminaryFailed">0</strong>Needs attention</div>
+                </div>
+                <p id="advancedPreliminaryProvenance" class="muted"></p>
+                <div id="advancedPreliminaryTable"></div>
+                <div class="actionRow">
+                    <button id="advancedPreliminaryPreviousPage" type="button" disabled>Previous 50 cases</button>
+                    <span id="advancedPreliminaryPageLabel" class="muted">Page 1</span>
+                    <button id="advancedPreliminaryNextPage" type="button" disabled>Next 50 cases</button>
+                </div>
+            </section>
+        </div>
+    </section>
+</main>
+
+<dialog id="advancedPreliminaryDialog">
+    <button id="advancedPreliminaryDialogClose" type="button">Close Stage 1 case report</button>
+    <h2 id="advancedPreliminaryDialogHeading">Stage 1 Meaning Units</h2>
+    <p id="advancedPreliminaryDialogProvenance"></p>
+    <div id="advancedPreliminaryDialogContent"></div>
+</dialog>
+
+<script src="researcher-staged-access.js?version=20260901-staged-page-v1"></script>
+<script src="researcher-advanced-preliminary.js?version=20260901-staged-page-v1"></script>
+</body>
+</html>

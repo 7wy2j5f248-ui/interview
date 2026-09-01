@@ -15,6 +15,7 @@ import {
     configuredStage1DefaultModel,
     configuredStage1Models
 } from "./analysisModelCatalog.js";
+import { normalizeOpenAIModel } from "./modelConfiguration.js";
 import { authorizeResearcher } from "./researcherAuth.js";
 
 export const config = { maxDuration: 300 };
@@ -263,12 +264,6 @@ async function startRun(supabase, req) {
     const requestedModel = typeof req.body?.model === "string"
         ? normalizeOpenAIModel(req.body.model)
         : defaultModel(models);
-    if (!models.includes(requestedModel)) {
-        throw Object.assign(
-            new Error("Choose a model from the configured Stage 1 model list."),
-            { status: 400 }
-        );
-    }
     const model = requestedModel;
     const reasoningEffort = process.env.ADVANCED_PRELIMINARY_REASONING_EFFORT
         || ADVANCED_PRELIMINARY_REASONING_EFFORT;
@@ -282,7 +277,7 @@ async function startRun(supabase, req) {
         console.error("Stage 1 model capability probe failed:", error);
         throw Object.assign(
             new Error(
-                `${model} is not currently available for this Stage 1 run. Choose another configured model.`
+                `${model} is not currently available or does not support the required Stage 1 capabilities. Enter another model ID.`
             ),
             { status: 422 }
         );

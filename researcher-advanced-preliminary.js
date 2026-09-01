@@ -16,6 +16,7 @@
     const provenance = document.getElementById("advancedPreliminaryProvenance");
     const tableHost = document.getElementById("advancedPreliminaryTable");
     const modelSelect = document.getElementById("advancedPreliminaryModel");
+    const modelSuggestions = document.getElementById("advancedPreliminaryModelSuggestions");
     const startButton = document.getElementById("advancedPreliminaryStartButton");
     const refreshButton = document.getElementById("advancedPreliminaryRefreshButton");
     const downloadButton = document.getElementById("advancedPreliminaryDownloadButton");
@@ -98,15 +99,17 @@
     function renderModels() {
         const models = payload.availableModels || [];
         const currentValue = modelSelect.value;
-        modelSelect.replaceChildren();
+        modelSuggestions?.replaceChildren();
         models.forEach(model => {
             const option = document.createElement("option");
             option.value = model;
-            option.textContent = model;
-            modelSelect.appendChild(option);
+            modelSuggestions?.appendChild(option);
         });
-        modelSelect.value = models.includes(currentValue)
-            ? currentValue : payload.defaultModel || models[0] || "";
+        // Suggestions never constrain the researcher. Keep every manually typed
+        // model ID intact and only supply a default before the field is edited.
+        if (!currentValue) {
+            modelSelect.value = payload.defaultModel || models[0] || "";
+        }
     }
 
     function render() {
@@ -124,7 +127,7 @@
 
         if (!run) {
             provenance.textContent = "No Stage 1 Meaning Unit run has been created yet.";
-            setStatus("Choose a configured model, then start Stage 1 for the Sleeping habits project.");
+            setStatus("Enter an exact model ID, then start Stage 1 for the Sleeping habits project.");
             startButton.disabled = !modelSelect.value;
             modelSelect.disabled = false;
             downloadButton.disabled = true;
@@ -356,7 +359,7 @@
     }
 
     startButton.addEventListener("click", async () => {
-        const selectedModel = modelSelect.value;
+        const selectedModel = modelSelect.value.trim();
         if (!selectedModel) return;
         const confirmed = window.confirm(
             `Start Stage 1 Meaning Unit identification for all eligible completed Sleeping habits transcripts using ${selectedModel}? `
