@@ -231,6 +231,26 @@ test("an explicitly resumed run exposes exactly one credential-free server wake"
     assert.match(endpoint, /processStagedAndContinue/);
 });
 
+test("long GPT-5.6 cases use one durable background response and poll by ID", async () => {
+    const worker = await source("server/advancedPreliminaryAnalysis.js");
+    const migration = await source(
+        "supabase/migrations/20260901223500_make_stage1_responses_durable.sql"
+    );
+    assert.match(worker, /background/);
+    assert.match(worker, /store: background/);
+    assert.match(worker, /responses\.retrieve/);
+    assert.match(worker, /save_advanced_preliminary_provider_response/);
+    assert.match(worker, /advanced-preliminary-\$\{claim\.job_id\}/);
+    assert.match(worker, /\["queued", "in_progress"\]/);
+    assert.match(migration, /provider_response_id/);
+    assert.match(migration, /unverified_spend_reserve_usd/);
+    assert.match(migration, /conservative spending reserve recorded/);
+    assert.match(migration, /Poll the one already-submitted response/);
+    assert.match(migration, /orphan_job_total \+ reserve_total/);
+    assert.match(migration, /spending_limit_usd = 80/);
+    assert.doesNotMatch(migration, /delete from public\./i);
+});
+
 test("analysis providers are server-configured and never expose credentials", () => {
     const environment = {
         OPENAI_API_KEY: "server-secret",

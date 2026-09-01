@@ -335,10 +335,11 @@ function analysisInstruction({
     ].join("\n\n");
 }
 
-function responseOptions(model, reasoningEffort, schema, name, input) {
+function responseOptions(model, reasoningEffort, schema, name, input, background = false) {
     return {
         model,
-        store: false,
+        store: background,
+        background,
         max_output_tokens: ADVANCED_PRELIMINARY_MAX_OUTPUT_TOKENS,
         reasoning: {
             effort: reasoningEffort,
@@ -349,6 +350,45 @@ function responseOptions(model, reasoningEffort, schema, name, input) {
             format: { type: "json_schema", name, strict: true, schema }
         },
         input
+    };
+}
+
+function analysisInput(messages, context) {
+    return [
+        { role: "system", content: analysisInstruction(context) },
+        {
+            role: "user",
+            content: `Original participant transcript (JSON):\n${transcriptForModel(messages)}`
+        }
+    ];
+}
+
+function completedAnalysisFromResponse(response, messages, normalizedModel) {
+    const analysis = validateAdvancedPreliminaryAnalysis(
+        parseResponse(response, "Advanced preliminary case analysis"),
+        messages
+    );
+    if (!analysis.complete) {
+        throw new Error(
+            `The single-pass analysis failed deterministic transcript traceability validation: ${analysis.invalidReasons.join(" | ")}`
+        );
+    }
+    return {
+        ...analysis,
+        audit: {
+            reviewStatus: "independent_complete_preliminary_case_analysis",
+            validationType: "local_deterministic_source_and_relationship_integrity",
+            priorAnalysisUsed: false,
+            aiAnalysisPassCount: 1,
+            stage1Only: false,
+            meaningUnitCount: analysis.meaningUnits.length,
+            codeCount: analysis.codes.length,
+            categoryCount: analysis.categories.length,
+            tentativeThemeCount: analysis.tentativeThemes.length,
+            overallSummary: `Generated independently from the original transcript in one ${normalizedModel} analysis pass. No prior-model analysis, AI audit, repair call, or per-case approval was used.`
+        },
+        inputTokenCount: response?.usage?.input_tokens || null,
+        outputTokenCount: response?.usage?.output_tokens || null
     };
 }
 
@@ -394,13 +434,7 @@ export async function generateAdvancedPreliminaryAnalysis(
     } = {}
 ) {
     const normalizedModel = normalizeAnalysisModel(model);
-    const input = [
-        { role: "system", content: analysisInstruction(context) },
-        {
-            role: "user",
-            content: `Original participant transcript (JSON):\n${transcriptForModel(messages)}`
-        }
-    ];
+    const input = analysisInput(messages, context);
     const response = await analysisClient.responses.create(responseOptions(
         normalizedModel,
         reasoningEffort,
@@ -408,32 +442,55 @@ export async function generateAdvancedPreliminaryAnalysis(
         "advanced_preliminary_case_analysis",
         input
     ));
-    const analysis = validateAdvancedPreliminaryAnalysis(
-        parseResponse(response, "Advanced preliminary case analysis"),
-        messages
+    return completedAnalysisFromResponse(response, messages, normalizedModel);
+}
+
+async function saveProviderResponse(supabase, claim, response) {
+    const { error } = await supabase.rpc(
+        "save_advanced_preliminary_provider_response",
+        {
+            p_job_id: claim.job_id,
+            p_provider_response_id: response.id,
+            p_provider_response_status: response.status || "queued",
+            p_input_token_count: response?.usage?.input_tokens || null,
+            p_output_token_count: response?.usage?.output_tokens || null
+        }
     );
-    if (!analysis.complete) {
-        throw new Error(
-            `The single-pass analysis failed deterministic transcript traceability validation: ${analysis.invalidReasons.join(" | ")}`
-        );
+    if (error) {
+        throw new Error("The durable model-response reference was not saved.", {
+            cause: error
+        });
     }
-    return {
-        ...analysis,
-        audit: {
-            reviewStatus: "independent_complete_preliminary_case_analysis",
-            validationType: "local_deterministic_source_and_relationship_integrity",
-            priorAnalysisUsed: false,
-            aiAnalysisPassCount: 1,
-            stage1Only: false,
-            meaningUnitCount: analysis.meaningUnits.length,
-            codeCount: analysis.codes.length,
-            categoryCount: analysis.categories.length,
-            tentativeThemeCount: analysis.tentativeThemes.length,
-            overallSummary: `Generated independently from the original transcript in one ${normalizedModel} analysis pass. No prior-model analysis, AI audit, repair call, or per-case approval was used.`
-        },
-        inputTokenCount: response?.usage?.input_tokens || null,
-        outputTokenCount: response?.usage?.output_tokens || null
+}
+
+async function persistCompletedAnalysis(supabase, claim, source, analysis) {
+    const payload = {
+        meaningUnits: analysis.meaningUnits,
+        codes: analysis.codes,
+        categories: analysis.categories,
+        tentativeThemes: analysis.tentativeThemes,
+        unassignedCodeNumbers: analysis.unassignedCodeNumbers,
+        unassignedCategoryNumbers: analysis.unassignedCategoryNumbers,
+        caseSummary: analysis.caseSummary,
+        audit: analysis.audit
     };
+    const { data: reportId, error: completionError } = await supabase.rpc(
+        "complete_advanced_preliminary_analysis",
+        {
+            p_job_id: claim.job_id,
+            p_participant_code: source.participantCode,
+            p_language: source.session.language,
+            p_input_token_count: analysis.inputTokenCount,
+            p_output_token_count: analysis.outputTokenCount,
+            p_payload: payload
+        }
+    );
+    if (completionError || !reportId) {
+        throw new Error("The advanced preliminary report was not saved.", {
+            cause: completionError || undefined
+        });
+    }
+    return reportId;
 }
 
 async function loadClaimedTranscript(supabase, claim) {
@@ -525,41 +582,54 @@ export async function processNextAdvancedPreliminaryAnalysis(
     try {
         const analysisClient = providerClientFactory(claim.provider);
         const source = await loadClaimedTranscript(supabase, claim);
-        const analysis = await generateAdvancedPreliminaryAnalysis(
-            analysisClient,
-            source.messages,
-            source.context,
-            {
-                model: claim.model,
-                reasoningEffort: claim.reasoning_effort
-            }
-        );
-        const payload = {
-            meaningUnits: analysis.meaningUnits,
-            codes: analysis.codes,
-            categories: analysis.categories,
-            tentativeThemes: analysis.tentativeThemes,
-            unassignedCodeNumbers: analysis.unassignedCodeNumbers,
-            unassignedCategoryNumbers: analysis.unassignedCategoryNumbers,
-            caseSummary: analysis.caseSummary,
-            audit: analysis.audit
-        };
-        const { data: reportId, error: completionError } = await supabase.rpc(
-            "complete_advanced_preliminary_analysis",
-            {
-                p_job_id: claim.job_id,
-                p_participant_code: source.participantCode,
-                p_language: source.session.language,
-                p_input_token_count: analysis.inputTokenCount,
-                p_output_token_count: analysis.outputTokenCount,
-                p_payload: payload
-            }
-        );
-        if (completionError || !reportId) {
-            throw new Error("The advanced preliminary report was not saved.", {
-                cause: completionError || undefined
-            });
+        let response;
+        if (claim.provider_response_id) {
+            response = await analysisClient.responses.retrieve(
+                claim.provider_response_id
+            );
+            await saveProviderResponse(supabase, claim, response);
+        } else {
+            const normalizedModel = normalizeAnalysisModel(claim.model);
+            response = await analysisClient.responses.create(
+                responseOptions(
+                    normalizedModel,
+                    claim.reasoning_effort,
+                    analysisSchema,
+                    "advanced_preliminary_case_analysis",
+                    analysisInput(source.messages, source.context),
+                    true
+                ),
+                { idempotencyKey: `advanced-preliminary-${claim.job_id}` }
+            );
+            await saveProviderResponse(supabase, claim, response);
         }
+
+        if (["queued", "in_progress"].includes(response.status)) {
+            return {
+                claimed: true,
+                completed: false,
+                inProgress: true,
+                runId: claim.run_id,
+                caseNumber: claim.case_number,
+                providerResponseId: response.id,
+                providerResponseStatus: response.status
+            };
+        }
+        if (response.status !== "completed") {
+            const providerError = response?.error?.message
+                || response?.incomplete_details?.reason
+                || `Model response ended with status ${response.status || "unknown"}.`;
+            throw new Error(providerError);
+        }
+
+        const analysis = completedAnalysisFromResponse(
+            response,
+            source.messages,
+            normalizeAnalysisModel(claim.model)
+        );
+        const reportId = await persistCompletedAnalysis(
+            supabase, claim, source, analysis
+        );
         console.log("Advanced preliminary case completed", {
             runId: claim.run_id,
             caseNumber: claim.case_number,
