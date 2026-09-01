@@ -1,28 +1,3 @@
-const PRELIMINARY_SCHEMA = {
-    type: "object",
-    properties: {
-        preliminary_codes: {
-            type: "array",
-            items: {
-                type: "object",
-                properties: {
-                    label: { type: "string" },
-                    definition: { type: "string" },
-                    rationale: { type: "string" },
-                    meaning_unit_ids: {
-                        type: "array",
-                        items: { type: "string" }
-                    }
-                },
-                required: ["label", "definition", "rationale", "meaning_unit_ids"],
-                additionalProperties: false
-            }
-        }
-    },
-    required: ["preliminary_codes"],
-    additionalProperties: false
-};
-
 const REFINEMENT_SCHEMA = {
     type: "object",
     properties: {
@@ -107,46 +82,13 @@ export function validatePreliminaryCodes(value, meaningUnits) {
     return { complete: !problems.length, codes, problems };
 }
 
-async function generatePreliminaryCodes(openaiClient, claim, source) {
-    const prompt = [
-        "Perform only the preliminary-Code part of Stage 2 for one case.",
-        "Derive concise case-grounded Codes from the supplied exact Meaning Units. Every Meaning Unit must support at least one Code. A Meaning Unit may support multiple Codes and a Code may use multiple Meaning Units.",
-        "Codes are analytical categories of related expressed meanings, not copied keywords and not full-sentence findings. Do not generate Categories or Themes. Do not compare this case with other cases in this step.",
-        "Use only supplied Meaning Unit IDs. Preserve semantic distinctions; do not collapse different meanings merely to reduce the number of Codes.",
-        `Case ${source.report.case_number}. Meaning Units (JSON): ${JSON.stringify(source.meaningUnits)}`
-    ].join("\n\n");
-    const create = async extra => openaiClient.responses.create(responseOptions(
-        claim,
-        PRELIMINARY_SCHEMA,
-        "stage2_preliminary_case_codes",
-        [{ role: "system", content: prompt }, ...(extra ? [{ role: "user", content: extra }] : [])]
-    ));
-    let response = await create(null);
-    let result = validatePreliminaryCodes(
-        parsed(response, "Stage 2 preliminary coding"),
-        source.meaningUnits
-    );
-    let inputTokens = response?.usage?.input_tokens || 0;
-    let outputTokens = response?.usage?.output_tokens || 0;
-    if (!result.complete) {
-        response = await create(
-            `Replace the draft and correct these provenance problems: ${result.problems.join(" | ")}`
-        );
-        inputTokens += response?.usage?.input_tokens || 0;
-        outputTokens += response?.usage?.output_tokens || 0;
-        result = validatePreliminaryCodes(
-            parsed(response, "Stage 2 preliminary-code repair"),
-            source.meaningUnits
-        );
-    }
-    if (!result.complete) {
-        throw new Error(`Stage 2 preliminary coding failed validation: ${result.problems.join(" | ")}`);
-    }
-    return { ...result, inputTokens, outputTokens };
-}
-
 async function loadPreliminarySource(supabase, claim) {
-    const [{ data: report, error: reportError }, { data: meaningUnits, error: muError }] =
+    const [
+        { data: report, error: reportError },
+        { data: meaningUnits, error: muError },
+        { data: codes, error: codeError },
+        { data: links, error: linkError }
+    ] =
         await Promise.all([
             supabase.from("advanced_preliminary_case_reports")
                 .select("id, case_number, session_id, project_id")
@@ -154,12 +96,45 @@ async function loadPreliminarySource(supabase, claim) {
             supabase.from("advanced_preliminary_meaning_units")
                 .select("id, unit_number, message_id, exact_source_text, source_language, context_note")
                 .eq("report_id", claim.stage1_report_id)
-                .order("unit_number")
+                .order("unit_number"),
+            supabase.from("advanced_preliminary_codes")
+                .select("id, code_number, code_label, definition, rationale")
+                .eq("report_id", claim.stage1_report_id)
+                .order("code_number"),
+            supabase.from("advanced_preliminary_code_meaning_units")
+                .select("code_id, meaning_unit_id")
+                .eq("report_id", claim.stage1_report_id)
         ]);
-    if (reportError || !report || muError || !meaningUnits?.length) {
-        throw new Error("The preserved Stage 1 Meaning Units could not be loaded.");
+    if (reportError || !report || muError || codeError || linkError
+        || !meaningUnits?.length || !codes?.length) {
+        throw new Error("The preserved preliminary case Codes and Meaning Units could not be loaded.");
     }
-    return { report, meaningUnits };
+    const linksByCode = (links || []).reduce((map, item) => {
+        if (!map.has(item.code_id)) map.set(item.code_id, []);
+        map.get(item.code_id).push(item.meaning_unit_id);
+        return map;
+    }, new Map());
+    const preliminaryCodes = codes.map(code => ({
+        label: code.code_label,
+        definition: code.definition,
+        rationale: code.rationale,
+        meaningUnitIds: linksByCode.get(code.id) || []
+    }));
+    const validated = validatePreliminaryCodes(
+        { preliminary_codes: preliminaryCodes.map(code => ({
+            label: code.label,
+            definition: code.definition,
+            rationale: code.rationale,
+            meaning_unit_ids: code.meaningUnitIds
+        })) },
+        meaningUnits
+    );
+    if (!validated.complete) {
+        throw new Error(
+            `Stored preliminary Code lineage is invalid: ${validated.problems.join(" | ")}`
+        );
+    }
+    return { report, meaningUnits, preliminaryCodes: validated.codes };
 }
 
 async function loadRefinementSource(supabase, claim) {
@@ -268,14 +243,13 @@ export async function processNextCrossCaseCodeRefinement(supabase, openaiClient)
     try {
         if (claim.phase === "preliminary_code") {
             const source = await loadPreliminarySource(supabase, claim);
-            const result = await generatePreliminaryCodes(openaiClient, claim, source);
             const { data: saved, error: saveError } = await supabase.rpc(
                 "complete_stage2_preliminary_case",
                 {
                     p_job_id: claim.job_id,
-                    p_payload: { preliminaryCodes: result.codes },
-                    p_input_tokens: result.inputTokens,
-                    p_output_tokens: result.outputTokens
+                    p_payload: { preliminaryCodes: source.preliminaryCodes },
+                    p_input_tokens: 0,
+                    p_output_tokens: 0
                 }
             );
             if (saveError || !saved) throw new Error("Stage 2 preliminary Codes were not saved.");

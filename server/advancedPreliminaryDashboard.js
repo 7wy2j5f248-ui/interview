@@ -163,18 +163,29 @@ async function loadSummary(supabase, req) {
         "Advanced preliminary case reports could not be loaded."
     ) : [];
     const reportIds = reports.map(report => report.id);
-    const meaningUnits = reportIds.length ? await requireData(
-        supabase
-            .from("advanced_preliminary_meaning_units")
-            .select("report_id")
-            .in("report_id", reportIds),
-        "Stage 1 meaning-unit counts could not be loaded."
-    ) : [];
+    const [meaningUnits, codes, categories, themes] = reportIds.length
+        ? await Promise.all([
+            requireData(supabase.from("advanced_preliminary_meaning_units")
+                .select("report_id").in("report_id", reportIds),
+            "Preliminary Meaning Unit counts could not be loaded."),
+            requireData(supabase.from("advanced_preliminary_codes")
+                .select("report_id").in("report_id", reportIds),
+            "Preliminary Code counts could not be loaded."),
+            requireData(supabase.from("advanced_preliminary_categories")
+                .select("report_id").in("report_id", reportIds),
+            "Preliminary Category counts could not be loaded."),
+            requireData(supabase.from("advanced_preliminary_themes")
+                .select("report_id").in("report_id", reportIds),
+            "Preliminary Tentative Theme counts could not be loaded.")
+        ]) : [[], [], [], []];
     const countByReport = rows => rows.reduce((counts, row) => {
         counts.set(row.report_id, (counts.get(row.report_id) || 0) + 1);
         return counts;
     }, new Map());
     const muCount = countByReport(meaningUnits);
+    const codeCount = countByReport(codes);
+    const categoryCount = countByReport(categories);
+    const themeCount = countByReport(themes);
     const reportByJob = new Map(reports.map(report => [report.job_id, report]));
     const attentionReports = await requireData(
         supabase
@@ -235,13 +246,16 @@ async function loadSummary(supabase, req) {
         "Legacy unusable cases could not be loaded."
     );
     const legacyJobIds = new Set(legacyJobs.map(job => job.id));
-    const decorateJob = (job, reportMap, counts) => {
+    const decorateJob = (job, reportMap, counts, hierarchyCounts = {}) => {
         const report = reportMap.get(job.id) || null;
         return {
             ...job,
             report: report ? {
                 ...report,
-                meaningUnitCount: counts.get(report.id) || 0
+                meaningUnitCount: counts.get(report.id) || 0,
+                codeCount: hierarchyCounts.codes?.get(report.id) || 0,
+                categoryCount: hierarchyCounts.categories?.get(report.id) || 0,
+                themeCount: hierarchyCounts.themes?.get(report.id) || 0
             } : null
         };
     };
@@ -263,7 +277,11 @@ async function loadSummary(supabase, req) {
         ),
         cases: jobs
             .filter(job => !attentionJobIds.has(job.id) && !legacyJobIds.has(job.id))
-            .map(job => decorateJob(job, reportByJob, muCount))
+            .map(job => decorateJob(job, reportByJob, muCount, {
+                codes: codeCount,
+                categories: categoryCount,
+                themes: themeCount
+            }))
     };
 }
 
@@ -304,21 +322,47 @@ async function loadCase(supabase, req) {
     );
     if (!report) return { run, job, report: null, transcript };
 
-    const meaningUnits = await requireData(
-        supabase
-            .from("advanced_preliminary_meaning_units")
+    const [meaningUnits, codes, codeMeaningUnits, categories, categoryCodes,
+        tentativeThemes, themeCategories] = await Promise.all([
+        requireData(supabase.from("advanced_preliminary_meaning_units")
             .select("id, report_id, unit_number, message_id, exact_source_text, source_language, start_offset, end_offset, occurrence_index, context_note")
-            .eq("report_id", report.id)
-            .order("unit_number"),
-        "Stage 1 meaning units could not be loaded."
-    );
+            .eq("report_id", report.id).order("unit_number"),
+        "Preliminary Meaning Units could not be loaded."),
+        requireData(supabase.from("advanced_preliminary_codes")
+            .select("id, report_id, code_number, code_label, definition, rationale")
+            .eq("report_id", report.id).order("code_number"),
+        "Preliminary Codes could not be loaded."),
+        requireData(supabase.from("advanced_preliminary_code_meaning_units")
+            .select("code_id, meaning_unit_id").eq("report_id", report.id),
+        "Code-to-Meaning-Unit links could not be loaded."),
+        requireData(supabase.from("advanced_preliminary_categories")
+            .select("id, report_id, category_number, category_label, definition, rationale")
+            .eq("report_id", report.id).order("category_number"),
+        "Preliminary Categories could not be loaded."),
+        requireData(supabase.from("advanced_preliminary_category_codes")
+            .select("category_id, code_id").eq("report_id", report.id),
+        "Category-to-Code links could not be loaded."),
+        requireData(supabase.from("advanced_preliminary_themes")
+            .select("id, report_id, theme_number, theme_label, rationale")
+            .eq("report_id", report.id).order("theme_number"),
+        "Preliminary Tentative Themes could not be loaded."),
+        requireData(supabase.from("advanced_preliminary_theme_categories")
+            .select("theme_id, category_id").eq("report_id", report.id),
+        "Theme-to-Category links could not be loaded.")
+    ]);
 
     return {
         run,
         job,
         report: {
             ...report,
-            meaningUnits
+            meaningUnits,
+            codes,
+            codeMeaningUnits,
+            categories,
+            categoryCodes,
+            tentativeThemes,
+            themeCategories
         },
         transcript
     };
@@ -347,15 +391,35 @@ async function downloadStage1Csv(supabase, req, res) {
         "Stage 1 reports could not be exported."
     );
     const reportIds = reports.map(report => report.id);
-    const meaningUnits = reportIds.length ? await requireData(
-        supabase
-            .from("advanced_preliminary_meaning_units")
-            .select("id, report_id, unit_number, message_id, exact_source_text, source_language, start_offset, end_offset, occurrence_index, context_note")
-            .in("report_id", reportIds)
-            .order("report_id")
-            .order("unit_number"),
-        "Stage 1 Meaning Units could not be exported."
-    ) : [];
+    const [meaningUnits, codes, codeMeaningUnits, categories, categoryCodes,
+        tentativeThemes, themeCategories] = reportIds.length
+        ? await Promise.all([
+            requireData(supabase.from("advanced_preliminary_meaning_units")
+                .select("id, report_id, unit_number, message_id, exact_source_text, source_language, start_offset, end_offset, occurrence_index, context_note")
+                .in("report_id", reportIds).order("report_id").order("unit_number"),
+            "Preliminary Meaning Units could not be exported."),
+            requireData(supabase.from("advanced_preliminary_codes")
+                .select("id, report_id, code_number, code_label, definition, rationale")
+                .in("report_id", reportIds),
+            "Preliminary Codes could not be exported."),
+            requireData(supabase.from("advanced_preliminary_code_meaning_units")
+                .select("report_id, code_id, meaning_unit_id").in("report_id", reportIds),
+            "Code-to-Meaning-Unit links could not be exported."),
+            requireData(supabase.from("advanced_preliminary_categories")
+                .select("id, report_id, category_number, category_label, definition, rationale")
+                .in("report_id", reportIds),
+            "Preliminary Categories could not be exported."),
+            requireData(supabase.from("advanced_preliminary_category_codes")
+                .select("report_id, category_id, code_id").in("report_id", reportIds),
+            "Category-to-Code links could not be exported."),
+            requireData(supabase.from("advanced_preliminary_themes")
+                .select("id, report_id, theme_number, theme_label, rationale")
+                .in("report_id", reportIds),
+            "Preliminary Tentative Themes could not be exported."),
+            requireData(supabase.from("advanced_preliminary_theme_categories")
+                .select("report_id, theme_id, category_id").in("report_id", reportIds),
+            "Theme-to-Category links could not be exported.")
+        ]) : [[], [], [], [], [], [], []];
     const reportById = new Map(reports.map(report => [report.id, report]));
     const project = Array.isArray(run.project_snapshot)
         ? run.project_snapshot[0] || {} : {};
@@ -366,10 +430,46 @@ async function downloadStage1Csv(supabase, req, res) {
         "Participant code", "Report ID", "Report completed at",
         "Meaning Unit", "Stable MU ID", "Message ID", "Exact source text",
         "Source language", "Start offset", "End offset", "Occurrence",
-        "Context note", "Analysis source", "AI analysis passes",
-        "Local exact-transcript validation"
+        "Context note", "Preliminary Code", "Stable Code ID", "Code label",
+        "Code definition", "Code rationale", "Preliminary Category",
+        "Stable Category ID", "Category label", "Category definition",
+        "Category rationale", "Preliminary Tentative Theme", "Stable Theme ID",
+        "Tentative Theme label", "Tentative Theme rationale", "Analysis source",
+        "AI analysis passes", "Local source and relationship validation"
     ];
-    const rows = meaningUnits.map(unit => {
+    const codeById = new Map(codes.map(item => [item.id, item]));
+    const categoryById = new Map(categories.map(item => [item.id, item]));
+    const themeById = new Map(tentativeThemes.map(item => [item.id, item]));
+    const lineage = [];
+    codeMeaningUnits.forEach(codeUnit => {
+        const unit = meaningUnits.find(item => item.id === codeUnit.meaning_unit_id);
+        const code = codeById.get(codeUnit.code_id);
+        if (!unit || !code) return;
+        const categoryIds = categoryCodes
+            .filter(link => link.code_id === code.id)
+            .map(link => link.category_id);
+        if (!categoryIds.length) {
+            lineage.push({ unit, code, category: null, theme: null });
+            return;
+        }
+        categoryIds.forEach(categoryId => {
+            const category = categoryById.get(categoryId) || null;
+            const themeIds = themeCategories
+                .filter(link => link.category_id === categoryId)
+                .map(link => link.theme_id);
+            if (!themeIds.length) {
+                lineage.push({ unit, code, category, theme: null });
+                return;
+            }
+            themeIds.forEach(themeId => lineage.push({
+                unit, code, category, theme: themeById.get(themeId) || null
+            }));
+        });
+    });
+    const linkedUnitIds = new Set(lineage.map(item => item.unit.id));
+    meaningUnits.filter(unit => !linkedUnitIds.has(unit.id))
+        .forEach(unit => lineage.push({ unit, code: null, category: null, theme: null }));
+    const rows = lineage.map(({ unit, code, category, theme }) => {
         const report = reportById.get(unit.report_id) || {};
         return [
             run.run_number, project.project_name, project.research_topic,
@@ -380,12 +480,17 @@ async function downloadStage1Csv(supabase, req, res) {
             report.id, report.completed_at, `MU${unit.unit_number}`, unit.id,
             unit.message_id, unit.exact_source_text, unit.source_language,
             unit.start_offset, unit.end_offset, unit.occurrence_index,
-            unit.context_note,
+            unit.context_note, code ? `CO${code.code_number}` : "", code?.id,
+            code?.code_label, code?.definition, code?.rationale,
+            category ? `CA${category.category_number}` : "", category?.id,
+            category?.category_label, category?.definition, category?.rationale,
+            theme ? `TH${theme.theme_number}` : "", theme?.id,
+            theme?.theme_label, theme?.rationale,
             report.analytical_audit?.priorAnalysisUsed === false
                 ? "original transcript only" : "historical stopped workflow",
             report.analytical_audit?.aiAnalysisPassCount || "historical",
             report.analytical_audit?.validationType
-                === "local_deterministic_exact_transcript_traceability"
+                === "local_deterministic_source_and_relationship_integrity"
                 ? "passed" : "historical"
         ];
     });
@@ -395,7 +500,7 @@ async function downloadStage1Csv(supabase, req, res) {
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
     res.setHeader(
         "Content-Disposition",
-        `attachment; filename="sleeping-habits-stage1-run-${run.run_number}.csv"`
+        `attachment; filename="sleeping-habits-preliminary-case-analysis-run-${run.run_number}.csv"`
     );
     return res.status(200).send(`\uFEFF${csv}`);
 }

@@ -52,17 +52,63 @@ function validDraft() {
             exact_source_text: "I stay awake really late most nights",
             occurrence_index: 1,
             context_note: "Exact repeated sleep-timing evidence."
-        }]
+        }],
+        codes: [{
+            label: "Late bedtime",
+            definition: "Going to bed later than desired or customary.",
+            rationale: "Both passages describe repeated late sleep timing.",
+            meaning_unit_numbers: [1, 4]
+        }, {
+            label: "Daytime tiredness",
+            definition: "Tiredness experienced on the following day.",
+            rationale: "The participant explicitly reports next-day tiredness.",
+            meaning_unit_numbers: [2]
+        }, {
+            label: "Quiet environment",
+            definition: "A preference for less environmental noise.",
+            rationale: "The participant wants a quieter environment.",
+            meaning_unit_numbers: [3]
+        }],
+        categories: [{
+            label: "Sleep timing",
+            definition: "Timing of sleep onset.",
+            rationale: "Describes the participant's late bedtime pattern.",
+            code_numbers: [1]
+        }, {
+            label: "Sleep consequences",
+            definition: "Effects associated with the sleep pattern.",
+            rationale: "Describes next-day tiredness.",
+            code_numbers: [2]
+        }, {
+            label: "Sleep environment",
+            definition: "Desired physical conditions for sleep.",
+            rationale: "Describes the participant's preference for quiet.",
+            code_numbers: [3]
+        }, {
+            label: "Sleep difficulties",
+            definition: "Difficulties spanning timing and next-day effects.",
+            rationale: "Links late bedtime with its reported consequence.",
+            code_numbers: [1, 2]
+        }],
+        tentative_themes: [{
+            label: "Misaligned sleep pattern",
+            rationale: "Late sleep timing coexists with daytime tiredness and a desire for improved conditions.",
+            category_numbers: [1, 2, 3, 4]
+        }],
+        case_summary: "The participant describes persistent late bedtime, next-day tiredness, and a desire for a quieter sleep environment."
     };
 }
 
-test("Stage 1 preserves exact Meaning Units and generates no higher layers", () => {
+test("Phase 1 preserves exact Meaning Units and generates the complete case hierarchy", () => {
     const result = validateAdvancedPreliminaryAnalysis(validDraft(), messages);
     assert.equal(result.complete, true);
     assert.equal(result.meaningUnits.length, 4);
-    assert.deepEqual(result.codes, []);
-    assert.deepEqual(result.categories, []);
-    assert.match(result.caseSummary, /No codes, categories, or themes were generated/);
+    assert.equal(result.codes.length, 3);
+    assert.equal(result.categories.length, 4);
+    assert.equal(result.tentativeThemes.length, 1);
+    assert.deepEqual(result.categories[3].codeNumbers, [1, 2]);
+    assert.deepEqual(result.tentativeThemes[0].categoryNumbers, [1, 2, 3, 4]);
+    assert.match(result.caseSummary, /persistent late bedtime/);
     assert.equal(result.meaningUnits[2].exactSourceText, "I want a quieter environment");
 });
 
@@ -108,21 +154,23 @@ test("Stage 1 performs one fresh model call from the original transcript only", 
     assert.equal(result.audit.priorAnalysisUsed, false);
     assert.equal(result.audit.aiAnalysisPassCount, 1);
     assert.equal(result.audit.validationType,
-        "local_deterministic_exact_transcript_traceability");
+        "local_deterministic_source_and_relationship_integrity");
+    assert.equal(result.codes.length, 3);
+    assert.equal(result.tentativeThemes.length, 1);
 });
 
-test("Stage 1 is versioned, stronger-model capable, and stops at Meaning Units", async () => {
+test("Phase 1 is versioned, stronger-model capable, and completes tentative themes", async () => {
     assert.equal(ADVANCED_PRELIMINARY_MODEL, "gpt-5.6-sol");
     assert.equal(ADVANCED_PRELIMINARY_REASONING_EFFORT, "high");
-    assert.equal(ADVANCED_PRELIMINARY_STOP_LAYER, "meaning_units");
-    assert.match(ADVANCED_PRELIMINARY_ANALYSIS_VERSION, /v2-fresh-single-pass/);
-    assert.match(ADVANCED_PRELIMINARY_PROMPT_VERSION, /v2-transcript-only-single-pass/);
+    assert.equal(ADVANCED_PRELIMINARY_STOP_LAYER, "preliminary_tentative_themes");
+    assert.match(ADVANCED_PRELIMINARY_ANALYSIS_VERSION, /v3-fresh-single-pass-complete/);
+    assert.match(ADVANCED_PRELIMINARY_PROMPT_VERSION, /v3-transcript-only-single-pass/);
     const worker = await source("server/advancedPreliminaryAnalysis.js");
-    assert.match(worker, /Stop at Meaning Units/);
-    assert.match(worker, /Do not generate, name, imply, copy, or evaluate codes, categories, themes/);
+    assert.match(worker, /Meaning Units → Preliminary Codes → Preliminary Categories → Preliminary Tentative Themes/);
+    assert.match(worker, /Relationships are many-to-many/);
     assert.match(worker, /Full-transcript coverage is mandatory/);
     assert.match(worker, /This is the only AI analysis pass for this case/);
-    assert.match(worker, /No previous analysis and no second AI audit will be used/);
+    assert.match(worker, /No previous analysis, second AI audit, repair call, or human approval gate will be used/);
     assert.doesNotMatch(worker, /auditAnalysis\(/);
     assert.doesNotMatch(worker, /advanced_preliminary_analysis_audit/);
     assert.doesNotMatch(worker, /stage1-source-content-audit/);
@@ -139,42 +187,42 @@ test("model suggestions are server-configurable without constraining manual mode
     }), "gpt-5.5");
 });
 
-test("database migration scopes Stage 1 to one project and preserves all prior analysis", async () => {
+test("database change scopes Phase 1, stores tentative themes, and preserves source data", async () => {
     const migration = await source(
-        "supabase/migrations/20260901013000_stage1_meaning_units_only.sql"
+        "supabase/migrations/20260901122121_complete_preliminary_case_reports.sql"
     );
     assert.match(migration, /create_stage1_meaning_unit_run/);
     assert.match(migration, /single_project_formally_completed_transcripts/);
-    assert.match(migration, /'meaning_units'/);
+    assert.match(migration, /'preliminary_tentative_themes'/);
+    assert.match(migration, /advanced_preliminary_themes/);
+    assert.match(migration, /advanced_preliminary_theme_categories/);
+    assert.match(migration, /drop constraint if exists advanced_preliminary_category_codes_report_id_code_id_key/);
     assert.match(migration, /design\.project_id = selected_project\.id/);
     assert.match(migration, /SLEEPING-HABITS/);
     assert.doesNotMatch(migration, /delete from public\./i);
     assert.doesNotMatch(migration, /update public\.qualitative_case_reports/i);
 });
 
-test("researcher UI locks later stages and exposes single-pass source provenance", async () => {
+test("researcher UI exposes the complete one-pass case hierarchy and locks later cross-case layers", async () => {
     const html = await source("staged-analysis.html");
     const access = await source("researcher-staged-access.js");
     const vercel = await source("vercel.json");
     const script = await source("researcher-advanced-preliminary.js");
     const dashboard = await source("server/advancedPreliminaryDashboard.js");
-    assert.match(html, /Stage 1 · Meaning Units/);
+    assert.match(html, /Complete Preliminary Case-Based Analysis/);
     assert.match(html, /Unlock and show Stage 1/);
-    assert.match(html, /retired Forms 1–4 are not loaded or displayed/);
     assert.match(html, /data-staged-only="true"/);
     assert.match(script, /workspace\?\.prepend\(section\)/);
     assert.match(script, /stagedAnalysisPrimary/);
     assert.match(script, /choose Lock workspace and unlock again/);
     assert.match(script, /advancedPreliminaryLockButton/);
     assert.match(script, /sessionStorage\.removeItem\(TOKEN_STORAGE_KEY\)/);
-    assert.match(html, /Stage 2 · Cross-Case Code Refinement — automatic after Stage 1/);
-    assert.match(html, /Stage 3 · Category Development — locked/);
-    assert.match(html, /Stage 4 · Theme Development — locked/);
-    assert.doesNotMatch(html, /Stage 5 · Theme Development/);
+    assert.match(html, /Phase 2A · Cross-Case Code Refinement — automatic after Phase 1/);
+    assert.match(html, /Phase 2B · Cross-Case Category Refinement — locked/);
+    assert.match(html, /Phase 2C · Cross-Case Theme Development — locked/);
     assert.match(html, /Meaning Units →[\s\S]*Codes → Categories → Themes/);
-    assert.match(html, /Historical transcripts, reports, jobs, and failures remain preserved in[\s\S]*protected audit storage/);
-    assert.match(html, /retired Forms 1–4 are not loaded or displayed/);
-    assert.match(html, /No approval is required to keep Stage 1 or Stage 2 moving/);
+    assert.match(html, /Rejected GPT-5\.1[\s\S]*is not used, audited, repaired, or supplied to the new model/);
+    assert.match(html, /without[\s\S]*a per-case approval bottleneck/);
     assert.match(html, /advancedPreliminaryModel/);
     assert.match(html, /list="advancedPreliminaryModelSuggestions"/);
     assert.match(html, /Enter any exact model identifier/);
@@ -189,14 +237,14 @@ test("researcher UI locks later stages and exposes single-pass source provenance
     assert.match(script, /modelSelect\.value\.trim\(\)/);
     assert.match(script, /Keep every manually typed/);
     assert.match(script, /modelSelect\.disabled = active/);
-    assert.match(script, /Inspect Meaning Units/);
+    assert.match(script, /Inspect complete case report/);
     assert.match(script, /Stage 1 annotated transcript/);
     assert.match(script, /meaningUnitAnnotation/);
     assert.match(script, /One pass · original transcript/);
     assert.match(script, /Independent analysis provenance/);
     assert.match(script, /prior analysis used: no/);
-    assert.match(html, /analytically ambiguous or unverified Stage 1 cases/);
-    assert.match(html, /They are not automatically archived/);
+    assert.match(html, /single-pass output could not be stored safely/);
+    assert.match(html, /without an additional paid AI audit/);
     assert.match(html, /These are not researcher archives/);
     assert.match(html, /Legacy cases/);
     assert.match(script, /attentionCases/);

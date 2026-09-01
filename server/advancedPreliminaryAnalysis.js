@@ -10,10 +10,10 @@ export const ADVANCED_PRELIMINARY_PROVIDER = "openai";
 export const ADVANCED_PRELIMINARY_MODEL = "gpt-5.6-sol";
 export const ADVANCED_PRELIMINARY_REASONING_EFFORT = "high";
 export const ADVANCED_PRELIMINARY_ANALYSIS_VERSION =
-    "staged-analysis-stage1-v2-fresh-single-pass-meaning-units";
+    "preliminary-case-analysis-v3-fresh-single-pass-complete";
 export const ADVANCED_PRELIMINARY_PROMPT_VERSION =
-    "staged-analysis-stage1-prompt-v2-transcript-only-single-pass";
-export const ADVANCED_PRELIMINARY_STOP_LAYER = "meaning_units";
+    "preliminary-case-analysis-prompt-v3-transcript-only-single-pass";
+export const ADVANCED_PRELIMINARY_STOP_LAYER = "preliminary_tentative_themes";
 export const SLEEPING_HABITS_PROJECT_CODE = "SLEEPING-HABITS";
 
 const analysisSchema = {
@@ -37,9 +37,65 @@ const analysisSchema = {
                 ],
                 additionalProperties: false
             }
-        }
+        },
+        codes: {
+            type: "array",
+            items: {
+                type: "object",
+                properties: {
+                    label: { type: "string" },
+                    definition: { type: "string" },
+                    rationale: { type: "string" },
+                    meaning_unit_numbers: {
+                        type: "array",
+                        items: { type: "integer" }
+                    }
+                },
+                required: [
+                    "label", "definition", "rationale", "meaning_unit_numbers"
+                ],
+                additionalProperties: false
+            }
+        },
+        categories: {
+            type: "array",
+            items: {
+                type: "object",
+                properties: {
+                    label: { type: "string" },
+                    definition: { type: "string" },
+                    rationale: { type: "string" },
+                    code_numbers: {
+                        type: "array",
+                        items: { type: "integer" }
+                    }
+                },
+                required: ["label", "definition", "rationale", "code_numbers"],
+                additionalProperties: false
+            }
+        },
+        tentative_themes: {
+            type: "array",
+            items: {
+                type: "object",
+                properties: {
+                    label: { type: "string" },
+                    rationale: { type: "string" },
+                    category_numbers: {
+                        type: "array",
+                        items: { type: "integer" }
+                    }
+                },
+                required: ["label", "rationale", "category_numbers"],
+                additionalProperties: false
+            }
+        },
+        case_summary: { type: "string" }
     },
-    required: ["meaning_units"],
+    required: [
+        "meaning_units", "codes", "categories", "tentative_themes",
+        "case_summary"
+    ],
     additionalProperties: false
 };
 
@@ -155,16 +211,86 @@ export function validateAdvancedPreliminaryAnalysis(value, messages) {
             });
         });
 
-    const complete = Boolean(meaningUnits.length && !invalidReasons.length);
+    const normalizeNumbers = (values, maximum) => [...new Set(
+        (Array.isArray(values) ? values : []).filter(number =>
+            Number.isInteger(number) && number > 0 && number <= maximum
+        )
+    )];
+    const codes = [];
+    (Array.isArray(value?.codes) ? value.codes : []).forEach((raw, index) => {
+        const label = normalizedText(raw?.label);
+        const definition = normalizedText(raw?.definition);
+        const rationale = normalizedText(raw?.rationale);
+        const meaningUnitNumbers = normalizeNumbers(
+            raw?.meaning_unit_numbers,
+            meaningUnits.length
+        );
+        if (!label || !definition || !rationale || !meaningUnitNumbers.length) {
+            invalidReasons.push(
+                `CO${index + 1} is missing a label, explanation, or valid Meaning Unit link.`
+            );
+            return;
+        }
+        codes.push({ label, definition, rationale, meaningUnitNumbers });
+    });
+
+    const categories = [];
+    (Array.isArray(value?.categories) ? value.categories : [])
+        .forEach((raw, index) => {
+            const label = normalizedText(raw?.label);
+            const definition = normalizedText(raw?.definition);
+            const rationale = normalizedText(raw?.rationale);
+            const codeNumbers = normalizeNumbers(raw?.code_numbers, codes.length);
+            if (!label || !definition || !rationale || !codeNumbers.length) {
+                invalidReasons.push(
+                    `CA${index + 1} is missing a label, explanation, or valid Code link.`
+                );
+                return;
+            }
+            categories.push({ label, definition, rationale, codeNumbers });
+        });
+
+    const tentativeThemes = [];
+    (Array.isArray(value?.tentative_themes) ? value.tentative_themes : [])
+        .forEach((raw, index) => {
+            const label = normalizedText(raw?.label);
+            const rationale = normalizedText(raw?.rationale);
+            const categoryNumbers = normalizeNumbers(
+                raw?.category_numbers,
+                categories.length
+            );
+            if (!label || !rationale || !categoryNumbers.length) {
+                invalidReasons.push(
+                    `TH${index + 1} is missing a label, explanation, or valid Category link.`
+                );
+                return;
+            }
+            tentativeThemes.push({ label, rationale, categoryNumbers });
+        });
+
+    const linkedCodeNumbers = new Set(categories.flatMap(item => item.codeNumbers));
+    const linkedCategoryNumbers = new Set(
+        tentativeThemes.flatMap(item => item.categoryNumbers)
+    );
+    const unassignedCodeNumbers = codes
+        .map((_, index) => index + 1)
+        .filter(number => !linkedCodeNumbers.has(number));
+    const unassignedCategoryNumbers = categories
+        .map((_, index) => index + 1)
+        .filter(number => !linkedCategoryNumbers.has(number));
+    const caseSummary = normalizedText(value?.case_summary);
+    const complete = Boolean(
+        meaningUnits.length && codes.length && caseSummary && !invalidReasons.length
+    );
 
     return {
         meaningUnits,
-        codes: [],
-        categories: [],
-        unassignedCodeNumbers: [],
-        caseSummary: meaningUnits.length
-            ? `Stage 1 preserved ${meaningUnits.length} exact Meaning Unit${meaningUnits.length === 1 ? "" : "s"}. No codes, categories, or themes were generated.`
-            : "Stage 1 did not produce a valid Meaning Unit.",
+        codes,
+        categories,
+        tentativeThemes,
+        unassignedCodeNumbers,
+        unassignedCategoryNumbers,
+        caseSummary: caseSummary || "The independent case analysis was incomplete.",
         invalidReasons,
         complete
     };
@@ -175,22 +301,25 @@ function transcriptForModel(messages) {
         message_id: message.id,
         language: message.language,
         original_text: message.originalText,
-        english_translation: message.englishTranslation,
-        analysis_text: message.analysisText
+        english_translation: message.englishTranslation
     })));
 }
 
 function analysisInstruction({ projectName, researchTopic }) {
     const scope = researchTopic || "Sleeping habits";
     return [
-        "Perform Stage 1 Meaning Unit identification for exactly one completed interview independently from its original transcript. No prior meaning unit, code, category, theme, report, corpus vocabulary, or codebook is supplied or permitted as analytical input.",
+        "Perform one complete Preliminary Case-Based Analysis for exactly one completed interview independently from its original transcript. No prior meaning unit, code, category, theme, report, model output, corpus vocabulary, or codebook is supplied or permitted as analytical input.",
         `Research project: ${projectName || "Historical sleeping-habits dataset"}. Research topic/scope: ${scope}. Include an activity only when the participant or transcript makes its connection to the research topic explicit.`,
-        "Stop at Meaning Units. Do not generate, name, imply, copy, or evaluate codes, categories, themes, tentative themes, refined concepts, cross-case comparisons, frequencies, or a global codebook.",
+        "Complete this case upward in this order: Transcript → Meaning Units → Preliminary Codes → Preliminary Categories → Preliminary Tentative Themes. Do not compare this participant with any other case. Do not use frequencies, refined cross-case concepts, or a predetermined global codebook.",
         "Read every participant message from beginning to end and segment all substantive research-relevant meanings into Meaning Units. Each Meaning Unit must be the smallest sufficient coherent original-language span that preserves its meaning in context. Copy exact_source_text verbatim from original_text, never from analysis_text, English translation, or a prior report. Use occurrence_index to identify a repeated span.",
         "Meaning Units remain case-grounded and must not be standardized. A Meaning Unit is an evidence segment, not an analytical label. Do not include interviewer text, greetings, thanks, farewells, consent formalities, or other conversational courtesies unless they contain substantive evidence relevant to the study topic.",
         "Full-transcript coverage is mandatory. Do not stop because similar evidence appeared earlier. Do not omit later or low-frequency evidence such as a stated preference, desired change, problem, condition, routine, consequence, evaluation, uncertainty, or contradiction when its connection to the study topic is explicit.",
         "Do not create overlapping Meaning Units. When adjacent words belong to the same coherent meaning, preserve them in one smallest sufficient span. When one participant passage contains analytically separable meanings, use separate non-overlapping exact spans.",
-        "Return only the complete meaning_units array. This is the only AI analysis pass for this case. The application assigns stable MU numbers and performs only local deterministic checks that each quoted span exists exactly in the original transcript. No previous analysis and no second AI audit will be used."
+        "Create concise English Preliminary Codes from the actual Meaning Units in this case. Each code should normally be one to three words and must name the specific phenomenon supported by every linked Meaning Unit. Link codes by meaning_unit_numbers; multiple codes may link to one Meaning Unit and one code may link to multiple Meaning Units.",
+        "Create case-specific Preliminary Categories as broader descriptive groupings of supported codes. Link them by code_numbers. Relationships are many-to-many: a code may contribute to more than one justified category. Do not force unrelated codes together and do not require exclusive or unshared children.",
+        "Create Preliminary Tentative Themes that express the patterned meaning supported by the case's categories. Link them by category_numbers. Relationships are many-to-many. A tentative theme is not a cross-case final theme and must not claim prevalence beyond this participant.",
+        "Use English for code, category, tentative-theme, definition, rationale, and case-summary text. Preserve exact_source_text in the original transcript language. If a higher layer is genuinely unsupported, leave that array empty and explain the unsynthesized result in case_summary; never invent support merely to fill a form.",
+        "Return the complete structured case report. This is the only AI analysis pass for this case. The application assigns stable MU, CO, CA, and TH positions and performs only local deterministic checks of exact transcript spans and relationship references. No previous analysis, second AI audit, repair call, or human approval gate will be used."
     ].join("\n\n");
 }
 
@@ -277,13 +406,16 @@ export async function generateAdvancedPreliminaryAnalysis(
     return {
         ...analysis,
         audit: {
-            reviewStatus: "single_pass_from_original_transcript",
-            validationType: "local_deterministic_exact_transcript_traceability",
+            reviewStatus: "independent_complete_preliminary_case_analysis",
+            validationType: "local_deterministic_source_and_relationship_integrity",
             priorAnalysisUsed: false,
             aiAnalysisPassCount: 1,
-            stage1Only: true,
+            stage1Only: false,
             meaningUnitCount: analysis.meaningUnits.length,
-            overallSummary: "Generated from the original transcript in one 5.6 analysis pass. No prior-model analysis and no second AI audit were used."
+            codeCount: analysis.codes.length,
+            categoryCount: analysis.categories.length,
+            tentativeThemeCount: analysis.tentativeThemes.length,
+            overallSummary: "Generated independently from the original transcript in one 5.6 analysis pass. No prior-model analysis, AI audit, repair call, or per-case approval was used."
         },
         inputTokenCount: response?.usage?.input_tokens || null,
         outputTokenCount: response?.usage?.output_tokens || null
@@ -348,13 +480,13 @@ async function loadClaimedTranscript(supabase, openaiClient, claim) {
     };
 }
 
-async function failJob(supabase, jobId, error) {
+async function failJob(supabase, jobId, error, retryable = false) {
     const { error: persistenceError } = await supabase.rpc(
         "fail_advanced_preliminary_analysis",
         {
             p_job_id: jobId,
             p_error: error instanceof Error ? error.message : String(error),
-            p_retryable: true
+            p_retryable: retryable
         }
     );
     if (persistenceError) {
@@ -392,7 +524,9 @@ export async function processNextAdvancedPreliminaryAnalysis(
             meaningUnits: analysis.meaningUnits,
             codes: analysis.codes,
             categories: analysis.categories,
+            tentativeThemes: analysis.tentativeThemes,
             unassignedCodeNumbers: analysis.unassignedCodeNumbers,
+            unassignedCategoryNumbers: analysis.unassignedCategoryNumbers,
             caseSummary: analysis.caseSummary,
             audit: analysis.audit
         };
@@ -425,7 +559,7 @@ export async function processNextAdvancedPreliminaryAnalysis(
             reportId
         };
     } catch (error) {
-        await failJob(supabase, claim.job_id, error);
+        await failJob(supabase, claim.job_id, error, false);
         console.error("Advanced preliminary case failed", {
             runId: claim.run_id,
             caseNumber: claim.case_number,

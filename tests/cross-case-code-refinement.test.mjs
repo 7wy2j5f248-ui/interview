@@ -108,11 +108,14 @@ test("Stage 2 schema is automatic, case-grounded, traceable, and stops before Ca
     assert.match(worker, /Similar wording is not enough/);
     assert.match(worker, /Do not merge analytically different meanings/);
     assert.match(worker, /Do not alter Meaning Units/);
-    assert.match(worker, /Do not generate Categories or Themes/);
+    assert.doesNotMatch(worker, /stage2_preliminary_case_codes/);
+    assert.doesNotMatch(worker, /Stage 2 preliminary-code repair/);
+    assert.match(worker, /advanced_preliminary_codes/);
+    assert.match(worker, /p_input_tokens: 0/);
     assert.match(api, /processNextAdvancedPreliminaryAnalysis[\s\S]*processNextCrossCaseCodeRefinement/);
-    assert.match(html, /No approval is required to keep Stage 1 or Stage 2 moving/);
-    assert.match(html, /Stage 3 · Category Development — locked/);
-    assert.match(html, /Stage 4 · Theme Development — locked/);
+    assert.match(html, /without[\s\S]*a per-case approval bottleneck/);
+    assert.match(html, /Phase 2B · Cross-Case Category Refinement — locked/);
+    assert.match(html, /Phase 2C · Cross-Case Theme Development — locked/);
     assert.match(dashboard, /Case ID/);
     assert.match(dashboard, /Preliminary Code/);
     assert.match(dashboard, /Refined Code/);

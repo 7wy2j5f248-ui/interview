@@ -141,8 +141,8 @@
         });
 
         if (!run) {
-            provenance.textContent = "No Stage 1 Meaning Unit run has been created yet.";
-            setStatus("Enter an exact model ID, then start Stage 1 for the Sleeping habits project.");
+            provenance.textContent = "No independent preliminary case-analysis run has been created yet.";
+            setStatus("Enter an exact model ID, then start the complete preliminary case analysis for the Sleeping habits project.");
             startButton.disabled = !modelSelect.value;
             modelSelect.disabled = false;
             downloadButton.disabled = true;
@@ -170,7 +170,7 @@
         setStatus(
             `Stage 1 run ${run.run_number}: ${run.status.replaceAll("_", " ")}. `
             + `${run.completed_count} of ${run.source_case_count} cases completed using `
-            + `${run.resolved_model || run.model}. Codes, Categories, and Themes are locked. `
+            + `${run.resolved_model || run.model}. Each completed case includes Meaning Units, preliminary Codes, preliminary Categories, and preliminary Tentative Themes. `
             + (run.status === "cancelled"
                 ? "This run is stopped and cannot make further model calls."
                 : "This run analyzes original transcripts without using earlier analysis as input.")
@@ -179,6 +179,7 @@
         const renderCaseTable = (items, host, mode = "active") => {
         const built = table([
             "Case ID", "Project lineage", "Status", "Meaning Units",
+            "Codes", "Categories", "Tentative Themes",
             "Generation", "Inspect"
         ]);
         const body = document.createElement("tbody");
@@ -197,6 +198,9 @@
                 ? `Needs attention${item.last_error ? `: ${item.last_error}` : ""}`
                 : item.status.replaceAll("_", " "));
             cell(row, item.report?.meaningUnitCount ?? "—");
+            cell(row, item.report?.codeCount ?? "—");
+            cell(row, item.report?.categoryCount ?? "—");
+            cell(row, item.report?.themeCount ?? "—");
             cell(row, item.report
                 ? item.report.analytical_audit?.aiAnalysisPassCount === 1
                     && item.report.analytical_audit?.priorAnalysisUsed === false
@@ -207,7 +211,7 @@
             const button = document.createElement("button");
             button.type = "button";
             button.textContent = item.report
-                ? "Inspect Meaning Units"
+                ? "Inspect complete case report"
                 : mode === "legacy" ? "Inspect transcript"
                 : item.status === "processing" ? "Processing" : "Not ready";
             button.disabled = !item.report && mode !== "legacy";
@@ -331,13 +335,20 @@
         }
     }
 
-    function meaningUnitColor(unitNumber) {
-        return `keywordColor${((Number(unitNumber) - 1) % 12) + 1}`;
+    function codeColor(codeNumber) {
+        return `keywordColor${((Number(codeNumber) - 1) % 12) + 1}`;
     }
 
-    function highlightedMessage(message, meaningUnits) {
+    function codesForUnit(report, meaningUnitId) {
+        const codeIds = new Set((report.codeMeaningUnits || [])
+            .filter(link => link.meaning_unit_id === meaningUnitId)
+            .map(link => link.code_id));
+        return (report.codes || []).filter(code => codeIds.has(code.id));
+    }
+
+    function highlightedMessage(message, report) {
         const text = message.Message || "";
-        const highlights = meaningUnits
+        const highlights = report.meaningUnits
             .filter(unit => unit.message_id === message.id)
             .sort((left, right) => left.start_offset - right.start_offset);
         const fragment = document.createDocumentFragment();
@@ -347,14 +358,17 @@
             fragment.append(document.createTextNode(text.slice(cursor, unit.start_offset)));
             const annotation = document.createElement("span");
             annotation.className = "meaningUnitAnnotation";
-            const colorClass = meaningUnitColor(unit.unit_number);
+            const linkedCodes = codesForUnit(report, unit.id);
+            const colorClass = codeColor(linkedCodes[0]?.code_number || unit.unit_number);
             const label = document.createElement("span");
             label.className = `meaningUnitCodeLabel ${colorClass}`;
-            label.textContent = `MU${unit.unit_number}`;
+            label.textContent = linkedCodes.length
+                ? linkedCodes.map(code => `CO${code.code_number} ${code.code_label}`).join(" · ")
+                : `MU${unit.unit_number} · unsynthesized`;
             const mark = document.createElement("mark");
             mark.className = colorClass;
             mark.textContent = text.slice(unit.start_offset, unit.end_offset);
-            mark.title = `MU${unit.unit_number} · stable ID ${unit.id}`;
+            mark.title = `MU${unit.unit_number} · ${label.textContent} · stable ID ${unit.id}`;
             annotation.append(label, mark);
             fragment.append(annotation);
             cursor = unit.end_offset;
@@ -374,16 +388,16 @@
             "transcriptIdentity"
         ));
         panel.appendChild(paragraph(
-            "This Stage 1 proposal uses transcripts and stored translations only. Every colored span below is an exact original-transcript Meaning Unit; no Code, Category, or Theme exists at this stage.",
+            "This complete preliminary case report was generated independently from this transcript. Every colored span is an exact original-transcript Meaning Unit; the CO label above it shows its linked preliminary Code. Multiple CO labels are shown when a Meaning Unit supports more than one Code.",
             "muted"
         ));
         const legend = document.createElement("div");
-        legend.setAttribute("aria-label", "Meaning Unit colour legend");
-        report.meaningUnits.forEach(unit => {
+        legend.setAttribute("aria-label", "Preliminary Code colour legend");
+        (report.codes || []).forEach(code => {
             const item = document.createElement("span");
-            item.className = `keywordLegend ${meaningUnitColor(unit.unit_number)}`;
-            item.textContent = `MU${unit.unit_number}`;
-            item.title = `Stable ID ${unit.id} · message ${unit.message_id}`;
+            item.className = `keywordLegend ${codeColor(code.code_number)}`;
+            item.textContent = `CO${code.code_number} · ${code.code_label}`;
+            item.title = code.definition;
             legend.appendChild(item);
         });
         panel.appendChild(legend);
@@ -398,7 +412,7 @@
                 ? `${message.Speaker || "Speaker"} · English original: `
                 : `${message.Speaker || "Speaker"} · Original (${language || "language not recorded"}): `;
             source.appendChild(speaker);
-            source.appendChild(highlightedMessage(message, report.meaningUnits));
+            source.appendChild(highlightedMessage(message, report));
             article.appendChild(source);
             if (message.EnglishTranslation && message.EnglishTranslation !== message.Message) {
                 article.appendChild(paragraph(
@@ -411,8 +425,73 @@
         return panel;
     }
 
+    function preliminaryHierarchy(report) {
+        const panel = document.createElement("section");
+        panel.className = "automaticReanalysisPanel";
+        panel.appendChild(heading("Preliminary case hierarchy"));
+        const codeById = new Map((report.codes || []).map(code => [code.id, code]));
+        const categoryById = new Map(
+            (report.categories || []).map(category => [category.id, category])
+        );
+        const built = table([
+            "Tentative Theme", "Preliminary Category", "Preliminary Code",
+            "Supporting Meaning Units"
+        ]);
+        const body = document.createElement("tbody");
+        const themeLinks = report.themeCategories || [];
+        const categoryLinks = report.categoryCodes || [];
+        const codeLinks = report.codeMeaningUnits || [];
+        const unitById = new Map(report.meaningUnits.map(unit => [unit.id, unit]));
+        const rows = [];
+        (report.tentativeThemes || []).forEach(theme => {
+            const categoryIds = themeLinks
+                .filter(link => link.theme_id === theme.id)
+                .map(link => link.category_id);
+            categoryIds.forEach(categoryId => {
+                const category = categoryById.get(categoryId);
+                const codeIds = categoryLinks
+                    .filter(link => link.category_id === categoryId)
+                    .map(link => link.code_id);
+                codeIds.forEach(codeId => {
+                    const code = codeById.get(codeId);
+                    const units = codeLinks
+                        .filter(link => link.code_id === codeId)
+                        .map(link => unitById.get(link.meaning_unit_id))
+                        .filter(Boolean);
+                    rows.push({ theme, category, code, units });
+                });
+            });
+        });
+        const representedCodes = new Set(rows.map(row => row.code?.id));
+        (report.codes || []).filter(code => !representedCodes.has(code.id))
+            .forEach(code => {
+                const units = codeLinks
+                    .filter(link => link.code_id === code.id)
+                    .map(link => unitById.get(link.meaning_unit_id)).filter(Boolean);
+                rows.push({ theme: null, category: null, code, units });
+            });
+        rows.forEach(item => {
+            const row = document.createElement("tr");
+            cell(row, item.theme
+                ? `TH${item.theme.theme_number} · ${item.theme.theme_label}`
+                : "Unsynthesized at theme level");
+            cell(row, item.category
+                ? `CA${item.category.category_number} · ${item.category.category_label}`
+                : "Unsynthesized at category level");
+            cell(row, item.code
+                ? `CO${item.code.code_number} · ${item.code.code_label}` : "—");
+            cell(row, item.units.map(unit =>
+                `MU${unit.unit_number}: ${unit.exact_source_text}`
+            ).join(" | "));
+            body.appendChild(row);
+        });
+        built.element.appendChild(body);
+        panel.appendChild(built.scroll);
+        return panel;
+    }
+
     async function openCase(caseNumber) {
-        dialogHeading.textContent = `${caseNumber} · Stage 1 Meaning Units`;
+        dialogHeading.textContent = `${caseNumber} · Complete preliminary case report`;
         dialogProvenance.textContent = "Loading exact evidence and provenance…";
         dialogContent.replaceChildren();
         dialog.showModal();
@@ -453,6 +532,7 @@
             ].join(" · ");
             dialogContent.appendChild(paragraph(report.case_summary));
             dialogContent.appendChild(annotatedTranscript(detail, report));
+            dialogContent.appendChild(preliminaryHierarchy(report));
             const singlePass = report.analytical_audit?.aiAnalysisPassCount === 1
                 && report.analytical_audit?.priorAnalysisUsed === false;
             dialogContent.appendChild(heading(singlePass
@@ -465,41 +545,11 @@
             if (singlePass) {
                 dialogContent.appendChild(paragraph(
                     `AI analysis passes: 1; prior analysis used: no; `
-                    + `local exact-transcript validation: completed; Meaning Units: ${report.meaningUnits.length}.`,
+                    + `local source/relationship integrity check: completed; `
+                    + `Meaning Units: ${report.meaningUnits.length}; Codes: ${report.codes.length}; `
+                    + `Categories: ${report.categories.length}; Tentative Themes: ${report.tentativeThemes.length}.`,
                     "muted"
                 ));
-            }
-            const gaps = report.analytical_audit?.omittedRelevantEvidence || [];
-            const rejectedUnits = (report.analytical_audit?.meaningUnitChecks || [])
-                .filter(check => !check.accepted);
-            if (rejectedUnits.length) {
-                dialogContent.appendChild(heading("Draft Meaning Units requiring review"));
-                dialogContent.appendChild(paragraph(
-                    "These exact transcript highlights remain visible as a proposal, but the independent audit did not verify them as final Stage 1 Meaning Units."
-                ));
-                rejectedUnits.forEach(check => {
-                    const block = document.createElement("blockquote");
-                    block.appendChild(paragraph(
-                        `MU${check.unitNumber} · message ${check.messageId}`,
-                        "muted"
-                    ));
-                    block.appendChild(paragraph(check.explanation));
-                    dialogContent.appendChild(block);
-                });
-            }
-            if (gaps.length) {
-                dialogContent.appendChild(heading("Exact transcript passages requiring coverage review"));
-                dialogContent.appendChild(paragraph(
-                    "These passages were found by the independent audit but are not yet represented by a Meaning Unit. The proposal remains inspectable and is not labeled as fully verified."
-                ));
-                gaps.forEach(gap => {
-                    const block = document.createElement("blockquote");
-                    block.appendChild(paragraph(`Message ${gap.messageId}`,
-                        "muted"));
-                    block.appendChild(paragraph(`Original: ${gap.exactSourceText}`));
-                    block.appendChild(paragraph(gap.explanation, "muted"));
-                    dialogContent.appendChild(block);
-                });
             }
             report.meaningUnits.forEach(unit => {
                 const block = document.createElement("blockquote");
@@ -543,8 +593,8 @@
         const selectedModel = modelSelect.value.trim();
         if (!selectedModel) return;
         const confirmed = window.confirm(
-            `Start Stage 1 Meaning Unit identification for all eligible completed Sleeping habits transcripts using ${selectedModel}? `
-            + "This creates a separate proposal version, preserves every earlier report, and does not generate Codes, Categories, or Themes."
+            `Start independent complete preliminary case analysis for all eligible completed Sleeping habits transcripts using ${selectedModel}? `
+            + "Each case is analyzed once from its original transcript into Meaning Units, preliminary Codes, preliminary Categories, and preliminary Tentative Themes. No previous model output, audit call, repair call, or per-case approval is used."
         );
         if (!confirmed) return;
         startButton.disabled = true;

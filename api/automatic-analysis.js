@@ -105,7 +105,7 @@ export default async function handler(req, res) {
         }));
         return res.status(202).json({
             accepted: true,
-            processing: "staged_meaning_units_then_cross_case_codes",
+            processing: "complete_preliminary_cases_then_cross_case_code_refinement",
             trigger: "independent_schedule"
         });
     }
@@ -151,7 +151,7 @@ export default async function handler(req, res) {
 
     return res.status(202).json({
         accepted: true,
-        processing: "staged_meaning_units_then_cross_case_codes",
+        processing: "complete_preliminary_cases_then_cross_case_code_refinement",
         processingOrder: "earliest_completed_first"
     });
 }
