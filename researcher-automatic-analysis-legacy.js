@@ -49,6 +49,7 @@
     const archiveButton = document.getElementById("automaticCaseArchiveButton");
     const unlockButton = document.getElementById("automaticAnalysisUnlockButton");
     const gateStatus = document.getElementById("automaticAnalysisGateStatus");
+    const stagedOnly = workspace.dataset.stagedOnly === "true";
 
     function token() {
         return sessionStorage.getItem(TOKEN_STORAGE_KEY) || "";
@@ -1893,12 +1894,14 @@
             revealUnlockedWorkspace();
             setGateStatus("");
             setStatus(
-                "Stage 1 controls are available above. Loading the historical forms separately…"
+                "Stage 1 controls are available above."
             );
             try {
-                await load();
-                clearInterval(refreshTimer);
-                refreshTimer = setInterval(() => load().catch(() => {}), 30000);
+                if (!stagedOnly) {
+                    await load();
+                    clearInterval(refreshTimer);
+                    refreshTimer = setInterval(() => load().catch(() => {}), 30000);
+                }
             } catch (error) {
                 setStatus(
                     `Historical forms could not load: ${error.message} Stage 1 remains separate above. If authorization failed, choose Lock workspace and unlock again.`,
@@ -1975,13 +1978,15 @@
         document.getElementById("automaticAnalysisToken").value = token();
         revealUnlockedWorkspace();
         setStatus(
-            "Restored researcher access. Stage 1 controls are available above; loading historical forms separately…"
+            "Restored researcher access. Stage 1 controls are available above."
         );
-        load().catch(error => setStatus(
-            `Historical forms could not load: ${error.message} Stage 1 remains separate above.`,
-            true
-        ));
-        clearInterval(refreshTimer);
-        refreshTimer = setInterval(() => load().catch(() => {}), 30000);
+        if (!stagedOnly) {
+            load().catch(error => setStatus(
+                `Historical forms could not load: ${error.message} Stage 1 remains separate above.`,
+                true
+            ));
+            clearInterval(refreshTimer);
+            refreshTimer = setInterval(() => load().catch(() => {}), 30000);
+        }
     }
 }());

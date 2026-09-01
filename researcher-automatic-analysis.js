@@ -2,7 +2,7 @@
     "use strict";
 
     const legacy = document.createElement("script");
-    legacy.src = "researcher-automatic-analysis-legacy.js?version=20260901-stage1-launch-v2";
+    legacy.src = "researcher-automatic-analysis-legacy.js?version=20260901-stage1-only-v3";
     legacy.onload = () => {
         const review = document.createElement("script");
         review.src = "researcher-automatic-review.js?version=20260831-four-analysis-forms-v1";

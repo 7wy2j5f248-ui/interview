@@ -517,6 +517,11 @@
             margin-block-start: 0;
         }
 
+        #automaticAnalysisWorkspace[data-staged-only="true"]
+            > :not(#advancedPreliminaryAnalysis) {
+            display: none !important;
+        }
+
         .automaticAnalysisTable td {
             min-width: 10rem;
             vertical-align: top;
@@ -961,15 +966,14 @@
         accepts the completed preceding layer.
     </p>
     <p>
-        The existing Forms 1–4 are preserved below only as historical
-        preliminary-analysis provenance. They are not the active framework,
-        are not being deleted or overwritten, and cannot control or block the
-        staged workflow. Stage 1 performs only independent, case-grounded
-        Meaning Unit identification.
+        Historical preliminary reports and jobs remain preserved in protected
+        audit storage, but the retired Forms 1–4 and their failure controls are
+        not part of this active dashboard. Stage 1 performs only independent,
+        case-grounded Meaning Unit identification.
     </p>
     <p class="automaticPipelineNote">
-        <strong>Analytical abbreviations:</strong> TH = Theme · CA = Category ·
-        CO = Code · K = Keyword · MU = Meaning Unit.
+        <strong>Analytical abbreviations:</strong> MU = Meaning Unit · CO = Code ·
+        CA = Category · TH = Theme.
         Meaning Units are exact, case-grounded evidence spans. They are not
         standardized across cases. The Code layer is the first future layer at
         which cross-case harmonization may occur, but it is unavailable during
@@ -986,14 +990,13 @@
         </div>
         <p class="automaticPipelineNote">
             <strong>Current task:</strong> after unlocking, the Stage 1 Meaning
-            Unit model selector and start button appear first. Historical forms
-            and their legacy failures load separately and cannot hide or disable
-            the Stage 1 launch control.
+            Unit model selector and start button appear first. The retired
+            framework is not loaded or displayed here.
         </p>
         <p id="automaticAnalysisGateStatus" class="muted" role="status"></p>
     </div>
 
-    <div id="automaticAnalysisWorkspace" hidden>
+    <div id="automaticAnalysisWorkspace" data-staged-only="true" hidden>
         <h3>Historical preliminary outputs — read-only audit reference</h3>
         <p class="automaticReanalysisWarning">
             The controls and Forms 1–4 below belong to the retired all-in-one
@@ -1069,6 +1072,9 @@
                 </button>
                 <button id="advancedPreliminaryDownloadButton" type="button" disabled>
                     Download Stage 1 provenance CSV
+                </button>
+                <button id="advancedPreliminaryLockButton" type="button">
+                    Lock Stage 1 access
                 </button>
             </div>
             <p id="advancedPreliminaryStatus" class="automaticReviewScopeSummary" role="status">
@@ -2118,8 +2124,8 @@ document.getElementById("periodResetButton").addEventListener("click", () => {
 loadStatistics();
 
 </script>
-<script src="researcher-automatic-analysis.js?version=20260901-stage1-launch-v2"></script>
-<script src="researcher-advanced-preliminary.js?version=20260901-stage1-launch-v2"></script>
+<script src="researcher-automatic-analysis.js?version=20260901-stage1-only-v3"></script>
+<script src="researcher-advanced-preliminary.js?version=20260901-stage1-only-v3"></script>
     
 </body>
 </html>

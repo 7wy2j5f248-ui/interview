@@ -7,6 +7,7 @@
     if (!section) return;
 
     const workspace = document.getElementById("automaticAnalysisWorkspace");
+    const gate = document.getElementById("automaticAnalysisTokenGate");
     // Keep the current staged task above every historical form, regardless of
     // how many legacy case rows are rendered below it.
     workspace?.prepend(section);
@@ -18,6 +19,7 @@
     const startButton = document.getElementById("advancedPreliminaryStartButton");
     const refreshButton = document.getElementById("advancedPreliminaryRefreshButton");
     const downloadButton = document.getElementById("advancedPreliminaryDownloadButton");
+    const lockButton = document.getElementById("advancedPreliminaryLockButton");
     const previousButton = document.getElementById("advancedPreliminaryPreviousPage");
     const nextButton = document.getElementById("advancedPreliminaryNextPage");
     const pageLabel = document.getElementById("advancedPreliminaryPageLabel");
@@ -411,6 +413,14 @@
     });
 
     refreshButton.addEventListener("click", () => load());
+    lockButton.addEventListener("click", () => {
+        sessionStorage.removeItem(TOKEN_STORAGE_KEY);
+        clearTimeout(refreshTimer);
+        workspace.hidden = true;
+        gate.hidden = false;
+        document.getElementById("automaticAnalysisToken").value = "";
+        setStatus("Researcher access is locked. Unlock to load or start Stage 1.");
+    });
     previousButton.addEventListener("click", () => {
         if (page <= 1) return;
         page -= 1;
