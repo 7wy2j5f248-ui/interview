@@ -7,6 +7,10 @@
     if (!section) return;
 
     const workspace = document.getElementById("automaticAnalysisWorkspace");
+    // Keep the current staged task above every historical form, regardless of
+    // how many legacy case rows are rendered below it.
+    workspace?.prepend(section);
+    section.classList.add("stagedAnalysisPrimary");
     const status = document.getElementById("advancedPreliminaryStatus");
     const provenance = document.getElementById("advancedPreliminaryProvenance");
     const tableHost = document.getElementById("advancedPreliminaryTable");
@@ -199,7 +203,10 @@
                 refreshTimer = setTimeout(() => load({ quiet: true }), 30000);
             }
         } catch (error) {
-            setStatus(error.message, true);
+            setStatus(
+                `${error.message} If access has expired, choose Lock workspace and unlock again.`,
+                true
+            );
         } finally {
             loading = false;
         }

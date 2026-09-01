@@ -64,6 +64,11 @@
         gateStatus.className = isError ? "errorMessage" : "muted";
     }
 
+    function revealUnlockedWorkspace() {
+        gate.hidden = true;
+        workspace.hidden = false;
+    }
+
     function displayValue(value) {
         if (value === null || value === undefined || value === "") {
             return "—";
@@ -1840,8 +1845,7 @@
 
         payload = { ...firstPage, cases };
         loadedScope = requestedScope;
-        gate.hidden = true;
-        workspace.hidden = false;
+        revealUnlockedWorkspace();
         render();
 
         if (pageCount > 1) {
@@ -1886,17 +1890,23 @@
             sessionStorage.setItem(TOKEN_STORAGE_KEY, entered);
             unlockButton.disabled = true;
             unlockButton.textContent = "Unlocking…";
-            setGateStatus("Checking the token and loading the newest reports…");
+            revealUnlockedWorkspace();
+            setGateStatus("");
+            setStatus(
+                "Stage 1 controls are available above. Loading the historical forms separately…"
+            );
             try {
                 await load();
-                setGateStatus("");
                 clearInterval(refreshTimer);
                 refreshTimer = setInterval(() => load().catch(() => {}), 30000);
             } catch (error) {
-                setGateStatus(error.message, true);
+                setStatus(
+                    `Historical forms could not load: ${error.message} Stage 1 remains separate above. If authorization failed, choose Lock workspace and unlock again.`,
+                    true
+                );
             } finally {
                 unlockButton.disabled = false;
-                unlockButton.textContent = "Unlock case analysis";
+                unlockButton.textContent = "Unlock and show Stage 1";
             }
         });
     document.getElementById("automaticAnalysisRefreshButton")
@@ -1963,11 +1973,15 @@
 
     if (token()) {
         document.getElementById("automaticAnalysisToken").value = token();
-        load().then(() => {
-            refreshTimer = setInterval(() => load().catch(() => {}), 30000);
-        }).catch(() => {
-            gate.hidden = false;
-            workspace.hidden = true;
-        });
+        revealUnlockedWorkspace();
+        setStatus(
+            "Restored researcher access. Stage 1 controls are available above; loading historical forms separately…"
+        );
+        load().catch(error => setStatus(
+            `Historical forms could not load: ${error.message} Stage 1 remains separate above.`,
+            true
+        ));
+        clearInterval(refreshTimer);
+        refreshTimer = setInterval(() => load().catch(() => {}), 30000);
     }
 }());

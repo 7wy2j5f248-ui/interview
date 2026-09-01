@@ -511,6 +511,12 @@
             padding: 0.85rem 1rem;
         }
 
+        .stagedAnalysisPrimary {
+            border: 3px solid #245fbd;
+            box-shadow: 0 0.35rem 1rem rgba(23, 57, 104, 0.14);
+            margin-block-start: 0;
+        }
+
         .automaticAnalysisTable td {
             min-width: 10rem;
             vertical-align: top;
@@ -947,22 +953,19 @@
 </section>
 
 <section id="analysisSection" class="panel" aria-labelledby="automaticAnalysisHeading">
-    <h2 id="automaticAnalysisHeading">Preliminary Case-Based Analysis</h2>
+    <h2 id="automaticAnalysisHeading">Qualitative Analysis Workspace</h2>
     <p class="automaticPipelineNote">
-        Analysis starts automatically when an interview receives its formal
-        completion signal. Complete transcripts are processed one case at a
-        time, from the earliest completion onward. Opening this dashboard does
-        not start or control the analysis.
+        <strong>Active researcher-controlled sequence:</strong> Meaning Units →
+        Codes → Categories → Themes. Only Meaning Units are available now.
+        Each later layer remains locked until the researcher inspects and
+        accepts the completed preceding layer.
     </p>
     <p>
-        The existing Forms 1–4 are preserved as the previous preliminary
-        analysis version. They are not being deleted, overwritten, or treated
-        as final cross-case analysis. A new advanced-model preliminary run is
-        shown separately below so its results can be compared with this
-        historical version. The staged workflow below now performs only
-        independent, case-grounded Meaning Unit identification. Cross-case Code
-        refinement, Code freezing, Category refinement, and Theme development
-        remain locked until the researcher has inspected the completed prior stage.
+        The existing Forms 1–4 are preserved below only as historical
+        preliminary-analysis provenance. They are not the active framework,
+        are not being deleted or overwritten, and cannot control or block the
+        staged workflow. Stage 1 performs only independent, case-grounded
+        Meaning Unit identification.
     </p>
     <p class="automaticPipelineNote">
         <strong>Analytical abbreviations:</strong> TH = Theme · CA = Category ·
@@ -979,26 +982,39 @@
             <input id="automaticAnalysisToken" type="password" autocomplete="current-password">
         </label>
         <div class="actionRow">
-            <button id="automaticAnalysisUnlockButton" type="button">Unlock case analysis</button>
+            <button id="automaticAnalysisUnlockButton" type="button">Unlock and show Stage 1</button>
         </div>
+        <p class="automaticPipelineNote">
+            <strong>Current task:</strong> after unlocking, the Stage 1 Meaning
+            Unit model selector and start button appear first. Historical forms
+            and their legacy failures load separately and cannot hide or disable
+            the Stage 1 launch control.
+        </p>
         <p id="automaticAnalysisGateStatus" class="muted" role="status"></p>
     </div>
 
     <div id="automaticAnalysisWorkspace" hidden>
+        <h3>Historical preliminary outputs — read-only audit reference</h3>
+        <p class="automaticReanalysisWarning">
+            The controls and Forms 1–4 below belong to the retired all-in-one
+            analysis workflow. They remain available for provenance and
+            comparison only. Their old failures and labels do not determine
+            any result in the active four-layer workflow above.
+        </p>
         <div class="actionRow">
             <button id="automaticAnalysisRefreshButton" type="button">Refresh progress</button>
             <button id="automaticAnalysisDownloadButton" type="button">Download complete Excel analysis</button>
             <button id="automaticAnalysisLockButton" type="button">Lock workspace</button>
         </div>
         <p id="automaticAnalysisStatus" class="muted" role="status"></p>
-        <div class="analysisOverview" aria-label="Automatic analysis progress">
+        <div class="analysisOverview" aria-label="Historical analysis progress">
             <div class="analysisMetric"><strong id="automaticAnalysisPendingCount">0</strong>Waiting</div>
             <div class="analysisMetric"><strong id="automaticAnalysisProcessingCount">0</strong>Processing</div>
             <div class="analysisMetric"><strong id="automaticAnalysisCompletedCount">0</strong>Available reports</div>
             <div class="analysisMetric"><strong id="automaticAnalysisFailedCount">0</strong>Legacy analysis failures</div>
             <div class="analysisMetric"><strong id="automaticAnalysisIncompleteCount">0</strong>Incomplete transcripts</div>
         </div>
-        <nav class="analysisViewTabs" aria-label="Automatic analysis forms">
+        <nav class="analysisViewTabs" aria-label="Historical analysis forms">
             <button type="button" data-automatic-analysis-view="cases" aria-pressed="true">Form 1 · Cases</button>
             <button type="button" data-automatic-analysis-view="keywords" aria-pressed="false">Form 2 · Keywords</button>
             <button type="button" data-automatic-analysis-view="codes" aria-pressed="false">Form 3 · Codes</button>
@@ -1027,10 +1043,14 @@
             <ol class="automaticReanalysisPanel" aria-label="Staged qualitative analysis workflow">
                 <li><strong>Stage 1 · Meaning Units</strong> — available now</li>
                 <li><button type="button" disabled>Stage 2 · Cross-Case Code Refinement — locked</button></li>
-                <li><button type="button" disabled>Stage 3 · Freeze Approved Codes — locked</button></li>
-                <li><button type="button" disabled>Stage 4 · Category Refinement — locked</button></li>
-                <li><button type="button" disabled>Stage 5 · Theme Development — locked</button></li>
+                <li><button type="button" disabled>Stage 3 · Category Development — locked</button></li>
+                <li><button type="button" disabled>Stage 4 · Theme Development — locked</button></li>
             </ol>
+            <p class="muted">
+                Researcher approval freezes the refined Code vocabulary at the
+                end of Stage 2 before Category Development can begin. This is
+                an approval gate, not a separate analytical layer.
+            </p>
             <label for="advancedPreliminaryModel">
                 Stage 1 analysis model
                 <select id="advancedPreliminaryModel" aria-describedby="advancedPreliminaryModelHelp"></select>
@@ -2098,8 +2118,8 @@ document.getElementById("periodResetButton").addEventListener("click", () => {
 loadStatistics();
 
 </script>
-<script src="researcher-automatic-analysis.js?version=20260831-advanced-preliminary-v1"></script>
-<script src="researcher-advanced-preliminary.js?version=20260901-stage1-meaning-units-v1"></script>
+<script src="researcher-automatic-analysis.js?version=20260901-stage1-launch-v2"></script>
+<script src="researcher-advanced-preliminary.js?version=20260901-stage1-launch-v2"></script>
     
 </body>
 </html>
