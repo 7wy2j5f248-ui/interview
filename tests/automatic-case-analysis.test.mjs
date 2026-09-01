@@ -945,6 +945,18 @@ test("researcher dashboard uses four separate case, keyword, code, and theme for
     assert.match(script, /URLSearchParams\(window\.location\.search\)\.get\("case"\)/);
     assert.match(script, /openRequestedTranscript\(\)/);
     assert.match(script, /Open case report/);
+    assert.match(script, /Review historical failure/);
+    assert.match(script, /function openLegacyFailureReview/);
+    assert.match(script, /historical all-in-one preliminary-analysis workflow/);
+    assert.match(script, /No case report from this attempt was accepted or made current/);
+    assert.match(script, /new staged Meaning Unit analysis/);
+    assert.match(script, /Open preserved transcript/);
+    assert.match(script, /CA1 or CA4/);
+    assert.doesNotMatch(
+        script,
+        /button\.disabled = !caseRecord\.hasReport;\s*button\.addEventListener\("click", \(\) => openCaseReport/
+    );
+    assert.match(html, /Legacy analysis failures/);
     assert.match(script, /function archiveCaseButton/);
     assert.match(script, /button\.textContent = caseRecord\.hasReport[\s\S]*?"Archive"/);
     assert.match(script, /setArchiveState\(caseRecord, true\)/);

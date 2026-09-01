@@ -212,11 +212,26 @@
             : caseRecord.status === "processing"
                 ? "Analysing"
                 : caseRecord.status === "failed"
-                    ? "Human review required"
+                    ? "Review historical failure"
                     : "Waiting";
-        button.disabled = !caseRecord.hasReport;
-        button.addEventListener("click", () => openCaseReport(caseRecord));
+        button.disabled = !caseRecord.hasReport
+            && caseRecord.status !== "failed";
+        button.addEventListener("click", () => {
+            if (caseRecord.hasReport) {
+                openCaseReport(caseRecord);
+                return;
+            }
+            if (caseRecord.status === "failed") {
+                openLegacyFailureReview(caseRecord);
+            }
+        });
         return button;
+    }
+
+    function analysisStatusText(caseRecord) {
+        return caseRecord.status === "failed" && !caseRecord.hasReport
+            ? "Historical preliminary-analysis attempt failed — current staged analysis unaffected"
+            : caseRecord.status || "—";
     }
 
     function reviewSource(caseRecord, kind = "case", record = null) {
@@ -326,7 +341,7 @@
             const reportCell = document.createElement("td");
             reportCell.appendChild(caseReportButton(caseRecord));
             row.appendChild(reportCell);
-            createCell(row, caseRecord.status || "—");
+            createCell(row, analysisStatusText(caseRecord));
             const archiveCell = document.createElement("td");
             archiveCell.appendChild(archiveCaseButton(caseRecord));
             row.appendChild(archiveCell);
@@ -1256,6 +1271,79 @@
         }
     }
 
+    function openLegacyFailureReview(caseRecord) {
+        activeCaseRecord = null;
+        document.getElementById("automaticCaseReportHeading").textContent =
+            `${caseRecord.caseNumber} · historical analysis failure`;
+        const identity = caseRecord.transcriptIdentity || {};
+        document.getElementById("automaticCaseReportIdentity").textContent =
+            `Participant code: ${identity.participantCode || "—"} · Session ID: ${identity.sessionId || "—"}`;
+        const content = document.getElementById("automaticCaseReportContent");
+        content.replaceChildren();
+
+        const notice = document.createElement("p");
+        notice.className = "automaticReanalysisWarning";
+        notice.textContent =
+            "This is a preserved failure from the historical all-in-one preliminary-analysis workflow. No case report from this attempt was accepted or made current. It does not block or determine the new staged Meaning Unit analysis.";
+
+        const detailsHeading = document.createElement("h3");
+        detailsHeading.textContent = "Recorded failure details";
+        const details = document.createElement("dl");
+        const detailRows = [
+            ["Historical status", caseRecord.status || "failed"],
+            ["Attempts recorded", caseRecord.attemptCount ?? "—"],
+            ["Transcript completed", formatTimestamp(caseRecord.sourceCompletedAt)],
+            ["Accepted report", "No — the rejected draft was not promoted or saved as a report"]
+        ];
+        detailRows.forEach(([labelText, value]) => {
+            const term = document.createElement("dt");
+            term.textContent = labelText;
+            const description = document.createElement("dd");
+            description.textContent = String(value);
+            details.append(term, description);
+        });
+
+        const errorHeading = document.createElement("h3");
+        errorHeading.textContent = "Original technical failure message";
+        const error = document.createElement("p");
+        error.className = "automaticReanalysisWarning";
+        error.textContent = caseRecord.lastError
+            || "No detailed failure message was retained for this historical attempt.";
+
+        const explanation = document.createElement("p");
+        explanation.textContent =
+            "Labels such as CA1 or CA4 in an old failure message refer to positions in a rejected temporary draft. They are not accepted categories and therefore do not appear in a saved report. The preserved transcript remains the source for the current Stage 1 workflow.";
+
+        const actions = document.createElement("div");
+        actions.className = "actionRow";
+        if (identity.sessionId) {
+            const openTranscriptButton = document.createElement("button");
+            openTranscriptButton.type = "button";
+            openTranscriptButton.textContent = "Open preserved transcript";
+            openTranscriptButton.addEventListener("click", () => {
+                reportDialog.close();
+                openTranscript(caseRecord, null, {
+                    trigger: null,
+                    label: `Historical failure · ${caseRecord.caseNumber}`
+                });
+            });
+            actions.appendChild(openTranscriptButton);
+        }
+
+        content.append(
+            notice,
+            detailsHeading,
+            details,
+            errorHeading,
+            error,
+            explanation,
+            actions
+        );
+        archiveButton.hidden = true;
+        archiveButton.disabled = true;
+        reportDialog.showModal();
+    }
+
     function openCaseReport(caseRecord) {
         activeCaseRecord = caseRecord;
         document.getElementById("automaticCaseReportHeading").textContent =
@@ -1395,6 +1483,8 @@
         archiveButton.textContent = caseRecord.archivedAt
             ? "Restore to active analysis"
             : "Archive completed case";
+        archiveButton.hidden = false;
+        archiveButton.disabled = caseRecord.status !== "completed";
         reportDialog.showModal();
     }
 
@@ -1775,7 +1865,7 @@
                 ? `${cases.length} archived cases.`
                 : requestedScope === "incomplete"
                     ? `${cases.length} incomplete transcripts need attention. They remain separate from completed-transcript analysis.`
-                    : `${cases.filter(item => item.hasReport).length} active case reports are available. Retryable cases may pause briefly; later completed cases continue while exhausted failures remain marked for human review.`
+                : `${cases.filter(item => item.hasReport).length} active case reports are available. Historical all-in-one failures remain inspectable audit records and do not block the separate staged workflow.`
         );
     }
 
