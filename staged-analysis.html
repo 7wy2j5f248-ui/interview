@@ -209,6 +209,7 @@
                     <div class="analysisMetric"><strong id="advancedPreliminaryProcessing">0</strong>Processing</div>
                     <div class="analysisMetric"><strong id="advancedPreliminaryCompleted">0</strong>Completed</div>
                     <div class="analysisMetric"><strong id="advancedPreliminaryFailed">0</strong>Needs attention</div>
+                    <div class="analysisMetric"><strong id="advancedPreliminaryLegacy">0</strong>Legacy unusable</div>
                 </div>
                 <p id="advancedPreliminaryProvenance" class="muted"></p>
                 <div id="advancedPreliminaryTable"></div>
@@ -217,6 +218,24 @@
                     <span id="advancedPreliminaryPageLabel" class="muted">Page 1</span>
                     <button id="advancedPreliminaryNextPage" type="button" disabled>Next 50 cases</button>
                 </div>
+                <details id="advancedPreliminaryAttentionPanel">
+                    <summary><strong>Needs attention</strong> — analytically ambiguous or unverified Stage 1 cases</summary>
+                    <p class="muted">
+                        These cases are kept separate from verified Stage 1 output. Their
+                        transcripts, draft highlights, audit reasons, and provenance remain
+                        available. They are not automatically archived.
+                    </p>
+                    <div id="advancedPreliminaryAttentionTable"></div>
+                </details>
+                <details id="advancedPreliminaryLegacyPanel">
+                    <summary><strong>Legacy cases</strong> — historical interviews classified as unusable</summary>
+                    <p class="muted">
+                        These are not researcher archives. Their source transcripts and
+                        classification reasons remain preserved, but they are excluded from
+                        the active staged analysis sequence.
+                    </p>
+                    <div id="advancedPreliminaryLegacyTable"></div>
+                </details>
             </section>
         </div>
     </section>

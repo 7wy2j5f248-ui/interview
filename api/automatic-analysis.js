@@ -82,7 +82,7 @@ export default async function handler(req, res) {
     if (req.query?.view === "advanced-preliminary"
         && (req.method === "GET"
             || (req.method === "POST"
-                && req.body?.action === "start"))) {
+                && ["start", "mark-legacy"].includes(req.body?.action)))) {
         return handleAdvancedPreliminaryDashboard(req, res);
     }
 

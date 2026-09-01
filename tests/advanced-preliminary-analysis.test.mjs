@@ -226,8 +226,17 @@ test("researcher UI locks later stages and exposes model, audit, evidence, and e
     assert.match(script, /Stage 1 annotated transcript/);
     assert.match(script, /meaningUnitAnnotation/);
     assert.match(script, /Full-transcript coverage/iu);
-    assert.match(script, /Stage 1 audit issues need review/);
+    assert.match(script, /Needs attention · Stage 1 audit issues/);
     assert.match(script, /Draft Meaning Units requiring review/);
+    assert.match(html, /analytically ambiguous or unverified Stage 1 cases/);
+    assert.match(html, /They are not automatically archived/);
+    assert.match(html, /These are not researcher archives/);
+    assert.match(html, /Legacy cases/);
+    assert.match(script, /attentionCases/);
+    assert.match(script, /Move to Legacy cases/);
+    assert.match(script, /mark-legacy/);
+    assert.match(dashboard, /coverageReviewRequired: true/);
+    assert.match(dashboard, /set_advanced_preliminary_case_disposition/);
     assert.match(script, /Exact transcript passages requiring coverage review/);
     assert.match(script, /download=stage1-csv/);
     assert.match(dashboard, /configuredStage1Models/);

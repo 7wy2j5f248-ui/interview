@@ -15,6 +15,8 @@
     const status = document.getElementById("advancedPreliminaryStatus");
     const provenance = document.getElementById("advancedPreliminaryProvenance");
     const tableHost = document.getElementById("advancedPreliminaryTable");
+    const attentionHost = document.getElementById("advancedPreliminaryAttentionTable");
+    const legacyHost = document.getElementById("advancedPreliminaryLegacyTable");
     const modelSelect = document.getElementById("advancedPreliminaryModel");
     const modelSuggestions = document.getElementById("advancedPreliminaryModelSuggestions");
     const startButton = document.getElementById("advancedPreliminaryStartButton");
@@ -28,7 +30,11 @@
     const dialogHeading = document.getElementById("advancedPreliminaryDialogHeading");
     const dialogProvenance = document.getElementById("advancedPreliminaryDialogProvenance");
     const dialogContent = document.getElementById("advancedPreliminaryDialogContent");
-    let payload = { run: null, cases: [], page: 1, pageSize: 50 };
+    let payload = {
+        run: null, cases: [], attentionCases: [], attentionCount: 0,
+        legacyCases: [], legacyCount: 0,
+        page: 1, pageSize: 50
+    };
     let page = 1;
     let loading = false;
     let refreshTimer = null;
@@ -114,13 +120,16 @@
 
     function render() {
         tableHost.replaceChildren();
+        attentionHost?.replaceChildren();
+        legacyHost?.replaceChildren();
         renderModels();
         const run = payload.run;
         [
             ["advancedPreliminaryPending", run?.pending_count || 0],
             ["advancedPreliminaryProcessing", run?.processing_count || 0],
             ["advancedPreliminaryCompleted", run?.completed_count || 0],
-            ["advancedPreliminaryFailed", run?.failed_count || 0]
+            ["advancedPreliminaryFailed", payload.attentionCount || 0]
+            ,["advancedPreliminaryLegacy", payload.legacyCount || 0]
         ].forEach(([id, value]) => {
             document.getElementById(id).textContent = value;
         });
@@ -159,18 +168,23 @@
             + "All earlier reports remain preserved and current."
         );
 
+        const renderCaseTable = (items, host, mode = "active") => {
         const built = table([
             "Case ID", "Project lineage", "Status", "Meaning Units",
             "Coverage audit", "Inspect"
         ]);
         const body = document.createElement("tbody");
-        payload.cases.forEach(item => {
+        items.forEach(item => {
             const row = document.createElement("tr");
             cell(row, item.case_number);
             cell(row, item.project_binding_status === "project_bound"
                 ? "Sleeping habits" : "Out of scope");
-            cell(row, item.report?.analytical_audit?.coverageReviewRequired
-                ? "Completed · Stage 1 audit issues need review"
+            cell(row, mode === "legacy"
+                ? `Legacy unusable · ${item.disposition_reason || "Historical interview data is not analytically usable."}`
+                : mode === "attention"
+                ? item.report
+                    ? "Needs attention · Stage 1 audit issues"
+                    : `Needs attention${item.last_error ? `: ${item.last_error}` : ""}`
                 : item.status === "failed"
                 ? `Needs attention${item.last_error ? `: ${item.last_error}` : ""}`
                 : item.status.replaceAll("_", " "));
@@ -188,11 +202,22 @@
             button.disabled = !item.report;
             button.addEventListener("click", () => openCase(item.case_number));
             action.appendChild(button);
+            if (mode === "attention") {
+                const legacyButton = document.createElement("button");
+                legacyButton.type = "button";
+                legacyButton.textContent = "Move to Legacy cases";
+                legacyButton.addEventListener("click", () => markLegacy(item));
+                action.appendChild(legacyButton);
+            }
             row.appendChild(action);
             body.appendChild(row);
         });
         built.element.appendChild(body);
-        tableHost.appendChild(built.scroll);
+        host?.appendChild(built.scroll);
+        };
+        renderCaseTable(payload.cases, tableHost);
+        renderCaseTable(payload.attentionCases || [], attentionHost, "attention");
+        renderCaseTable(payload.legacyCases || [], legacyHost, "legacy");
         pageLabel.textContent = `Page ${payload.page}`;
         previousButton.disabled = payload.page <= 1;
         nextButton.disabled = payload.page * payload.pageSize >= run.source_case_count;
@@ -390,6 +415,26 @@
         } catch (error) {
             dialogContent.appendChild(paragraph(error.message, "errorMessage"));
         }
+    }
+
+    async function markLegacy(item) {
+        const defaultReason =
+            "Historical interview model did not elicit sufficiently clear or complete evidence; data is not usable for staged analysis.";
+        const reason = window.prompt(
+            `Why should ${item.case_number} be classified as a Legacy unusable case?`,
+            defaultReason
+        )?.trim();
+        if (!reason) return;
+        await request(API_PATH, {
+            method: "POST",
+            body: JSON.stringify({
+                action: "mark-legacy",
+                jobId: item.id,
+                reason
+            })
+        });
+        setStatus(`${item.case_number} was moved to Legacy cases. Its transcript and reason remain preserved.`);
+        await load({ quiet: true });
     }
 
     startButton.addEventListener("click", async () => {
