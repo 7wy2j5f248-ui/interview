@@ -872,6 +872,9 @@ test("historical FIFO case pipeline remains preserved but is no longer triggered
     assert.match(migration, /enable row level security/);
     assert.doesNotMatch(chat, /scheduleAutomaticCaseAnalysis/);
     assert.match(chat, /scheduleCompletedTranscriptTranslation/);
+    const design = await readFile(new URL("../api/loadDesign.js", import.meta.url), "utf8");
+    assert.doesNotMatch(design, /scheduleAutomaticCaseAnalysis/);
+    assert.match(design, /scheduleStagedAnalysis/);
 });
 
 test("future reports preserve MU to CO to CA to TH lineage and unsynthesized findings", async () => {

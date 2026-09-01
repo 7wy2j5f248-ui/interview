@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { selectUsableResearchDesign } from "../server/researchDesign.js";
 import { scheduleTranscriptTranslationBackfill } from "../server/messageTranslation.js";
+import { scheduleStagedAnalysis } from "../server/stagedAnalysisWorker.js";
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -17,6 +18,9 @@ export default async function handler(req, res) {
     }
 
     scheduleTranscriptTranslationBackfill(req);
+    // A routine design read wakes only the active staged Meaning Unit worker.
+    // Retired case and framework-analysis workers are not reachable here.
+    scheduleStagedAnalysis(req);
 
     return res.status(200).json(design);
   } catch (error) {
