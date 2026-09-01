@@ -82,11 +82,19 @@ const auditSchema = {
             }
         },
         stage1_only: { type: "boolean" },
+        source_qualifies_for_framework: { type: "boolean" },
+        source_qualification_reason: { type: "string" },
+        source_evidence_message_ids: {
+            type: "array",
+            items: { type: "string" }
+        },
         overall_summary: { type: "string" }
     },
     required: [
         "meaning_unit_checks", "full_transcript_coverage",
         "omitted_relevant_evidence", "stage1_only",
+        "source_qualifies_for_framework", "source_qualification_reason",
+        "source_evidence_message_ids",
         "overall_summary"
     ],
     additionalProperties: false
@@ -257,11 +265,27 @@ export function validateAdvancedPreliminaryAudit(analysis, value) {
     })).filter(item => item.messageId && item.exactSourceText);
     const fullTranscriptCoverage = Boolean(value?.full_transcript_coverage);
     const stage1Only = Boolean(value?.stage1_only);
+    const sourceQualifiesForFramework =
+        Boolean(value?.source_qualifies_for_framework);
+    const sourceQualificationReason = normalizedText(
+        value?.source_qualification_reason
+    ) || (sourceQualifiesForFramework
+        ? "The respondent content contains sufficient study-relevant evidence."
+        : "The respondent content does not provide sufficient usable evidence for this analysis framework.");
+    const sourceEvidenceMessageIds = [...new Set(
+        (Array.isArray(value?.source_evidence_message_ids)
+            ? value.source_evidence_message_ids : [])
+            .map(normalizedText)
+            .filter(Boolean)
+    )];
     return {
         meaningUnitChecks,
         fullTranscriptCoverage,
         omittedRelevantEvidence,
         stage1Only,
+        sourceQualifiesForFramework,
+        sourceQualificationReason,
+        sourceEvidenceMessageIds,
         overallSummary: normalizedText(value?.overall_summary)
             || "No audit summary was supplied.",
         complete: Boolean(
@@ -270,6 +294,7 @@ export function validateAdvancedPreliminaryAudit(analysis, value) {
             && fullTranscriptCoverage
             && !omittedRelevantEvidence.length
             && stage1Only
+            && sourceQualifiesForFramework
         )
     };
 }
@@ -389,6 +414,7 @@ async function auditAnalysis(
                 "Return one meaning_unit_check for every numbered Meaning Unit, with no missing or extra checks. Match both its number and transcript message ID.",
                 "Accept a Meaning Unit only when it is an exact original-language transcript span, is substantively relevant to the named research topic, is the smallest sufficient coherent span, and preserves enough context to retain the participant's meaning.",
                 "Perform a separate full-transcript coverage pass. Read every participant message from beginning to end and compare it against all proposed Meaning Units. Set full_transcript_coverage=true only when every substantive study-relevant meaning is represented. Put every omitted relevant span in omitted_relevant_evidence with its message ID, exact original text, and explanation. Later, low-frequency, contradictory, evaluative, or aspirational evidence still counts.",
+                "Separately decide whether the respondent's own content qualifies for this project's analysis framework. Set source_qualifies_for_framework=false only when the transcript itself is outside the topic, too vague, or too incomplete to support a defensible case analysis because the interview failed to elicit usable evidence. Do not disqualify a case merely because the draft omitted evidence or used an over-broad Meaning Unit; those are analysis defects, not source-content defects. Record a concise human-readable reason and the transcript message IDs supporting the source decision.",
                 "Set stage1_only=true only when the draft contains Meaning Units alone and neither the draft nor your audit generates, names, implies, copies, or evaluates any code, category, or theme.",
                 "Audit only the supplied transcript and Meaning Unit draft. Do not compare cases and do not invent a replacement analysis in the audit response.",
                 analysisInstruction(context)
@@ -476,6 +502,24 @@ export async function generateAdvancedPreliminaryAnalysis(
     totalInputTokens += audited.inputTokens;
     totalOutputTokens += audited.outputTokens;
 
+    if (!audited.audit.sourceQualifiesForFramework) {
+        return {
+            ...generated.analysis,
+            caseSummary: `${generated.analysis.caseSummary} The independent source-content check classified this historical interview as unsuitable for the current analysis framework.`,
+            audit: {
+                ...audited.audit,
+                coverageReviewRequired: false,
+                reviewStatus: "legacy_unusable_source_content"
+            },
+            legacyDisposition: {
+                reason: audited.audit.sourceQualificationReason,
+                evidenceMessageIds: audited.audit.sourceEvidenceMessageIds
+            },
+            inputTokenCount: totalInputTokens || null,
+            outputTokenCount: totalOutputTokens || null
+        };
+    }
+
     if (!audited.audit.complete) {
         generated = await createDraft([
             `Audited draft requiring replacement (JSON): ${JSON.stringify(draftForAudit(generated.analysis))}`,
@@ -499,6 +543,24 @@ export async function generateAdvancedPreliminaryAnalysis(
         );
         totalInputTokens += audited.inputTokens;
         totalOutputTokens += audited.outputTokens;
+    }
+
+    if (!audited.audit.sourceQualifiesForFramework) {
+        return {
+            ...generated.analysis,
+            caseSummary: `${generated.analysis.caseSummary} The independent source-content check classified this historical interview as unsuitable for the current analysis framework.`,
+            audit: {
+                ...audited.audit,
+                coverageReviewRequired: false,
+                reviewStatus: "legacy_unusable_source_content"
+            },
+            legacyDisposition: {
+                reason: audited.audit.sourceQualificationReason,
+                evidenceMessageIds: audited.audit.sourceEvidenceMessageIds
+            },
+            inputTokenCount: totalInputTokens || null,
+            outputTokenCount: totalOutputTokens || null
+        };
     }
 
     if (!audited.audit.complete && !coverageGapIsReviewable(audited.audit)) {
@@ -641,6 +703,39 @@ export async function processNextAdvancedPreliminaryAnalysis(
                 reasoningEffort: claim.reasoning_effort
             }
         );
+        if (analysis.legacyDisposition) {
+            const { data: moved, error: dispositionError } = await supabase.rpc(
+                "set_advanced_preliminary_case_disposition",
+                {
+                    p_job_id: claim.job_id,
+                    p_disposition: "legacy_unusable",
+                    p_reason: analysis.legacyDisposition.reason,
+                    p_actor: "stage1-source-content-audit",
+                    p_evidence: {
+                        messageIds: analysis.legacyDisposition.evidenceMessageIds,
+                        audit: analysis.audit,
+                        model: claim.model,
+                        reasoningEffort: claim.reasoning_effort
+                    }
+                }
+            );
+            if (dispositionError || !moved) {
+                throw new Error("The legacy source-content disposition was not saved.", {
+                    cause: dispositionError || undefined
+                });
+            }
+            console.log("Advanced preliminary case classified as legacy unusable", {
+                runId: claim.run_id,
+                caseNumber: claim.case_number
+            });
+            return {
+                claimed: true,
+                completed: true,
+                disposition: "legacy_unusable",
+                runId: claim.run_id,
+                caseNumber: claim.case_number
+            };
+        }
         const payload = {
             meaningUnits: analysis.meaningUnits,
             codes: analysis.codes,

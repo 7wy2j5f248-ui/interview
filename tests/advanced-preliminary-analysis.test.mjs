@@ -71,6 +71,10 @@ function acceptedAudit(analysis, overrides = {}) {
         full_transcript_coverage: true,
         omitted_relevant_evidence: [],
         stage1_only: true,
+        source_qualifies_for_framework: true,
+        source_qualification_reason:
+            "The transcript contains sufficient sleeping-habits evidence.",
+        source_evidence_message_ids: [messages[0].id],
         overall_summary: "Full transcript coverage verified at Meaning Units only.",
         ...overrides
     };
@@ -123,6 +127,19 @@ test("independent Stage 1 audit requires exact MU checks, coverage, and no highe
     assert.equal(rejected.stage1Only, false);
 });
 
+test("source-content ineligibility is distinct from an analysis defect", () => {
+    const analysis = validateAdvancedPreliminaryAnalysis(validDraft(), messages);
+    const audit = validateAdvancedPreliminaryAudit(analysis, acceptedAudit(analysis, {
+        source_qualifies_for_framework: false,
+        source_qualification_reason:
+            "The interview did not elicit enough clear topic-relevant content.",
+        source_evidence_message_ids: [messages[0].id]
+    }));
+    assert.equal(audit.complete, false);
+    assert.equal(audit.sourceQualifiesForFramework, false);
+    assert.match(audit.sourceQualificationReason, /did not elicit enough/);
+});
+
 test("exact audit coverage gaps remain reviewable instead of becoming terminal failures", () => {
     const analysis = validateAdvancedPreliminaryAnalysis(validDraft(), messages);
     const audit = validateAdvancedPreliminaryAudit(analysis, acceptedAudit(analysis, {
@@ -159,6 +176,8 @@ test("Stage 1 is versioned, stronger-model capable, and stops at Meaning Units",
     assert.match(worker, /Stop at Meaning Units/);
     assert.match(worker, /Do not generate, name, imply, copy, or evaluate codes, categories, themes/);
     assert.match(worker, /Full-transcript coverage is mandatory/);
+    assert.match(worker, /source_qualifies_for_framework=false/);
+    assert.match(worker, /stage1-source-content-audit/);
     assert.doesNotMatch(worker, /sharedVocabulary/);
 });
 

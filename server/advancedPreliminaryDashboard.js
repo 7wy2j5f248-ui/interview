@@ -79,7 +79,7 @@ async function loadSummary(supabase, req) {
     const jobs = await requireData(
         supabase
             .from("advanced_preliminary_analysis_jobs")
-            .select("id, session_id, participant_id, case_number, source_completed_at, project_id, analysis_framework_id, source_report_id, project_binding_status, status, attempt_count, completed_at, updated_at, last_error, disposition, disposition_reason, disposition_at, disposition_by")
+            .select("id, session_id, participant_id, case_number, source_completed_at, project_id, analysis_framework_id, source_report_id, project_binding_status, status, attempt_count, completed_at, updated_at, last_error, disposition, disposition_reason, disposition_evidence, disposition_at, disposition_by")
             .eq("run_id", run.id)
             .order("source_completed_at", { ascending: true })
             .order("session_id", { ascending: true })
@@ -119,7 +119,7 @@ async function loadSummary(supabase, req) {
     const failedJobs = await requireData(
         supabase
             .from("advanced_preliminary_analysis_jobs")
-            .select("id, session_id, participant_id, case_number, source_completed_at, project_id, analysis_framework_id, source_report_id, project_binding_status, status, attempt_count, completed_at, updated_at, last_error, disposition, disposition_reason, disposition_at, disposition_by")
+            .select("id, session_id, participant_id, case_number, source_completed_at, project_id, analysis_framework_id, source_report_id, project_binding_status, status, attempt_count, completed_at, updated_at, last_error, disposition, disposition_reason, disposition_evidence, disposition_at, disposition_by")
             .eq("run_id", run.id)
             .eq("status", "failed")
             .eq("disposition", "active")
@@ -136,7 +136,7 @@ async function loadSummary(supabase, req) {
     const reportOnlyJobs = reportOnlyJobIds.length ? await requireData(
         supabase
             .from("advanced_preliminary_analysis_jobs")
-            .select("id, session_id, participant_id, case_number, source_completed_at, project_id, analysis_framework_id, source_report_id, project_binding_status, status, attempt_count, completed_at, updated_at, last_error, disposition, disposition_reason, disposition_at, disposition_by")
+            .select("id, session_id, participant_id, case_number, source_completed_at, project_id, analysis_framework_id, source_report_id, project_binding_status, status, attempt_count, completed_at, updated_at, last_error, disposition, disposition_reason, disposition_evidence, disposition_at, disposition_by")
             .in("id", reportOnlyJobIds)
             .order("source_completed_at", { ascending: true }),
         "Audited Stage 1 cases requiring attention could not be loaded."
@@ -160,7 +160,7 @@ async function loadSummary(supabase, req) {
     const legacyJobs = await requireData(
         supabase
             .from("advanced_preliminary_analysis_jobs")
-            .select("id, session_id, participant_id, case_number, source_completed_at, project_id, analysis_framework_id, source_report_id, project_binding_status, status, attempt_count, completed_at, updated_at, last_error, disposition, disposition_reason, disposition_at, disposition_by")
+            .select("id, session_id, participant_id, case_number, source_completed_at, project_id, analysis_framework_id, source_report_id, project_binding_status, status, attempt_count, completed_at, updated_at, last_error, disposition, disposition_reason, disposition_evidence, disposition_at, disposition_by")
             .eq("run_id", run.id)
             .eq("disposition", "legacy_unusable")
             .order("source_completed_at", { ascending: true }),
@@ -210,7 +210,7 @@ async function loadCase(supabase, req) {
     }
     const { data: job, error: jobError } = await supabase
         .from("advanced_preliminary_analysis_jobs")
-        .select("id, run_id, session_id, participant_id, case_number, source_completed_at, project_id, analysis_framework_id, source_report_id, project_binding_status, status, attempt_count, completed_at, last_error")
+        .select("id, run_id, session_id, participant_id, case_number, source_completed_at, project_id, analysis_framework_id, source_report_id, project_binding_status, status, attempt_count, completed_at, last_error, disposition, disposition_reason, disposition_evidence, disposition_at, disposition_by")
         .eq("run_id", run.id)
         .or(`case_number.eq.${caseReference},session_id.eq.${caseReference}`)
         .maybeSingle();
@@ -416,7 +416,8 @@ async function markLegacyCase(supabase, req) {
             p_job_id: jobId,
             p_disposition: "legacy_unusable",
             p_reason: reason,
-            p_actor: "researcher-dashboard"
+            p_actor: "researcher-dashboard",
+            p_evidence: { source: "researcher-dashboard" }
         }
     );
     if (error || !data) {

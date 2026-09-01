@@ -198,8 +198,9 @@
             button.type = "button";
             button.textContent = item.report
                 ? "Inspect Meaning Units"
+                : mode === "legacy" ? "Inspect transcript"
                 : item.status === "processing" ? "Processing" : "Not ready";
-            button.disabled = !item.report;
+            button.disabled = !item.report && mode !== "legacy";
             button.addEventListener("click", () => openCase(item.case_number));
             action.appendChild(button);
             if (mode === "attention") {
@@ -336,8 +337,19 @@
             const report = detail.report;
             if (!report) {
                 dialogContent.appendChild(paragraph(
-                    `This case is ${detail.job.status}; no Stage 1 proposal is available yet.`
+                    detail.job.disposition === "legacy_unusable"
+                        ? `Legacy unusable: ${detail.job.disposition_reason || "The respondent content did not qualify for this analysis framework."}`
+                        : `This case is ${detail.job.status}; no Stage 1 proposal is available yet.`
                 ));
+                if (detail.job.disposition === "legacy_unusable") {
+                    const rawReport = {
+                        participant_code: null,
+                        participant_id: detail.job.participant_id,
+                        session_id: detail.job.session_id,
+                        meaningUnits: []
+                    };
+                    dialogContent.appendChild(annotatedTranscript(detail, rawReport));
+                }
                 return;
             }
             dialogProvenance.textContent = [
