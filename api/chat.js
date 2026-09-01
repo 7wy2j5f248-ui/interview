@@ -10,6 +10,7 @@ import {
   refreshInterviewSessionMetrics,
   resolveInactivityTimeoutMinutes
 } from "../server/sessionLifecycle.js";
+import { scheduleAutomaticCaseAnalysis } from "../server/automaticCaseAnalysis.js";
 import { scheduleCompletedTranscriptTranslation } from "../server/messageTranslation.js";
 
 const supportedInterviewLanguages = Object.freeze({
@@ -396,6 +397,9 @@ Return final_question_answered as true when the participant's current message an
         activeSessionId,
         language
       );
+      // This request only wakes the analysis worker; a wake-up failure never
+      // loses the durable queue item.
+      scheduleAutomaticCaseAnalysis(req);
     }
 
     return res.status(200).json({

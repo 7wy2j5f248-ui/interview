@@ -2,10 +2,16 @@ import { waitUntil } from "@vercel/functions";
 import OpenAI from "openai";
 import { createClient } from "@supabase/supabase-js";
 import {
-    continueStagedAnalysis,
-    stagedAnalysisBaseUrl,
-    stagedAnalysisWorkerRequestIsAuthorized
-} from "../server/stagedAnalysisWorker.js";
+    handleCaseAnalysisDashboard,
+    handleCaseArchiveMutation
+} from "../server/caseAnalysisDashboard.js";
+import {
+    automaticCaseAnalysisBaseUrl,
+    continueAutomaticCaseAnalysis,
+    processOldestAutomaticCase,
+    workerRequestIsAuthorized
+} from "../server/automaticCaseAnalysis.js";
+import { processOldestFrameworkReanalysis } from "../server/frameworkReanalysis.js";
 import {
     processNextAdvancedPreliminaryAnalysis
 } from "../server/advancedPreliminaryAnalysis.js";
@@ -21,30 +27,44 @@ import {
 
 export const config = { maxDuration: 300 };
 
-async function processStagedAndContinue(req) {
+async function processAndContinue(req) {
     const supabaseUrl = process.env.SUPABASE_URL;
     const secretKey = process.env.SUPABASE_SECRET_KEY;
     const openaiKey = process.env.OPENAI_API_KEY;
 
     if (!supabaseUrl || !secretKey || !openaiKey) {
-        throw new Error("Staged-analysis configuration is incomplete.");
+        throw new Error("Automatic case-analysis configuration is incomplete.");
     }
 
     const supabaseClient = createClient(supabaseUrl, secretKey, {
         auth: { persistSession: false, autoRefreshToken: false }
     });
     const openaiClient = new OpenAI({ apiKey: openaiKey });
-    const result = await processNextAdvancedPreliminaryAnalysis(
+    let result = await processOldestAutomaticCase(
         supabaseClient,
         openaiClient
     );
+
+    if (!result.claimed) {
+        result = await processOldestFrameworkReanalysis(
+            supabaseClient,
+            openaiClient
+        );
+    }
+
+    if (!result.claimed) {
+        result = await processNextAdvancedPreliminaryAnalysis(
+            supabaseClient,
+            openaiClient
+        );
+    }
 
     if (result.claimed) {
         if (!result.completed) {
             await new Promise(resolve => setTimeout(resolve, 12000));
         }
-        await continueStagedAnalysis(
-            stagedAnalysisBaseUrl(req)
+        await continueAutomaticCaseAnalysis(
+            automaticCaseAnalysisBaseUrl(req)
         );
     }
 }
@@ -86,9 +106,17 @@ export default async function handler(req, res) {
         return handleAdvancedPreliminaryDashboard(req, res);
     }
 
+    if (req.method === "GET") {
+        return handleCaseAnalysisDashboard(req, res);
+    }
+
     if (req.method !== "POST") {
         res.setHeader("Allow", "GET, POST");
         return res.status(405).json({ error: "Method not allowed." });
+    }
+
+    if (["archive", "restore"].includes(req.body?.action)) {
+        return handleCaseArchiveMutation(req, res);
     }
 
     if (req.body?.worker === "translation") {
@@ -106,17 +134,16 @@ export default async function handler(req, res) {
         });
     }
 
-    if (!stagedAnalysisWorkerRequestIsAuthorized(req)) {
+    if (!workerRequestIsAuthorized(req)) {
         return res.status(401).json({ error: "Unauthorized." });
     }
 
-    waitUntil(processStagedAndContinue(req).catch(error => {
-        console.error("Staged-analysis worker stopped:", error);
+    waitUntil(processAndContinue(req).catch(error => {
+        console.error("Automatic case-analysis worker stopped:", error);
     }));
 
     return res.status(202).json({
         accepted: true,
-        processing: "staged_meaning_units",
         processingOrder: "earliest_completed_first"
     });
 }
