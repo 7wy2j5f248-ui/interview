@@ -242,6 +242,10 @@
             `contract ${run.execution_contract_version || "historical contract"}`,
             `plan ${run.execution_plan_hash || "historical unverified plan"}`,
             `maximum calls ${run.maximum_analysis_calls ?? run.source_case_count}`,
+            `authorized incremental spend $${run.spending_limit_usd ?? "not configured"}`,
+            `recorded since authorization $${run.estimated_incremental_spend_usd ?? 0}`,
+            `spending guard ${run.spend_guard_status || "not configured"}`,
+            `resumed ${run.resumed_at || "no"}`,
             `model verified ${run.model_verified_at || "not verified"}`
         ].join(" · ");
         startButton.disabled = active || !providerSelect.value || !modelSelect.value.trim();
@@ -256,6 +260,8 @@
             + `${run.resolved_model || run.model}. Each completed case includes Meaning Units, preliminary Codes, preliminary Categories, and preliminary Tentative Themes. `
             + (run.status === "cancelled"
                 ? "This run is stopped and cannot make further model calls."
+                : run.status === "spending_limit_reached"
+                ? "The spending guard stopped new model calls before the authorized limit."
                 : "This run analyzes original transcripts without using earlier analysis as input.")
         );
 

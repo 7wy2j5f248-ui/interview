@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
     ADVANCED_PRELIMINARY_ANALYSIS_VERSION,
+    ADVANCED_PRELIMINARY_MAX_OUTPUT_TOKENS,
     ADVANCED_PRELIMINARY_PROMPT_VERSION,
     ADVANCED_PRELIMINARY_REASONING_EFFORT,
     ADVANCED_PRELIMINARY_STOP_LAYER,
@@ -166,6 +167,7 @@ test("Stage 1 performs one fresh model call from the original transcript only", 
 test("Phase 1 is versioned, stronger-model capable, and completes tentative themes", async () => {
     assert.equal(ADVANCED_PRELIMINARY_REASONING_EFFORT, "high");
     assert.equal(ADVANCED_PRELIMINARY_STOP_LAYER, "preliminary_tentative_themes");
+    assert.equal(ADVANCED_PRELIMINARY_MAX_OUTPUT_TOKENS, 20000);
     assert.match(ADVANCED_PRELIMINARY_ANALYSIS_VERSION, /v4-researcher-controlled-independent/);
     assert.match(ADVANCED_PRELIMINARY_PROMPT_VERSION, /v4-explicit-run-contract/);
     const worker = await source("server/advancedPreliminaryAnalysis.js");
@@ -178,6 +180,23 @@ test("Phase 1 is versioned, stronger-model capable, and completes tentative them
     assert.doesNotMatch(worker, /advanced_preliminary_analysis_audit/);
     assert.doesNotMatch(worker, /stage1-source-content-audit/);
     assert.doesNotMatch(worker, /sharedVocabulary/);
+});
+
+test("resumed Stage 1 work has a durable incremental spending guard", async () => {
+    const migration = await source(
+        "supabase/migrations/20260901194500_resume_stage1_with_spending_guard.sql"
+    );
+    assert.match(migration, /resume_advanced_preliminary_analysis_run/);
+    assert.match(migration, /spending_limit_usd/);
+    assert.match(migration, /spending_baseline_usd/);
+    assert.match(migration, /estimated_incremental_spend_usd/);
+    assert.match(migration, /next_call_reserve_usd/);
+    assert.match(migration, /incremental_total \+ active_run\.next_call_reserve_usd/);
+    assert.match(migration, /spending_limit_reached/);
+    assert.match(migration, /status in \('cancelled', 'failed'\)/);
+    assert.match(migration, /previous_cancellations/);
+    assert.match(migration, /selected_run\.model <> 'gpt-5\.6-sol'/);
+    assert.doesNotMatch(migration, /delete from public\./i);
 });
 
 test("analysis providers are server-configured and never expose credentials", () => {

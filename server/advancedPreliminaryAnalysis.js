@@ -17,6 +17,7 @@ export const FRESH_ANALYSIS_OPERATION = "fresh_independent_analysis";
 export const AUTHORITATIVE_SOURCE = "original_completed_transcripts";
 export const LEGACY_ANALYSIS_INPUT = "excluded";
 export const EXECUTION_CONTRACT_VERSION = "researcher-operation-contract-v1";
+export const ADVANCED_PRELIMINARY_MAX_OUTPUT_TOKENS = 20000;
 
 const analysisSchema = {
     type: "object",
@@ -338,6 +339,7 @@ function responseOptions(model, reasoningEffort, schema, name, input) {
     return {
         model,
         store: false,
+        max_output_tokens: ADVANCED_PRELIMINARY_MAX_OUTPUT_TOKENS,
         reasoning: {
             effort: reasoningEffort,
             context: "current_turn"
