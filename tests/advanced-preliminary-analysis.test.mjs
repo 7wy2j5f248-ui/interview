@@ -215,6 +215,22 @@ test("a stopped GPT-5.6 run can continue only after its preserved reports prove 
     assert.doesNotMatch(migration, /delete from public\./i);
 });
 
+test("an explicitly resumed run exposes exactly one credential-free server wake", async () => {
+    const migration = await source(
+        "supabase/migrations/20260901205500_add_single_use_stage1_wake.sql"
+    );
+    const endpoint = await source("api/automatic-analysis.js");
+    assert.match(migration, /initial_wake_pending/);
+    assert.match(migration, /initial_wake_consumed_at/);
+    assert.match(migration, /consume_authorized_analysis_initial_wake/);
+    assert.match(migration, /spend_guard_status = 'active'/);
+    assert.match(migration, /spending_limit_usd is not null/);
+    assert.match(migration, /initial_wake_pending = false/);
+    assert.match(endpoint, /authorized-initial-wake/);
+    assert.match(endpoint, /single_use_researcher_authorized_run_wake/);
+    assert.match(endpoint, /processStagedAndContinue/);
+});
+
 test("analysis providers are server-configured and never expose credentials", () => {
     const environment = {
         OPENAI_API_KEY: "server-secret",

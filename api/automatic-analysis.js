@@ -104,6 +104,40 @@ export default async function handler(req, res) {
         return res.status(405).json({ error: "Method not allowed." });
     }
 
+    if (req.body?.worker === "authorized-initial-wake") {
+        const supabaseUrl = process.env.SUPABASE_URL;
+        const secretKey = process.env.SUPABASE_SECRET_KEY;
+        if (!supabaseUrl || !secretKey) {
+            return res.status(500).json({
+                error: "Staged-analysis configuration is incomplete."
+            });
+        }
+        const supabaseClient = createClient(supabaseUrl, secretKey, {
+            auth: { persistSession: false, autoRefreshToken: false }
+        });
+        const { data: runId, error } = await supabaseClient.rpc(
+            "consume_authorized_analysis_initial_wake"
+        );
+        if (error) {
+            console.error("Authorized initial wake could not be consumed:", error);
+            return res.status(500).json({ error: "The authorized run could not be woken." });
+        }
+        if (!runId) {
+            return res.status(409).json({
+                error: "No unused researcher-authorized run wake is available."
+            });
+        }
+        waitUntil(processStagedAndContinue(req).catch(workerError => {
+            console.error("Authorized staged-analysis wake stopped:", workerError);
+        }));
+        return res.status(202).json({
+            accepted: true,
+            runId,
+            processing: "fresh_independent_preliminary_case_analysis_only",
+            authorization: "single_use_researcher_authorized_run_wake"
+        });
+    }
+
     if (req.body?.worker === "translation") {
         if (!transcriptTranslationRequestIsAuthorized(req)) {
             return res.status(401).json({ error: "Unauthorized." });
