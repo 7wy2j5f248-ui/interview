@@ -2,7 +2,7 @@ import { ensureEnglishTranslations } from "./messageTranslation.js";
 import {
     isConversationalCourtesy,
     prepareParticipantMessages
-} from "./analysisCore.js";
+} from "./stagedTranscript.js";
 import { loadParticipantCodeMap } from "./participantCodes.js";
 import { normalizeOpenAIModel } from "./modelConfiguration.js";
 

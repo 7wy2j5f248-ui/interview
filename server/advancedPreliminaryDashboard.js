@@ -10,7 +10,7 @@ import {
     SLEEPING_HABITS_PROJECT_CODE,
     probeAdvancedPreliminaryModel
 } from "./advancedPreliminaryAnalysis.js";
-import { scheduleAutomaticCaseAnalysis } from "./automaticCaseAnalysis.js";
+import { scheduleStagedAnalysis } from "./stagedAnalysisWorker.js";
 import {
     configuredStage1DefaultModel,
     configuredStage1Models
@@ -79,7 +79,7 @@ async function loadSummary(supabase, req) {
     const jobs = await requireData(
         supabase
             .from("advanced_preliminary_analysis_jobs")
-            .select("id, session_id, participant_id, case_number, source_completed_at, project_id, analysis_framework_id, source_report_id, project_binding_status, status, attempt_count, completed_at, updated_at, last_error")
+            .select("id, session_id, participant_id, case_number, source_completed_at, project_id, status, attempt_count, completed_at, updated_at, last_error")
             .eq("run_id", run.id)
             .order("source_completed_at", { ascending: true })
             .order("session_id", { ascending: true })
@@ -90,7 +90,7 @@ async function loadSummary(supabase, req) {
     const reports = jobIds.length ? await requireData(
         supabase
             .from("advanced_preliminary_case_reports")
-            .select("id, job_id, session_id, case_number, participant_code, language, project_id, source_report_id, case_summary, model, resolved_model, reasoning_effort, analysis_version, prompt_version, analytical_audit, input_token_count, output_token_count, completed_at")
+            .select("id, job_id, session_id, case_number, participant_code, language, project_id, case_summary, model, resolved_model, reasoning_effort, analysis_version, prompt_version, analytical_audit, input_token_count, output_token_count, completed_at")
             .in("job_id", jobIds),
         "Advanced preliminary case reports could not be loaded."
     ) : [];
@@ -140,7 +140,7 @@ async function loadCase(supabase, req) {
     }
     const { data: job, error: jobError } = await supabase
         .from("advanced_preliminary_analysis_jobs")
-        .select("id, run_id, session_id, participant_id, case_number, source_completed_at, project_id, analysis_framework_id, source_report_id, project_binding_status, status, attempt_count, completed_at, last_error")
+            .select("id, run_id, session_id, participant_id, case_number, source_completed_at, project_id, status, attempt_count, completed_at, last_error")
         .eq("run_id", run.id)
         .or(`case_number.eq.${caseReference},session_id.eq.${caseReference}`)
         .maybeSingle();
@@ -149,7 +149,7 @@ async function loadCase(supabase, req) {
     }
     const { data: report, error: reportError } = await supabase
         .from("advanced_preliminary_case_reports")
-        .select("id, run_id, job_id, session_id, case_number, participant_id, participant_code, language, project_id, analysis_framework_id, source_report_id, provider, model, resolved_model, reasoning_effort, analysis_version, prompt_version, case_summary, unassigned_code_numbers, analytical_audit, input_token_count, output_token_count, created_at, completed_at")
+        .select("id, run_id, job_id, session_id, case_number, participant_id, participant_code, language, project_id, provider, model, resolved_model, reasoning_effort, analysis_version, prompt_version, case_summary, unassigned_code_numbers, analytical_audit, input_token_count, output_token_count, created_at, completed_at")
         .eq("job_id", job.id)
         .maybeSingle();
     if (reportError) throw new Error("The selected advanced report could not be loaded.");
@@ -315,7 +315,7 @@ async function startRun(supabase, req) {
             { status: message.includes("already active") ? 409 : 500 }
         );
     }
-    const scheduled = scheduleAutomaticCaseAnalysis(req);
+    const scheduled = scheduleStagedAnalysis(req);
     return {
         runId,
         modelVerified: true,
