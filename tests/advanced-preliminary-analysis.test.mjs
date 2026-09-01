@@ -7,6 +7,7 @@ import {
     ADVANCED_PRELIMINARY_PROMPT_VERSION,
     ADVANCED_PRELIMINARY_REASONING_EFFORT,
     ADVANCED_PRELIMINARY_STOP_LAYER,
+    SOURCE_ELIGIBILITY_GUARD_VERSION,
     coverageGapIsReviewable,
     validateAdvancedPreliminaryAnalysis,
     validateAdvancedPreliminaryAudit
@@ -129,15 +130,52 @@ test("independent Stage 1 audit requires exact MU checks, coverage, and no highe
 
 test("source-content ineligibility is distinct from an analysis defect", () => {
     const analysis = validateAdvancedPreliminaryAnalysis(validDraft(), messages);
-    const audit = validateAdvancedPreliminaryAudit(analysis, acceptedAudit(analysis, {
+    const sourceIneligible = acceptedAudit(analysis, {
         source_qualifies_for_framework: false,
         source_qualification_reason:
             "The interview did not elicit enough clear topic-relevant content.",
-        source_evidence_message_ids: [messages[0].id]
-    }));
+        source_evidence_message_ids: [],
+        full_transcript_coverage: false
+    });
+    sourceIneligible.meaning_unit_checks.forEach(check => {
+        check.research_relevant = false;
+        check.explanation = "The exact span is outside the research topic.";
+    });
+    const audit = validateAdvancedPreliminaryAudit(analysis, sourceIneligible);
     assert.equal(audit.complete, false);
     assert.equal(audit.sourceQualifiesForFramework, false);
+    assert.equal(audit.declaredSourceQualifiesForFramework, false);
+    assert.equal(audit.sourceQualificationOverrideApplied, false);
     assert.match(audit.sourceQualificationReason, /did not elicit enough/);
+});
+
+test("coverage defects can never disqualify a transcript containing relevant evidence", () => {
+    const analysis = validateAdvancedPreliminaryAnalysis(validDraft(), messages);
+    const audit = validateAdvancedPreliminaryAudit(analysis, acceptedAudit(analysis, {
+        source_qualifies_for_framework: false,
+        source_qualification_reason:
+            "The draft is too incomplete to support analysis.",
+        source_evidence_message_ids: [],
+        full_transcript_coverage: false,
+        omitted_relevant_evidence: [{
+            message_id: messages[1].id,
+            exact_source_text: "I want a quieter environment",
+            explanation: "Relevant evidence was omitted from the draft."
+        }]
+    }));
+    assert.equal(audit.declaredSourceQualifiesForFramework, false);
+    assert.equal(audit.sourceQualifiesForFramework, true);
+    assert.equal(audit.sourceQualificationOverrideApplied, true);
+    assert.equal(
+        audit.sourceEligibilityGuardVersion,
+        SOURCE_ELIGIBILITY_GUARD_VERSION
+    );
+    assert.deepEqual(audit.sourceEvidenceMessageIds, [
+        messages[0].id,
+        messages[1].id
+    ]);
+    assert.match(audit.sourceQualificationReason, /coverage audit itself/);
+    assert.equal(coverageGapIsReviewable(audit), true);
 });
 
 test("exact audit coverage gaps remain reviewable instead of becoming terminal failures", () => {
@@ -177,6 +215,8 @@ test("Stage 1 is versioned, stronger-model capable, and stops at Meaning Units",
     assert.match(worker, /Do not generate, name, imply, copy, or evaluate codes, categories, themes/);
     assert.match(worker, /Full-transcript coverage is mandatory/);
     assert.match(worker, /source_qualifies_for_framework=false/);
+    assert.match(worker, /Coverage and source eligibility are logically independent/);
+    assert.match(worker, /defects in the proposed analysis, not in the interview data/);
     assert.match(worker, /stage1-source-content-audit/);
     assert.doesNotMatch(worker, /sharedVocabulary/);
 });

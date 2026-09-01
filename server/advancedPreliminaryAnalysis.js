@@ -13,6 +13,8 @@ export const ADVANCED_PRELIMINARY_ANALYSIS_VERSION =
     "staged-analysis-stage1-v1-meaning-units-only";
 export const ADVANCED_PRELIMINARY_PROMPT_VERSION =
     "staged-analysis-stage1-prompt-v1-exact-coverage";
+export const SOURCE_ELIGIBILITY_GUARD_VERSION =
+    "source-eligibility-guard-v1-analysis-defects-cannot-disqualify-source";
 export const ADVANCED_PRELIMINARY_STOP_LAYER = "meaning_units";
 export const SLEEPING_HABITS_PROJECT_CODE = "SLEEPING-HABITS";
 
@@ -265,27 +267,52 @@ export function validateAdvancedPreliminaryAudit(analysis, value) {
     })).filter(item => item.messageId && item.exactSourceText);
     const fullTranscriptCoverage = Boolean(value?.full_transcript_coverage);
     const stage1Only = Boolean(value?.stage1_only);
-    const sourceQualifiesForFramework =
+    const declaredSourceQualifiesForFramework =
         Boolean(value?.source_qualifies_for_framework);
-    const sourceQualificationReason = normalizedText(
-        value?.source_qualification_reason
-    ) || (sourceQualifiesForFramework
-        ? "The respondent content contains sufficient study-relevant evidence."
-        : "The respondent content does not provide sufficient usable evidence for this analysis framework.");
-    const sourceEvidenceMessageIds = [...new Set(
+    const declaredSourceEvidenceMessageIds = [...new Set(
         (Array.isArray(value?.source_evidence_message_ids)
             ? value.source_evidence_message_ids : [])
             .map(normalizedText)
             .filter(Boolean)
     )];
+    const auditProvenRelevantMessageIds = [...new Set([
+        ...meaningUnitChecks
+            .filter(check => check.exactSourceMatch && check.researchRelevant)
+            .map(check => check.messageId),
+        ...omittedRelevantEvidence.map(item => item.messageId)
+    ].filter(Boolean))];
+    // A coverage audit cannot coherently say both that study-relevant evidence
+    // exists and that the source transcript is unusable. Coverage and span
+    // problems are defects in the proposed analysis, not in the interview data.
+    const sourceQualificationOverrideApplied = Boolean(
+        !declaredSourceQualifiesForFramework
+        && auditProvenRelevantMessageIds.length
+    );
+    const sourceQualifiesForFramework = Boolean(
+        declaredSourceQualifiesForFramework
+        || auditProvenRelevantMessageIds.length
+    );
+    const sourceQualificationReason = sourceQualificationOverrideApplied
+        ? "The coverage audit itself identified study-relevant transcript evidence. The source remains eligible; coverage or segmentation defects must be repaired in the analysis output and cannot disqualify the interview."
+        : normalizedText(value?.source_qualification_reason)
+            || (sourceQualifiesForFramework
+                ? "The respondent content contains sufficient study-relevant evidence."
+                : "The respondent content does not provide sufficient usable evidence for this analysis framework.");
+    const sourceEvidenceMessageIds = [...new Set([
+        ...declaredSourceEvidenceMessageIds,
+        ...auditProvenRelevantMessageIds
+    ])];
     return {
         meaningUnitChecks,
         fullTranscriptCoverage,
         omittedRelevantEvidence,
         stage1Only,
         sourceQualifiesForFramework,
+        declaredSourceQualifiesForFramework,
         sourceQualificationReason,
         sourceEvidenceMessageIds,
+        sourceQualificationOverrideApplied,
+        sourceEligibilityGuardVersion: SOURCE_ELIGIBILITY_GUARD_VERSION,
         overallSummary: normalizedText(value?.overall_summary)
             || "No audit summary was supplied.",
         complete: Boolean(
@@ -415,6 +442,7 @@ async function auditAnalysis(
                 "Accept a Meaning Unit only when it is an exact original-language transcript span, is substantively relevant to the named research topic, is the smallest sufficient coherent span, and preserves enough context to retain the participant's meaning.",
                 "Perform a separate full-transcript coverage pass. Read every participant message from beginning to end and compare it against all proposed Meaning Units. Set full_transcript_coverage=true only when every substantive study-relevant meaning is represented. Put every omitted relevant span in omitted_relevant_evidence with its message ID, exact original text, and explanation. Later, low-frequency, contradictory, evaluative, or aspirational evidence still counts.",
                 "Separately decide whether the respondent's own content qualifies for this project's analysis framework. Set source_qualifies_for_framework=false only when the transcript itself is outside the topic, too vague, or too incomplete to support a defensible case analysis because the interview failed to elicit usable evidence. Do not disqualify a case merely because the draft omitted evidence or used an over-broad Meaning Unit; those are analysis defects, not source-content defects. Record a concise human-readable reason and the transcript message IDs supporting the source decision.",
+                "Coverage and source eligibility are logically independent. If any proposed Meaning Unit is exact and research-relevant, or if omitted_relevant_evidence contains any item, then the transcript demonstrably contains study-relevant evidence and source_qualifies_for_framework MUST be true. A thin, incomplete, or defective draft is never evidence that the source interview is unusable.",
                 "Set stage1_only=true only when the draft contains Meaning Units alone and neither the draft nor your audit generates, names, implies, copies, or evaluates any code, category, or theme.",
                 "Audit only the supplied transcript and Meaning Unit draft. Do not compare cases and do not invent a replacement analysis in the audit response.",
                 analysisInstruction(context)
