@@ -482,6 +482,18 @@
                 + `accepted categories: ${(report.analytical_audit?.categoryChecks || []).filter(check => check.accepted).length}/${report.categories.length}.`,
                 "muted"
             ));
+            dialogContent.appendChild(paragraph(
+                `Full-transcript coverage: ${report.analytical_audit?.fullTranscriptCoverage ? "verified" : "not verified"}; `
+                + `case summary uses only coded evidence: ${report.analytical_audit?.summaryUsesOnlyCodedEvidence ? "verified" : "not verified"}.`,
+                report.analytical_audit?.fullTranscriptCoverage
+                    && report.analytical_audit?.summaryUsesOnlyCodedEvidence
+                    ? "muted" : "errorMessage"
+            ));
+            (report.analytical_audit?.omittedRelevantEvidence || [])
+                .forEach(item => dialogContent.appendChild(paragraph(
+                    `Omitted evidence · message ${item.messageId}: ${item.exactSourceText} — ${item.explanation}`,
+                    "errorMessage"
+                )));
 
         } catch (error) {
             dialogContent.appendChild(paragraph(error.message, "errorMessage"));

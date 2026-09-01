@@ -113,6 +113,9 @@ test("independent audit makes case-paraphrase and reusability explicit gates", (
             no_theme_claim: true,
             explanation: "Accepted."
         }],
+        full_transcript_coverage: true,
+        omitted_relevant_evidence: [],
+        summary_uses_only_coded_evidence: true,
         overall_summary: "One code requires repair."
     });
     assert.equal(audit.complete, false);
@@ -123,13 +126,53 @@ test("advanced run is versioned, uses a stronger reasoning model, and stops at c
     assert.equal(ADVANCED_PRELIMINARY_MODEL, "gpt-5.6-sol");
     assert.equal(ADVANCED_PRELIMINARY_REASONING_EFFORT, "high");
     assert.match(ADVANCED_PRELIMINARY_ANALYSIS_VERSION, /advanced-preliminary/);
-    assert.match(ADVANCED_PRELIMINARY_PROMPT_VERSION, /analytical-concepts/);
+    assert.match(ADVANCED_PRELIMINARY_ANALYSIS_VERSION, /full-transcript-coverage/);
+    assert.match(ADVANCED_PRELIMINARY_PROMPT_VERSION, /coverage-audited-concepts/);
     const worker = await source("server/advancedPreliminaryAnalysis.js");
     assert.match(worker, /Stop at preliminary categories/);
     assert.match(worker, /Do not generate themes/);
     assert.match(worker, /not a shortened retelling/);
     assert.match(worker, /exact_source_text verbatim from original_text/);
+    assert.match(worker, /Full-transcript coverage is mandatory/);
+    assert.match(worker, /do not rank or renumber them by frequency/);
     assert.doesNotMatch(worker, /sharedVocabulary/);
+});
+
+test("advanced audit rejects omitted relevant transcript evidence", () => {
+    const analysis = validateAdvancedPreliminaryAnalysis(validDraft(), messages);
+    const audit = validateAdvancedPreliminaryAudit(analysis, {
+        code_checks: analysis.codes.map((code, index) => ({
+            code_number: index + 1,
+            label: code.label,
+            transcript_grounded: true,
+            analytical_concept: true,
+            not_case_paraphrase: true,
+            potentially_reusable: true,
+            appropriately_specific: true,
+            meaning_unit_fit: true,
+            explanation: "Accepted."
+        })),
+        category_checks: [{
+            category_number: 1,
+            label: analysis.categories[0].label,
+            derived_from_codes: true,
+            coherent_grouping: true,
+            higher_order_abstraction: true,
+            no_theme_claim: true,
+            explanation: "Accepted."
+        }],
+        full_transcript_coverage: false,
+        omitted_relevant_evidence: [{
+            message_id: messages[1].id,
+            exact_source_text: "stay awake really late most nights",
+            explanation: "Relevant later evidence was not represented."
+        }],
+        summary_uses_only_coded_evidence: true,
+        overall_summary: "Coverage failed."
+    });
+    assert.equal(audit.complete, false);
+    assert.equal(audit.fullTranscriptCoverage, false);
+    assert.equal(audit.omittedRelevantEvidence.length, 1);
 });
 
 test("advanced schema preserves previous reports and stable MU to code to category IDs", async () => {
@@ -166,5 +209,6 @@ test("researcher UI exposes model provenance, progress, comparison, and traceabi
     assert.match(script, /map\.get\(link\.meaning_unit_id\)/);
     assert.match(script, /detail, report, codeById, codeIdsByUnit/);
     assert.match(script, /Demographics are shown from the preserved prior report for review only/);
+    assert.match(script, /Full-transcript coverage:/);
     assert.match(dashboard, /model, demographics, case_interpretation/);
 });

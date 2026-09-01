@@ -10,9 +10,9 @@ export const ADVANCED_PRELIMINARY_PROVIDER = "openai";
 export const ADVANCED_PRELIMINARY_MODEL = "gpt-5.6-sol";
 export const ADVANCED_PRELIMINARY_REASONING_EFFORT = "high";
 export const ADVANCED_PRELIMINARY_ANALYSIS_VERSION =
-    "advanced-preliminary-v1-transcript-to-category";
+    "advanced-preliminary-v2-full-transcript-coverage";
 export const ADVANCED_PRELIMINARY_PROMPT_VERSION =
-    "advanced-preliminary-prompt-v1-analytical-concepts";
+    "advanced-preliminary-prompt-v2-coverage-audited-concepts";
 
 const analysisSchema = {
     type: "object",
@@ -129,9 +129,28 @@ const auditSchema = {
                 additionalProperties: false
             }
         },
+        full_transcript_coverage: { type: "boolean" },
+        omitted_relevant_evidence: {
+            type: "array",
+            items: {
+                type: "object",
+                properties: {
+                    message_id: { type: "string" },
+                    exact_source_text: { type: "string" },
+                    explanation: { type: "string" }
+                },
+                required: ["message_id", "exact_source_text", "explanation"],
+                additionalProperties: false
+            }
+        },
+        summary_uses_only_coded_evidence: { type: "boolean" },
         overall_summary: { type: "string" }
     },
-    required: ["code_checks", "category_checks", "overall_summary"],
+    required: [
+        "code_checks", "category_checks", "full_transcript_coverage",
+        "omitted_relevant_evidence", "summary_uses_only_coded_evidence",
+        "overall_summary"
+    ],
     additionalProperties: false
 };
 
@@ -384,9 +403,23 @@ export function validateAdvancedPreliminaryAudit(analysis, value) {
             accepted
         };
     });
+    const omittedRelevantEvidence = (Array.isArray(value?.omitted_relevant_evidence)
+        ? value.omitted_relevant_evidence : []).map(item => ({
+        messageId: normalizedText(item?.message_id),
+        exactSourceText: normalizedText(item?.exact_source_text),
+        explanation: normalizedText(item?.explanation)
+            || "Substantive research-relevant transcript evidence was omitted."
+    })).filter(item => item.messageId && item.exactSourceText);
+    const fullTranscriptCoverage = Boolean(value?.full_transcript_coverage);
+    const summaryUsesOnlyCodedEvidence = Boolean(
+        value?.summary_uses_only_coded_evidence
+    );
     return {
         codeChecks,
         categoryChecks,
+        fullTranscriptCoverage,
+        omittedRelevantEvidence,
+        summaryUsesOnlyCodedEvidence,
         overallSummary: normalizedText(value?.overall_summary)
             || "No audit summary was supplied.",
         complete: Boolean(
@@ -394,6 +427,9 @@ export function validateAdvancedPreliminaryAudit(analysis, value) {
             && categoryChecks.length === categoryChecksByNumber.size
             && codeChecks.every(check => check.accepted)
             && categoryChecks.every(check => check.accepted)
+            && fullTranscriptCoverage
+            && !omittedRelevantEvidence.length
+            && summaryUsesOnlyCodedEvidence
         )
     };
 }
@@ -442,7 +478,9 @@ function analysisInstruction({ projectName, researchTopic }) {
         "One Meaning Unit may support multiple codes only when it contains multiple analytically distinct concepts. One code may govern multiple Meaning Units when they express the same concept. Do not manufacture codes or collapse different meanings.",
         "After coding within this case, derive preliminary categories only from relationships among the generated codes. Each category must group at least two related codes into one coherent higher-order descriptive concept. A code may belong to at most one category in this run. Leave a firm code unassigned when no justified category exists. Categories remain case-based and need not match another case.",
         "Preserve complete Category → Code → Meaning Unit → original transcript-message traceability. C01 and CA01 are presentation positions only; the database will assign stable object IDs.",
-        "Frequency never determines analytical meaning. Cover the substantive research-relevant meanings present in the case, but do not include irrelevant or phatic text.",
+        "Frequency never determines analytical meaning or code order. Keep codes in case-grounded analytical order; do not rank or renumber them by frequency. Frequency remains separately calculable metadata.",
+        "Full-transcript coverage is mandatory. Before returning, reread every participant message from beginning to end. Every substantive meaning explicitly relevant to the research topic must appear as an exact Meaning Unit and link to at least one code. Do not stop coding because similar evidence appeared earlier. Exclude greetings, phatic text, and substantively unrelated material, but never omit relevant later evidence such as a stated preference, desired change, problem, condition, routine, consequence, or evaluation.",
+        "The case summary may mention only meanings represented in the coded Meaning Units. It must not introduce or repeat uncoded transcript evidence.",
         "Return the complete structured result and no theme layer."
     ].join("\n\n");
 }
@@ -516,6 +554,8 @@ async function auditAnalysis(
                 "Reject a code when it is merely a shortened participant-specific paraphrase, contains incidental details instead of an analytical concept, imports an unsupported explanation, is too broad to preserve meaning, or does not fit every assigned Meaning Unit.",
                 "Potentially reusable means the concept could govern another Meaning Unit with equivalent meaning; it does not mean that another case was consulted or that a global codebook exists.",
                 "Reject a category unless it is derived from all and only its linked codes, forms one coherent higher-order grouping, and remains a preliminary category rather than a theme claim.",
+                "Perform a separate full-transcript coverage pass after the code and category checks. Read every participant message from beginning to end and compare it against all proposed Meaning Units. Set full_transcript_coverage=true only when every substantive study-relevant meaning is represented by an exact Meaning Unit linked to a code. Put every omitted relevant span in omitted_relevant_evidence with its message ID, exact original text, and explanation. An omitted later or low-frequency meaning is still a failure.",
+                "Set summary_uses_only_coded_evidence=true only when every claim in the case summary is supported by the proposed coded Meaning Units. Frequency and code position are not coverage tests.",
                 "Audit only the supplied transcript and draft. Do not compare cases and do not invent a replacement analysis in the audit response.",
                 analysisInstruction(context)
             ].join("\n\n")
@@ -606,7 +646,7 @@ export async function generateAdvancedPreliminaryAnalysis(
         generated = await createDraft([
             `Audited draft requiring replacement (JSON): ${JSON.stringify(draftForAudit(generated.analysis))}`,
             `Independent audit (JSON): ${JSON.stringify(audited.audit)}`,
-            "Repair every rejected code or category. Codes must be analytical concepts rather than participant-specific paraphrases. Preserve valid exact original-language Meaning Units and all traceability. Return no themes."
+            "Repair every rejected code or category and add every omitted substantive research-relevant span as an exact original-language Meaning Unit linked to an analytical code. Remove any case-summary claim that is not supported by coded Meaning Units. Recheck the full transcript from beginning to end. Do not rank codes by frequency. Preserve all traceability and return no themes."
         ].join("\n\n"));
         totalInputTokens += generated.response?.usage?.input_tokens || 0;
         totalOutputTokens += generated.response?.usage?.output_tokens || 0;
@@ -632,7 +672,16 @@ export async function generateAdvancedPreliminaryAnalysis(
             ...audited.audit.codeChecks.filter(check => !check.accepted)
                 .map(check => `CO${check.codeNumber} ${check.label}: ${check.explanation}`),
             ...audited.audit.categoryChecks.filter(check => !check.accepted)
-                .map(check => `CA${check.categoryNumber} ${check.label}: ${check.explanation}`)
+                .map(check => `CA${check.categoryNumber} ${check.label}: ${check.explanation}`),
+            ...(!audited.audit.fullTranscriptCoverage
+                ? ["Full-transcript coverage failed: substantive research-relevant evidence was omitted."]
+                : []),
+            ...audited.audit.omittedRelevantEvidence.map(item =>
+                `Omitted evidence in message ${item.messageId}: ${item.exactSourceText} (${item.explanation})`
+            ),
+            ...(!audited.audit.summaryUsesOnlyCodedEvidence
+                ? ["The case summary contains a claim not supported by coded Meaning Units."]
+                : [])
         ];
         throw new Error(
             `The advanced preliminary analysis failed its independent concept audit: ${failures.join(" | ")}`
