@@ -162,6 +162,9 @@ test("researcher UI exposes model provenance, progress, comparison, and traceabi
     assert.match(script, /meaningUnitAnnotation/);
     assert.match(script, /meaningUnitCodeLabel \$\{colorClass\}/);
     assert.match(script, /mark\.className = colorClass/);
+    assert.match(script, /codeIdsByUnit = report\.codeMeaningUnits\.reduce/);
+    assert.match(script, /map\.get\(link\.meaning_unit_id\)/);
+    assert.match(script, /detail, report, codeById, codeIdsByUnit/);
     assert.match(script, /Demographics are shown from the preserved prior report for review only/);
     assert.match(dashboard, /model, demographics, case_interpretation/);
 });

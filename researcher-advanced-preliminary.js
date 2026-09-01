@@ -397,6 +397,12 @@
                 map.set(link.code_id, ids);
                 return map;
             }, new Map());
+            const codeIdsByUnit = report.codeMeaningUnits.reduce((map, link) => {
+                const ids = map.get(link.meaning_unit_id) || [];
+                ids.push(link.code_id);
+                map.set(link.meaning_unit_id, ids);
+                return map;
+            }, new Map());
             const codeIdsByCategory = report.categoryCodes.reduce((map, link) => {
                 const ids = map.get(link.category_id) || [];
                 ids.push(link.code_id);
@@ -406,7 +412,7 @@
             const assignedCodeIds = new Set(report.categoryCodes.map(link => link.code_id));
 
             dialogContent.appendChild(advancedAnnotatedTranscript(
-                detail, report, codeById, muIdsByCode
+                detail, report, codeById, codeIdsByUnit
             ));
 
             report.categories.forEach(category => {
