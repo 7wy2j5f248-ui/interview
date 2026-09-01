@@ -596,7 +596,7 @@ test("one-code categories are rejected while the code remains a completed findin
     assert.equal(audit.themeHierarchy.ungroupedCodes.length, 1);
 });
 
-test("each code and category has at most one hierarchy parent", () => {
+test("codes and categories may have multiple hierarchy parents", () => {
     const messages = [1, 2, 3, 4].map(number => ({
         id: `message-${number}`,
         originalText: `sleep evidence ${number}`
@@ -636,16 +636,14 @@ test("each code and category has at most one hierarchy parent", () => {
         case_interpretation: "A bounded hierarchy test."
     }, messages);
 
-    assert.equal(analysis.categories.length, 2);
-    assert.match(
-        analysis.rejectedCategoryAssignments[0].reason,
-        /at most one category parent/
-    );
-    assert.equal(analysis.themes.length, 1);
-    assert.match(
-        analysis.rejectedThemeAssignments[0].reason,
-        /at most one theme parent/
-    );
+    assert.equal(analysis.categories.length, 3);
+    assert.deepEqual(analysis.categories[1].codeNumbers, [1, 3]);
+    assert.deepEqual(analysis.rejectedCategoryAssignments, []);
+    assert.equal(analysis.themes.length, 2);
+    assert.deepEqual(analysis.themes[1].categoryNumbers, [1, 2]);
+    assert.deepEqual(analysis.rejectedThemeAssignments, []);
+    assert.deepEqual(analysis.unassignedCodeNumbers, []);
+    assert.deepEqual(analysis.unassignedCategoryNumbers, [3]);
 });
 
 test("themes fail when their categories do not form a patterned meaning", () => {

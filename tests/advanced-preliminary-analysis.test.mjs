@@ -82,6 +82,23 @@ test("advanced preliminary validation preserves reusable codes and exact MU line
     assert.equal(result.meaningUnits[0].messageId, messages[0].id);
 });
 
+test("advanced preliminary categories may reuse analytically related codes", () => {
+    const draft = validDraft();
+    draft.categories.push({
+        label: "Daily effects",
+        definition: "Ways sleep timing is connected with daytime experience.",
+        rationale: "The same timing and fatigue codes support a distinct daily-effects grouping.",
+        code_numbers: [1, 2]
+    });
+
+    const result = validateAdvancedPreliminaryAnalysis(draft, messages);
+
+    assert.equal(result.complete, true);
+    assert.equal(result.categories.length, 2);
+    assert.deepEqual(result.categories[1].codeNumbers, [1, 2]);
+    assert.deepEqual(result.unassignedCodeNumbers, []);
+});
+
 test("advanced preliminary validation rejects rewritten or non-source meaning units", () => {
     const draft = validDraft();
     draft.meaning_units[0].exact_source_text = "Usually sleeps late";
@@ -136,6 +153,8 @@ test("advanced run is versioned, uses a stronger reasoning model, and stops at c
     assert.match(worker, /Full-transcript coverage is mandatory/);
     assert.match(worker, /do not rank or renumber them by frequency/);
     assert.doesNotMatch(worker, /sharedVocabulary/);
+    assert.doesNotMatch(worker, /at most one category/);
+    assert.doesNotMatch(worker, /unshared codes/);
 });
 
 test("advanced audit rejects omitted relevant transcript evidence", () => {
@@ -179,6 +198,9 @@ test("advanced schema preserves previous reports and stable MU to code to catego
     const migration = await source(
         "supabase/migrations/20260831235500_add_advanced_preliminary_analysis.sql"
     );
+    const overlappingCategoryMigration = await source(
+        "supabase/migrations/20260901010000_allow_overlapping_preliminary_categories.sql"
+    );
     assert.match(migration, /advanced_preliminary_analysis_runs/);
     assert.match(migration, /advanced_preliminary_meaning_units/);
     assert.match(migration, /advanced_preliminary_code_meaning_units/);
@@ -188,6 +210,10 @@ test("advanced schema preserves previous reports and stable MU to code to catego
     assert.doesNotMatch(migration, /update public\.qualitative_case_reports/i);
     assert.doesNotMatch(migration, /delete from public\.qualitative_case_/i);
     assert.doesNotMatch(migration, /insert into public\.qualitative_case_/i);
+    assert.match(
+        overlappingCategoryMigration,
+        /drop constraint if exists advanced_preliminary_category_codes_report_id_code_id_key/
+    );
 });
 
 test("researcher UI exposes model provenance, progress, comparison, and traceability", async () => {
