@@ -169,7 +169,9 @@
             cell(row, item.case_number);
             cell(row, item.project_binding_status === "project_bound"
                 ? "Sleeping habits" : "Out of scope");
-            cell(row, item.status === "failed"
+            cell(row, item.report?.analytical_audit?.coverageReviewRequired
+                ? "Completed · coverage gaps need review"
+                : item.status === "failed"
                 ? `Needs attention${item.last_error ? `: ${item.last_error}` : ""}`
                 : item.status.replaceAll("_", " "));
             cell(row, item.report?.meaningUnitCount ?? "—");
@@ -340,6 +342,21 @@
                 report.analytical_audit?.fullTranscriptCoverage
                     && report.analytical_audit?.stage1Only ? "muted" : "errorMessage"
             ));
+            const gaps = report.analytical_audit?.omittedRelevantEvidence || [];
+            if (gaps.length) {
+                dialogContent.appendChild(heading("Exact transcript passages requiring coverage review"));
+                dialogContent.appendChild(paragraph(
+                    "These passages were found by the independent audit but are not yet represented by a Meaning Unit. The proposal remains inspectable and is not labeled as fully verified."
+                ));
+                gaps.forEach(gap => {
+                    const block = document.createElement("blockquote");
+                    block.appendChild(paragraph(`Message ${gap.messageId}`,
+                        "muted"));
+                    block.appendChild(paragraph(`Original: ${gap.exactSourceText}`));
+                    block.appendChild(paragraph(gap.explanation, "muted"));
+                    dialogContent.appendChild(block);
+                });
+            }
             report.meaningUnits.forEach(unit => {
                 const block = document.createElement("blockquote");
                 block.appendChild(paragraph(

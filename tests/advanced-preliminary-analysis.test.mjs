@@ -7,6 +7,7 @@ import {
     ADVANCED_PRELIMINARY_PROMPT_VERSION,
     ADVANCED_PRELIMINARY_REASONING_EFFORT,
     ADVANCED_PRELIMINARY_STOP_LAYER,
+    coverageGapIsReviewable,
     validateAdvancedPreliminaryAnalysis,
     validateAdvancedPreliminaryAudit
 } from "../server/advancedPreliminaryAnalysis.js";
@@ -122,6 +123,20 @@ test("independent Stage 1 audit requires exact MU checks, coverage, and no highe
     assert.equal(rejected.stage1Only, false);
 });
 
+test("exact audit coverage gaps remain reviewable instead of becoming terminal failures", () => {
+    const analysis = validateAdvancedPreliminaryAnalysis(validDraft(), messages);
+    const audit = validateAdvancedPreliminaryAudit(analysis, acceptedAudit(analysis, {
+        full_transcript_coverage: false,
+        omitted_relevant_evidence: [{
+            message_id: messages[1].id,
+            exact_source_text: "quieter environment",
+            explanation: "Relevant preference omitted from the proposal."
+        }]
+    }));
+    assert.equal(audit.complete, false);
+    assert.equal(coverageGapIsReviewable(audit), true);
+});
+
 test("Stage 1 is versioned, stronger-model capable, and stops at Meaning Units", async () => {
     assert.equal(ADVANCED_PRELIMINARY_MODEL, "gpt-5.6-sol");
     assert.equal(ADVANCED_PRELIMINARY_REASONING_EFFORT, "high");
@@ -199,6 +214,8 @@ test("researcher UI locks later stages and exposes model, audit, evidence, and e
     assert.match(script, /Stage 1 annotated transcript/);
     assert.match(script, /meaningUnitAnnotation/);
     assert.match(script, /Full-transcript coverage/iu);
+    assert.match(script, /coverage gaps need review/);
+    assert.match(script, /Exact transcript passages requiring coverage review/);
     assert.match(script, /download=stage1-csv/);
     assert.match(dashboard, /configuredStage1Models/);
     assert.match(dashboard, /probeAdvancedPreliminaryModel/);

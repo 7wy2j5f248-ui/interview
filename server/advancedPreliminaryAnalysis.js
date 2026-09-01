@@ -274,6 +274,17 @@ export function validateAdvancedPreliminaryAudit(analysis, value) {
     };
 }
 
+export function coverageGapIsReviewable(audit) {
+    return Boolean(
+        audit
+        && audit.stage1Only
+        && !audit.fullTranscriptCoverage
+        && audit.meaningUnitChecks?.length
+        && audit.meaningUnitChecks.every(check => check.accepted)
+        && audit.omittedRelevantEvidence?.length
+    );
+}
+
 function transcriptForModel(messages) {
     return JSON.stringify(messages.map(message => ({
         message_id: message.id,
@@ -488,7 +499,7 @@ export async function generateAdvancedPreliminaryAnalysis(
         totalOutputTokens += audited.outputTokens;
     }
 
-    if (!audited.audit.complete) {
+    if (!audited.audit.complete && !coverageGapIsReviewable(audited.audit)) {
         const failures = [
             ...audited.audit.meaningUnitChecks.filter(check => !check.accepted)
                 .map(check => `MU${check.unitNumber}: ${check.explanation}`),
@@ -507,9 +518,21 @@ export async function generateAdvancedPreliminaryAnalysis(
         );
     }
 
+    const coverageReviewRequired = coverageGapIsReviewable(audited.audit);
+    const audit = {
+        ...audited.audit,
+        coverageReviewRequired,
+        reviewStatus: coverageReviewRequired
+            ? "coverage_gaps_need_researcher_review"
+            : "verified"
+    };
+
     return {
         ...generated.analysis,
-        audit: audited.audit,
+        caseSummary: coverageReviewRequired
+            ? `${generated.analysis.caseSummary} The independent audit identified ${audit.omittedRelevantEvidence.length} exact transcript passage${audit.omittedRelevantEvidence.length === 1 ? "" : "s"} for coverage review; the proposal is preserved and is not represented as fully verified.`
+            : generated.analysis.caseSummary,
+        audit,
         inputTokenCount: totalInputTokens || null,
         outputTokenCount: totalOutputTokens || null
     };
