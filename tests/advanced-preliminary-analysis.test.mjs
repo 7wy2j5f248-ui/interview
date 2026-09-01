@@ -143,8 +143,8 @@ test("advanced run is versioned, uses a stronger reasoning model, and stops at c
     assert.equal(ADVANCED_PRELIMINARY_MODEL, "gpt-5.6-sol");
     assert.equal(ADVANCED_PRELIMINARY_REASONING_EFFORT, "high");
     assert.match(ADVANCED_PRELIMINARY_ANALYSIS_VERSION, /advanced-preliminary/);
-    assert.match(ADVANCED_PRELIMINARY_ANALYSIS_VERSION, /full-transcript-coverage/);
-    assert.match(ADVANCED_PRELIMINARY_PROMPT_VERSION, /coverage-audited-concepts/);
+    assert.match(ADVANCED_PRELIMINARY_ANALYSIS_VERSION, /overlapping-categories/);
+    assert.match(ADVANCED_PRELIMINARY_PROMPT_VERSION, /many-to-many-categories/);
     const worker = await source("server/advancedPreliminaryAnalysis.js");
     assert.match(worker, /Stop at preliminary categories/);
     assert.match(worker, /Do not generate themes/);
@@ -194,7 +194,7 @@ test("advanced audit rejects omitted relevant transcript evidence", () => {
     assert.equal(audit.omittedRelevantEvidence.length, 1);
 });
 
-test("advanced schema preserves previous reports and stable MU to code to category IDs", async () => {
+test("advanced schema has stable MU to code to category IDs and allows overlap", async () => {
     const migration = await source(
         "supabase/migrations/20260831235500_add_advanced_preliminary_analysis.sql"
     );
@@ -216,14 +216,14 @@ test("advanced schema preserves previous reports and stable MU to code to catego
     );
 });
 
-test("researcher UI exposes model provenance, progress, comparison, and traceability", async () => {
+test("researcher UI exposes model provenance and transcript-only traceability", async () => {
     const html = await source("researcher.html");
     const script = await source("researcher-advanced-preliminary.js");
     const dashboard = await source("server/advancedPreliminaryDashboard.js");
     assert.match(html, /New Advanced-Model Preliminary Analysis/);
     assert.match(html, /Meaning Units → Preliminary Analytical Codes → Preliminary Categories/);
     assert.match(html, /researcher-advanced-preliminary\.js/);
-    assert.match(script, /Previous preliminary analysis \(preserved comparison\)/);
+    assert.doesNotMatch(script, /Previous preliminary analysis/);
     assert.match(script, /Inspect MU → Code → Category/);
     assert.match(script, /Stable code ID/);
     assert.match(script, /Advanced annotated transcript \(review format\)/);
@@ -234,7 +234,9 @@ test("researcher UI exposes model provenance, progress, comparison, and traceabi
     assert.match(script, /codeIdsByUnit = report\.codeMeaningUnits\.reduce/);
     assert.match(script, /map\.get\(link\.meaning_unit_id\)/);
     assert.match(script, /detail, report, codeById, codeIdsByUnit/);
-    assert.match(script, /Demographics are shown from the preserved prior report for review only/);
+    assert.match(script, /no earlier analysis report was used/);
     assert.match(script, /Full-transcript coverage:/);
-    assert.match(dashboard, /model, demographics, case_interpretation/);
+    assert.doesNotMatch(dashboard, /qualitative_case_codes/);
+    assert.doesNotMatch(dashboard, /qualitative_case_categories/);
+    assert.doesNotMatch(dashboard, /qualitative_case_themes/);
 });

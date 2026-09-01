@@ -198,46 +198,6 @@ async function loadCase(supabase, req) {
             )
         ]);
 
-    let previous = null;
-    if (report.source_report_id) {
-        const { data: previousReport } = await supabase
-            .from("qualitative_case_reports")
-            .select("id, analysis_version, model, demographics, case_interpretation, completed_at")
-            .eq("id", report.source_report_id)
-            .maybeSingle();
-        if (previousReport) {
-            const [previousCodes, previousCategories, previousThemes] =
-                await Promise.all([
-                    requireData(
-                        supabase.from("qualitative_case_codes")
-                            .select("code_number, code_label")
-                            .eq("report_id", previousReport.id)
-                            .order("code_number"),
-                        "Previous codes could not be loaded."
-                    ),
-                    requireData(
-                        supabase.from("qualitative_case_categories")
-                            .select("category_number, category_label")
-                            .eq("report_id", previousReport.id)
-                            .order("category_number"),
-                        "Previous categories could not be loaded."
-                    ),
-                    requireData(
-                        supabase.from("qualitative_case_themes")
-                            .select("theme_number, theme_label")
-                            .eq("report_id", previousReport.id)
-                            .order("theme_number"),
-                        "Previous themes could not be loaded."
-                    )
-                ]);
-            previous = {
-                ...previousReport,
-                codes: previousCodes,
-                categories: previousCategories,
-                themes: previousThemes
-            };
-        }
-    }
     return {
         run,
         job,
@@ -249,8 +209,7 @@ async function loadCase(supabase, req) {
             codeMeaningUnits: codeLinks,
             categoryCodes: categoryLinks
         },
-        transcript,
-        previous
+        transcript
     };
 }
 

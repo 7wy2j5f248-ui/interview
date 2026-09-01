@@ -3,11 +3,11 @@ import { DEFAULT_OPENAI_MODEL } from "./modelConfiguration.js";
 import { analysisFrameworkInstruction } from "./analysisFramework.js";
 
 export const QUALITATIVE_ANALYSIS_MODEL = DEFAULT_OPENAI_MODEL;
-export const QUALITATIVE_ANALYSIS_VERSION = "task-014-v7-complete-cases-before-summary";
+export const QUALITATIVE_ANALYSIS_VERSION = "task-014-v8-invalid-analysis-reset";
 export const AUTOMATIC_CASE_ANALYSIS_VERSION =
-    "case-analysis-v5-meaning-units-categories-completed";
+    "case-analysis-v6-overlapping-hierarchy";
 export const AUTOMATIC_CASE_REANALYSIS_VERSION =
-    "case-reanalysis-v5-meaning-units-categories-proposed";
+    "case-reanalysis-v6-overlapping-hierarchy-proposed";
 export const DEFAULT_ANALYSIS_BATCH_SIZE = 40;
 export const MAX_ANALYTIC_LABEL_WORDS = 8;
 export const MAX_ANALYTIC_LABEL_LENGTH = 100;

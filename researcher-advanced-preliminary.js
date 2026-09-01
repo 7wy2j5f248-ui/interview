@@ -113,7 +113,7 @@
         setStatus(
             `Advanced run ${run.run_number}: ${run.status.replaceAll("_", " ")}. `
             + `${run.completed_count} of ${run.source_case_count} cases completed. `
-            + "Previous reports remain preserved and current."
+            + "This run uses transcripts and stored translations only."
         );
 
         const built = table([
@@ -183,13 +183,6 @@
         return element;
     }
 
-    function listLabels(records, numberKey, labelKey, prefix) {
-        if (!records?.length) return "None recorded";
-        return records.map(record =>
-            `${prefix}${record[numberKey]} ${record[labelKey]}`
-        ).join("; ");
-    }
-
     function meaningUnitBlock(unit, transcriptById) {
         const container = document.createElement("blockquote");
         const source = transcriptById.get(unit.message_id);
@@ -217,25 +210,6 @@
         return Number.isFinite(numeric) && numeric > 0
             ? ((numeric - 1) % 12) + 1
             : 1;
-    }
-
-    function displayValue(value) {
-        if (value === null || value === undefined || value === "") return "—";
-        if (typeof value === "object") {
-            return Object.entries(value)
-                .filter(([, nested]) => nested !== null && nested !== "")
-                .map(([key, nested]) => `${key.replaceAll("_", " ")}: ${nested}`)
-                .join("; ") || "—";
-        }
-        return String(value).replaceAll("_", " ");
-    }
-
-    function demographicsText(demographics) {
-        return Object.entries(demographics || {})
-            .filter(([, value]) => value !== null && value !== ""
-                && !(typeof value === "object" && !Object.keys(value).length))
-            .map(([key, value]) => `${key.replaceAll("_", " ")}: ${displayValue(value)}`)
-            .join("; ") || "Not recorded";
     }
 
     function advancedHighlightedText(message, report, codeById, codeIdsByUnit) {
@@ -292,10 +266,7 @@
             "transcriptIdentity"
         ));
         section.appendChild(paragraph(
-            `Demographic data: ${demographicsText(detail.previous?.demographics)}`
-        ));
-        section.appendChild(paragraph(
-            "Demographics are shown from the preserved prior report for review only; they were not used as analytical input for this new transcript-only run.",
+            "This report was generated from the source transcript and stored English translations only; no earlier analysis report was used.",
             "muted"
         ));
 
@@ -359,29 +330,8 @@
                 report.analysis_version,
                 report.prompt_version,
                 `report ${report.id}`,
-                `preserved source report ${report.source_report_id || "historical transcript only"}`
+                "source: transcript and stored translations only"
             ].join(" · ");
-
-            dialogContent.appendChild(heading("Previous preliminary analysis (preserved comparison)"));
-            if (detail.previous) {
-                dialogContent.appendChild(paragraph(
-                    `${detail.previous.analysis_version} · ${detail.previous.model} · report ${detail.previous.id}`,
-                    "muted"
-                ));
-                dialogContent.appendChild(paragraph(
-                    `Previous codes: ${listLabels(detail.previous.codes, "code_number", "code_label", "CO")}`
-                ));
-                dialogContent.appendChild(paragraph(
-                    `Previous categories: ${listLabels(detail.previous.categories, "category_number", "category_label", "CA")}`
-                ));
-                dialogContent.appendChild(paragraph(
-                    `Previous tentative themes: ${listLabels(detail.previous.themes, "theme_number", "theme_label", "TH")}`
-                ));
-            } else {
-                dialogContent.appendChild(paragraph(
-                    "No previous report link is available for this historical case. The original transcript remains preserved."
-                ));
-            }
 
             dialogContent.appendChild(heading("New transcript-grounded transformation"));
             dialogContent.appendChild(paragraph(report.case_summary));
@@ -502,8 +452,8 @@
 
     startButton.addEventListener("click", async () => {
         const confirmed = window.confirm(
-            "Start a new advanced-model preliminary analysis for all 275 completed transcripts? "
-            + "This creates a separate version and preserves every existing report. The run stops at categories."
+            "Start a new advanced-model preliminary analysis for all completed transcripts? "
+            + "The invalid reports have been discarded. This clean run uses transcripts and stored translations only, and stops at categories."
         );
         if (!confirmed) return;
         startButton.disabled = true;

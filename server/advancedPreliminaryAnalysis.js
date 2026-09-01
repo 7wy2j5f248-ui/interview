@@ -10,9 +10,9 @@ export const ADVANCED_PRELIMINARY_PROVIDER = "openai";
 export const ADVANCED_PRELIMINARY_MODEL = "gpt-5.6-sol";
 export const ADVANCED_PRELIMINARY_REASONING_EFFORT = "high";
 export const ADVANCED_PRELIMINARY_ANALYSIS_VERSION =
-    "advanced-preliminary-v2-full-transcript-coverage";
+    "advanced-preliminary-v3-overlapping-categories";
 export const ADVANCED_PRELIMINARY_PROMPT_VERSION =
-    "advanced-preliminary-prompt-v2-coverage-audited-concepts";
+    "advanced-preliminary-prompt-v3-many-to-many-categories";
 
 const analysisSchema = {
     type: "object",
