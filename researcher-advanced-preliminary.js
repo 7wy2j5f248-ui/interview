@@ -1,4 +1,4 @@
-(function initializeAdvancedPreliminaryAnalysis() {
+(function initializeStagedQualitativeAnalysis() {
     "use strict";
 
     const TOKEN_STORAGE_KEY = "researcherDashboardToken";
@@ -10,8 +10,10 @@
     const status = document.getElementById("advancedPreliminaryStatus");
     const provenance = document.getElementById("advancedPreliminaryProvenance");
     const tableHost = document.getElementById("advancedPreliminaryTable");
+    const modelSelect = document.getElementById("advancedPreliminaryModel");
     const startButton = document.getElementById("advancedPreliminaryStartButton");
     const refreshButton = document.getElementById("advancedPreliminaryRefreshButton");
+    const downloadButton = document.getElementById("advancedPreliminaryDownloadButton");
     const previousButton = document.getElementById("advancedPreliminaryPreviousPage");
     const nextButton = document.getElementById("advancedPreliminaryNextPage");
     const pageLabel = document.getElementById("advancedPreliminaryPageLabel");
@@ -30,9 +32,7 @@
 
     function setStatus(message, isError = false) {
         status.textContent = message;
-        status.className = isError
-            ? "errorMessage"
-            : "automaticReviewScopeSummary";
+        status.className = isError ? "errorMessage" : "automaticReviewScopeSummary";
     }
 
     async function request(url, options = {}) {
@@ -46,10 +46,21 @@
             cache: "no-store"
         });
         const body = await response.json().catch(() => ({}));
-        if (!response.ok) {
-            throw new Error(body.error || `Request failed with ${response.status}.`);
-        }
+        if (!response.ok) throw new Error(body.error || `Request failed with ${response.status}.`);
         return body;
+    }
+
+    function paragraph(text, className = "") {
+        const element = document.createElement("p");
+        element.textContent = text;
+        element.className = className;
+        return element;
+    }
+
+    function heading(text) {
+        const element = document.createElement("h3");
+        element.textContent = text;
+        return element;
     }
 
     function cell(row, value) {
@@ -57,7 +68,6 @@
         element.textContent = value === null || value === undefined || value === ""
             ? "—" : String(value);
         row.appendChild(element);
-        return element;
     }
 
     function table(headers) {
@@ -79,8 +89,23 @@
         return { scroll, element };
     }
 
+    function renderModels() {
+        const models = payload.availableModels || [];
+        const currentValue = modelSelect.value;
+        modelSelect.replaceChildren();
+        models.forEach(model => {
+            const option = document.createElement("option");
+            option.value = model;
+            option.textContent = model;
+            modelSelect.appendChild(option);
+        });
+        modelSelect.value = models.includes(currentValue)
+            ? currentValue : payload.defaultModel || models[0] || "";
+    }
+
     function render() {
         tableHost.replaceChildren();
+        renderModels();
         const run = payload.run;
         [
             ["advancedPreliminaryPending", run?.pending_count || 0],
@@ -92,15 +117,21 @@
         });
 
         if (!run) {
-            provenance.textContent = "No advanced preliminary analysis run has been created yet.";
-            startButton.disabled = false;
+            provenance.textContent = "No Stage 1 Meaning Unit run has been created yet.";
+            setStatus("Choose a configured model, then start Stage 1 for the Sleeping habits project.");
+            startButton.disabled = !modelSelect.value;
+            modelSelect.disabled = false;
+            downloadButton.disabled = true;
             previousButton.disabled = true;
             nextButton.disabled = true;
             return;
         }
 
+        const active = ["queued", "processing"].includes(run.status);
         provenance.textContent = [
             `Run ${run.run_number}`,
+            `project ${run.project_snapshot?.[0]?.project_name || "Sleeping habits"}`,
+            `topic ${run.project_snapshot?.[0]?.research_topic || "Sleeping habits"}`,
             `${run.provider} / requested ${run.model}`,
             `resolved ${run.resolved_model || "not recorded"}`,
             `reasoning ${run.reasoning_effort}`,
@@ -109,34 +140,39 @@
             `stop layer ${run.stop_layer}`,
             `model verified ${run.model_verified_at || "not verified"}`
         ].join(" · ");
-        startButton.disabled = ["queued", "processing"].includes(run.status);
+        startButton.disabled = active || !modelSelect.value;
+        modelSelect.disabled = active;
+        downloadButton.disabled = run.completed_count < 1;
         setStatus(
-            `Advanced run ${run.run_number}: ${run.status.replaceAll("_", " ")}. `
-            + `${run.completed_count} of ${run.source_case_count} cases completed. `
-            + "This run uses transcripts and stored translations only."
+            `Stage 1 run ${run.run_number}: ${run.status.replaceAll("_", " ")}. `
+            + `${run.completed_count} of ${run.source_case_count} cases completed using `
+            + `${run.resolved_model || run.model}. Codes, Categories, and Themes are locked. `
+            + "All earlier reports remain preserved and current."
         );
 
         const built = table([
             "Case ID", "Project lineage", "Status", "Meaning Units",
-            "Preliminary Codes", "Preliminary Categories", "Inspect"
+            "Coverage audit", "Inspect"
         ]);
         const body = document.createElement("tbody");
         payload.cases.forEach(item => {
             const row = document.createElement("tr");
             cell(row, item.case_number);
             cell(row, item.project_binding_status === "project_bound"
-                ? "Project-bound" : "Historical unbound");
+                ? "Sleeping habits" : "Out of scope");
             cell(row, item.status === "failed"
                 ? `Needs attention${item.last_error ? `: ${item.last_error}` : ""}`
                 : item.status.replaceAll("_", " "));
             cell(row, item.report?.meaningUnitCount ?? "—");
-            cell(row, item.report?.codeCount ?? "—");
-            cell(row, item.report?.categoryCount ?? "—");
+            cell(row, item.report
+                ? item.report.analytical_audit?.fullTranscriptCoverage
+                    ? "Verified" : "Not verified"
+                : "—");
             const action = document.createElement("td");
             const button = document.createElement("button");
             button.type = "button";
             button.textContent = item.report
-                ? "Inspect MU → Code → Category"
+                ? "Inspect Meaning Units"
                 : item.status === "processing" ? "Processing" : "Not ready";
             button.disabled = !item.report;
             button.addEventListener("click", () => openCase(item.case_number));
@@ -148,14 +184,13 @@
         tableHost.appendChild(built.scroll);
         pageLabel.textContent = `Page ${payload.page}`;
         previousButton.disabled = payload.page <= 1;
-        nextButton.disabled = payload.page * payload.pageSize
-            >= run.source_case_count;
+        nextButton.disabled = payload.page * payload.pageSize >= run.source_case_count;
     }
 
     async function load({ quiet = false } = {}) {
         if (loading || !token() || workspace?.hidden) return;
         loading = true;
-        if (!quiet) setStatus("Loading the advanced preliminary run…");
+        if (!quiet) setStatus("Loading Stage 1 progress…");
         try {
             payload = await request(`${API_PATH}&page=${page}&_=${Date.now()}`);
             render();
@@ -170,116 +205,62 @@
         }
     }
 
-    function heading(text) {
-        const element = document.createElement("h3");
-        element.textContent = text;
-        return element;
+    function meaningUnitColor(unitNumber) {
+        return `keywordColor${((Number(unitNumber) - 1) % 12) + 1}`;
     }
 
-    function paragraph(text, className = "") {
-        const element = document.createElement("p");
-        element.textContent = text;
-        element.className = className;
-        return element;
-    }
-
-    function meaningUnitBlock(unit, transcriptById) {
-        const container = document.createElement("blockquote");
-        const source = transcriptById.get(unit.message_id);
-        container.appendChild(paragraph(
-            `MU${unit.unit_number} · stable ID ${unit.id} · message ${unit.message_id}`,
-            "muted"
-        ));
-        container.appendChild(paragraph(`Original: ${unit.exact_source_text}`));
-        if (source?.EnglishTranslation
-            && source.EnglishTranslation !== source.Message) {
-            container.appendChild(paragraph(
-                `English message translation: ${source.EnglishTranslation}`,
-                "muted"
-            ));
-        }
-        container.appendChild(paragraph(
-            `Transcript offsets ${unit.start_offset}–${unit.end_offset}; occurrence ${unit.occurrence_index}.`,
-            "muted"
-        ));
-        return container;
-    }
-
-    function codeColorSlot(codeNumber) {
-        const numeric = Number.parseInt(codeNumber, 10);
-        return Number.isFinite(numeric) && numeric > 0
-            ? ((numeric - 1) % 12) + 1
-            : 1;
-    }
-
-    function advancedHighlightedText(message, report, codeById, codeIdsByUnit) {
+    function highlightedMessage(message, meaningUnits) {
         const text = message.Message || "";
-        const highlights = report.meaningUnits
+        const highlights = meaningUnits
             .filter(unit => unit.message_id === message.id)
-            .map(unit => ({
-                ...unit,
-                codes: [...new Set(codeIdsByUnit.get(unit.id) || [])]
-                    .map(codeId => codeById.get(codeId))
-                    .filter(Boolean)
-            }))
-            .sort((left, right) => left.start_offset - right.start_offset
-                || right.end_offset - left.end_offset);
+            .sort((left, right) => left.start_offset - right.start_offset);
         const fragment = document.createDocumentFragment();
         let cursor = 0;
-
         highlights.forEach(unit => {
             if (unit.start_offset < cursor || unit.end_offset > text.length) return;
             fragment.append(document.createTextNode(text.slice(cursor, unit.start_offset)));
             const annotation = document.createElement("span");
             annotation.className = "meaningUnitAnnotation";
-            const firstCode = unit.codes[0];
-            const colorClass = `keywordColor${codeColorSlot(firstCode?.code_number)}`;
+            const colorClass = meaningUnitColor(unit.unit_number);
             const label = document.createElement("span");
             label.className = `meaningUnitCodeLabel ${colorClass}`;
-            const codeLabels = unit.codes.map(code =>
-                `CO${code.code_number}: ${code.code_label}`
-            );
-            label.textContent = codeLabels.length
-                ? `${codeLabels.join(" · ")} · MU${unit.unit_number}`
-                : `MU${unit.unit_number}`;
+            label.textContent = `MU${unit.unit_number}`;
             const mark = document.createElement("mark");
             mark.className = colorClass;
             mark.textContent = text.slice(unit.start_offset, unit.end_offset);
-            mark.title = codeLabels.join(" · ") || `MU${unit.unit_number}`;
+            mark.title = `MU${unit.unit_number} · stable ID ${unit.id}`;
             annotation.append(label, mark);
             fragment.append(annotation);
             cursor = unit.end_offset;
         });
-
         fragment.append(document.createTextNode(text.slice(cursor)));
         return fragment;
     }
 
-    function advancedAnnotatedTranscript(detail, report, codeById, codeIdsByUnit) {
-        const section = document.createElement("section");
-        section.className = "automaticReanalysisPanel";
-        section.appendChild(heading("Advanced annotated transcript (review format)"));
-        section.appendChild(paragraph(
+    function annotatedTranscript(detail, report) {
+        const panel = document.createElement("section");
+        panel.className = "automaticReanalysisPanel";
+        panel.appendChild(heading("Stage 1 annotated transcript"));
+        panel.appendChild(paragraph(
             `Participant code: ${report.participant_code || "—"} · `
             + `Participant ID: ${report.participant_id || "—"} · `
             + `Session ID: ${report.session_id || detail.job.session_id || "—"} · linked match`,
             "transcriptIdentity"
         ));
-        section.appendChild(paragraph(
-            "This report was generated from the source transcript and stored English translations only; no earlier analysis report was used.",
+        panel.appendChild(paragraph(
+            "This Stage 1 proposal uses transcripts and stored translations only. Every colored span below is an exact original-transcript Meaning Unit; no Code, Category, or Theme exists at this stage.",
             "muted"
         ));
-
         const legend = document.createElement("div");
-        legend.setAttribute("aria-label", "Advanced code colour legend");
-        report.codes.forEach(code => {
+        legend.setAttribute("aria-label", "Meaning Unit colour legend");
+        report.meaningUnits.forEach(unit => {
             const item = document.createElement("span");
-            item.className = `keywordLegend keywordColor${codeColorSlot(code.code_number)}`;
-            item.textContent = `CO${code.code_number}: ${code.code_label}`;
-            item.title = code.rationale;
+            item.className = `keywordLegend ${meaningUnitColor(unit.unit_number)}`;
+            item.textContent = `MU${unit.unit_number}`;
+            item.title = `Stable ID ${unit.id} · message ${unit.message_id}`;
             legend.appendChild(item);
         });
-        section.appendChild(legend);
+        panel.appendChild(legend);
 
         detail.transcript.forEach(message => {
             const article = document.createElement("article");
@@ -291,25 +272,22 @@
                 ? `${message.Speaker || "Speaker"} · English original: `
                 : `${message.Speaker || "Speaker"} · Original (${language || "language not recorded"}): `;
             source.appendChild(speaker);
-            source.appendChild(advancedHighlightedText(
-                message, report, codeById, codeIdsByUnit
-            ));
+            source.appendChild(highlightedMessage(message, report.meaningUnits));
             article.appendChild(source);
-            if (message.EnglishTranslation
-                && message.EnglishTranslation !== message.Message) {
+            if (message.EnglishTranslation && message.EnglishTranslation !== message.Message) {
                 article.appendChild(paragraph(
                     `English translation: ${message.EnglishTranslation}`,
                     "englishTranslation"
                 ));
             }
-            section.appendChild(article);
+            panel.appendChild(article);
         });
-        return section;
+        return panel;
     }
 
     async function openCase(caseNumber) {
-        dialogHeading.textContent = `${caseNumber} · Advanced preliminary case report`;
-        dialogProvenance.textContent = "Loading traceability…";
+        dialogHeading.textContent = `${caseNumber} · Stage 1 Meaning Units`;
+        dialogProvenance.textContent = "Loading exact evidence and provenance…";
         dialogContent.replaceChildren();
         dialog.showModal();
         try {
@@ -319,161 +297,112 @@
             const report = detail.report;
             if (!report) {
                 dialogContent.appendChild(paragraph(
-                    `This case is ${detail.job.status}; no advanced report is available yet.`
+                    `This case is ${detail.job.status}; no Stage 1 proposal is available yet.`
                 ));
                 return;
             }
             dialogProvenance.textContent = [
                 `Run ${detail.run.run_number}`,
-                `${report.provider} / ${report.resolved_model || report.model}`,
+                `project ${detail.run.project_snapshot?.[0]?.project_name || "Sleeping habits"}`,
+                `topic ${detail.run.project_snapshot?.[0]?.research_topic || "Sleeping habits"}`,
+                `${report.provider} / requested ${report.model}`,
+                `resolved ${report.resolved_model || report.model}`,
                 `reasoning ${report.reasoning_effort}`,
                 report.analysis_version,
                 report.prompt_version,
-                `report ${report.id}`,
-                "source: transcript and stored translations only"
+                `stop layer ${detail.run.stop_layer}`,
+                `proposal report ${report.id}`,
+                "source: transcripts and stored translations only"
             ].join(" · ");
-
-            dialogContent.appendChild(heading("New transcript-grounded transformation"));
             dialogContent.appendChild(paragraph(report.case_summary));
-            const transcriptById = new Map(detail.transcript.map(message => [
-                message.id,
-                message
-            ]));
-            const muById = new Map(report.meaningUnits.map(unit => [unit.id, unit]));
-            const codeById = new Map(report.codes.map(code => [code.id, code]));
-            const muIdsByCode = report.codeMeaningUnits.reduce((map, link) => {
-                const ids = map.get(link.code_id) || [];
-                ids.push(link.meaning_unit_id);
-                map.set(link.code_id, ids);
-                return map;
-            }, new Map());
-            const codeIdsByUnit = report.codeMeaningUnits.reduce((map, link) => {
-                const ids = map.get(link.meaning_unit_id) || [];
-                ids.push(link.code_id);
-                map.set(link.meaning_unit_id, ids);
-                return map;
-            }, new Map());
-            const codeIdsByCategory = report.categoryCodes.reduce((map, link) => {
-                const ids = map.get(link.category_id) || [];
-                ids.push(link.code_id);
-                map.set(link.category_id, ids);
-                return map;
-            }, new Map());
-            const assignedCodeIds = new Set(report.categoryCodes.map(link => link.code_id));
-
-            dialogContent.appendChild(advancedAnnotatedTranscript(
-                detail, report, codeById, codeIdsByUnit
+            dialogContent.appendChild(annotatedTranscript(detail, report));
+            dialogContent.appendChild(heading("Independent Stage 1 coverage audit"));
+            dialogContent.appendChild(paragraph(
+                report.analytical_audit?.overallSummary || "No audit summary was recorded."
             ));
-
-            report.categories.forEach(category => {
-                const categorySection = document.createElement("section");
-                categorySection.className = "automaticReanalysisPanel";
-                categorySection.appendChild(heading(
-                    `CA${category.category_number} ${category.category_label}`
-                ));
-                categorySection.appendChild(paragraph(
-                    `${category.definition} ${category.rationale}`
-                ));
-                categorySection.appendChild(paragraph(
-                    `Stable category ID: ${category.id}`,
+            dialogContent.appendChild(paragraph(
+                `Accepted Meaning Units: ${(report.analytical_audit?.meaningUnitChecks || [])
+                    .filter(check => check.accepted).length}/${report.meaningUnits.length}; `
+                + `full-transcript coverage: ${report.analytical_audit?.fullTranscriptCoverage ? "verified" : "not verified"}; `
+                + `Stage 1 only: ${report.analytical_audit?.stage1Only ? "verified" : "not verified"}.`,
+                report.analytical_audit?.fullTranscriptCoverage
+                    && report.analytical_audit?.stage1Only ? "muted" : "errorMessage"
+            ));
+            report.meaningUnits.forEach(unit => {
+                const block = document.createElement("blockquote");
+                block.appendChild(paragraph(
+                    `MU${unit.unit_number} · stable ID ${unit.id} · message ${unit.message_id}`,
                     "muted"
                 ));
-                (codeIdsByCategory.get(category.id) || []).forEach(codeId => {
-                    const code = codeById.get(codeId);
-                    if (!code) return;
-                    categorySection.appendChild(heading(
-                        `CO${code.code_number} ${code.code_label}`
-                    ));
-                    categorySection.appendChild(paragraph(
-                        `${code.definition} ${code.rationale}`
-                    ));
-                    categorySection.appendChild(paragraph(
-                        `Stable code ID: ${code.id} · ${code.meaning_unit_count} linked Meaning Unit(s)`,
-                        "muted"
-                    ));
-                    (muIdsByCode.get(code.id) || []).forEach(muId => {
-                        const unit = muById.get(muId);
-                        if (unit) categorySection.appendChild(
-                            meaningUnitBlock(unit, transcriptById)
-                        );
-                    });
-                });
-                dialogContent.appendChild(categorySection);
+                block.appendChild(paragraph(`Original: ${unit.exact_source_text}`));
+                block.appendChild(paragraph(
+                    `Offsets ${unit.start_offset}–${unit.end_offset}; occurrence ${unit.occurrence_index}. ${unit.context_note || ""}`,
+                    "muted"
+                ));
+                dialogContent.appendChild(block);
             });
-
-            const unassignedCodes = report.codes.filter(code =>
-                !assignedCodeIds.has(code.id)
-            );
-            if (unassignedCodes.length) {
-                dialogContent.appendChild(heading("Firm preliminary codes not forced into a category"));
-                unassignedCodes.forEach(code => {
-                    dialogContent.appendChild(heading(
-                        `CO${code.code_number} ${code.code_label}`
-                    ));
-                    dialogContent.appendChild(paragraph(
-                        `${code.definition} ${code.rationale}`
-                    ));
-                    (muIdsByCode.get(code.id) || []).forEach(muId => {
-                        const unit = muById.get(muId);
-                        if (unit) dialogContent.appendChild(
-                            meaningUnitBlock(unit, transcriptById)
-                        );
-                    });
-                });
-            }
-
-            dialogContent.appendChild(heading("Independent analytical audit"));
-            dialogContent.appendChild(paragraph(
-                report.analytical_audit?.overallSummary
-                    || "No audit summary was recorded."
-            ));
-            dialogContent.appendChild(paragraph(
-                `Accepted codes: ${(report.analytical_audit?.codeChecks || []).filter(check => check.accepted).length}/${report.codes.length}; `
-                + `accepted categories: ${(report.analytical_audit?.categoryChecks || []).filter(check => check.accepted).length}/${report.categories.length}.`,
-                "muted"
-            ));
-            dialogContent.appendChild(paragraph(
-                `Full-transcript coverage: ${report.analytical_audit?.fullTranscriptCoverage ? "verified" : "not verified"}; `
-                + `case summary uses only coded evidence: ${report.analytical_audit?.summaryUsesOnlyCodedEvidence ? "verified" : "not verified"}.`,
-                report.analytical_audit?.fullTranscriptCoverage
-                    && report.analytical_audit?.summaryUsesOnlyCodedEvidence
-                    ? "muted" : "errorMessage"
-            ));
-            (report.analytical_audit?.omittedRelevantEvidence || [])
-                .forEach(item => dialogContent.appendChild(paragraph(
-                    `Omitted evidence · message ${item.messageId}: ${item.exactSourceText} — ${item.explanation}`,
-                    "errorMessage"
-                )));
-
         } catch (error) {
             dialogContent.appendChild(paragraph(error.message, "errorMessage"));
         }
     }
 
     startButton.addEventListener("click", async () => {
+        const selectedModel = modelSelect.value;
+        if (!selectedModel) return;
         const confirmed = window.confirm(
-            "Start a new advanced-model preliminary analysis for all completed transcripts? "
-            + "The invalid reports have been discarded. This clean run uses transcripts and stored translations only, and stops at categories."
+            `Start Stage 1 Meaning Unit identification for all eligible completed Sleeping habits transcripts using ${selectedModel}? `
+            + "This creates a separate proposal version, preserves every earlier report, and does not generate Codes, Categories, or Themes."
         );
         if (!confirmed) return;
         startButton.disabled = true;
-        setStatus("Verifying the stronger model against the production API…");
+        modelSelect.disabled = true;
+        setStatus(`Verifying ${selectedModel} against the production API…`);
         try {
             const result = await request(API_PATH, {
                 method: "POST",
-                body: JSON.stringify({ action: "start" })
+                body: JSON.stringify({ action: "start", model: selectedModel })
             });
             setStatus(
                 `Model verified: ${result.provider} ${result.resolvedModel}, reasoning ${result.reasoningEffort}. `
-                + "The 275-case run is queued in source-completion order."
+                + `The ${result.project.project_name} Stage 1 run is queued in source-completion order and stops at ${result.stopLayer}.`
             );
             page = 1;
             await load({ quiet: true });
         } catch (error) {
             setStatus(error.message, true);
             startButton.disabled = false;
+            modelSelect.disabled = false;
         }
     });
+
+    downloadButton.addEventListener("click", async () => {
+        downloadButton.disabled = true;
+        setStatus("Preparing the Stage 1 provenance export…");
+        try {
+            const response = await fetch(
+                `${API_PATH}&download=stage1-csv&_=${Date.now()}`,
+                { headers: { Authorization: `Bearer ${token()}` }, cache: "no-store" }
+            );
+            if (!response.ok) {
+                const body = await response.json().catch(() => ({}));
+                throw new Error(body.error || "The Stage 1 export could not be prepared.");
+            }
+            const blob = await response.blob();
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = `sleeping-habits-stage1-run-${payload.run?.run_number || "latest"}.csv`;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            URL.revokeObjectURL(url);
+            render();
+        } catch (error) {
+            setStatus(error.message, true);
+            downloadButton.disabled = false;
+        }
+    });
+
     refreshButton.addEventListener("click", () => load());
     previousButton.addEventListener("click", () => {
         if (page <= 1) return;

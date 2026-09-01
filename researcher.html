@@ -959,18 +959,18 @@
         analysis version. They are not being deleted, overwritten, or treated
         as final cross-case analysis. A new advanced-model preliminary run is
         shown separately below so its results can be compared with this
-        historical version. Meaning units are first completed within every
-        individual case; the new run then develops case-based preliminary codes
-        and categories and stops before themes or any cross-case refinement.
+        historical version. The staged workflow below now performs only
+        independent, case-grounded Meaning Unit identification. Cross-case Code
+        refinement, Code freezing, Category refinement, and Theme development
+        remain locked until the researcher has inspected the completed prior stage.
     </p>
     <p class="automaticPipelineNote">
         <strong>Analytical abbreviations:</strong> TH = Theme · CA = Category ·
         CO = Code · K = Keyword · MU = Meaning Unit.
-        Meaning units, codes, and categories are firm evidence-grounded units.
-        A category answers “What is being described?” A theme states the
-        patterned meaning linking categories. PLI publishes the completed
-        outcome without pausing for researcher approval; researcher feedback
-        starts a new traceable version afterward.
+        Meaning Units are exact, case-grounded evidence spans. They are not
+        standardized across cases. The Code layer is the first future layer at
+        which cross-case harmonization may occur, but it is unavailable during
+        Stage 1.
     </p>
 
     <div id="automaticAnalysisTokenGate">
@@ -1010,30 +1010,49 @@
         <div id="automaticAnalysisTable"></div>
 
         <section id="advancedPreliminaryAnalysis" class="analysisDiscussion" aria-labelledby="advancedPreliminaryHeading">
-            <h3 id="advancedPreliminaryHeading">New Advanced-Model Preliminary Analysis</h3>
+            <h3 id="advancedPreliminaryHeading">Staged Qualitative Analysis</h3>
             <p>
-                This separate version begins again from the original transcript
-                for every completed case. It produces only
-                <strong>Meaning Units → Preliminary Analytical Codes → Preliminary Categories</strong>.
-                It does not read the previous analytical objects, generate
-                themes, harmonize codes across cases, or replace the existing
-                reports.
+                <strong>Stage 1 is active: Transcript → Meaning Units.</strong>
+                Each completed Sleeping habits transcript is read independently.
+                The result contains exact original-transcript evidence only. It
+                does not read prior analytical objects, compare cases, or generate
+                Codes, Categories, or Themes.
             </p>
             <p class="muted">
-                The 275-case dataset includes 269 project-bound Sleeping habits
-                cases and six historical cases created before project binding.
-                Historical cases remain visible and are explicitly marked.
+                Every Stage 1 proposal is separately versioned and preserves its
+                transcript message, exact text, offsets, project/topic, chosen
+                model, prompt, audit, prior-report link, and stable Meaning Unit ID.
+                All earlier reports remain preserved and current.
+            </p>
+            <ol class="automaticReanalysisPanel" aria-label="Staged qualitative analysis workflow">
+                <li><strong>Stage 1 · Meaning Units</strong> — available now</li>
+                <li><button type="button" disabled>Stage 2 · Cross-Case Code Refinement — locked</button></li>
+                <li><button type="button" disabled>Stage 3 · Freeze Approved Codes — locked</button></li>
+                <li><button type="button" disabled>Stage 4 · Category Refinement — locked</button></li>
+                <li><button type="button" disabled>Stage 5 · Theme Development — locked</button></li>
+            </ol>
+            <label for="advancedPreliminaryModel">
+                Stage 1 analysis model
+                <select id="advancedPreliminaryModel" aria-describedby="advancedPreliminaryModelHelp"></select>
+            </label>
+            <p id="advancedPreliminaryModelHelp" class="muted">
+                The list comes from the server-side approved model catalog. The
+                selected model is tested before launch and permanently recorded
+                on the run. An active run cannot change models.
             </p>
             <div class="actionRow">
                 <button id="advancedPreliminaryStartButton" type="button">
-                    Start new advanced preliminary run
+                    Start Stage 1 Meaning Unit run
                 </button>
                 <button id="advancedPreliminaryRefreshButton" type="button">
-                    Refresh advanced run
+                    Refresh Stage 1 run
+                </button>
+                <button id="advancedPreliminaryDownloadButton" type="button" disabled>
+                    Download Stage 1 provenance CSV
                 </button>
             </div>
             <p id="advancedPreliminaryStatus" class="automaticReviewScopeSummary" role="status">
-                Load the advanced preliminary run to inspect its model and progress.
+                Load Stage 1 to inspect its model, coverage, and progress.
             </p>
             <div class="analysisOverview" aria-label="Advanced preliminary analysis progress">
                 <div class="analysisMetric"><strong id="advancedPreliminaryPending">0</strong>Waiting</div>
@@ -1236,8 +1255,8 @@
 </dialog>
 
 <dialog id="advancedPreliminaryDialog">
-    <button id="advancedPreliminaryDialogClose" type="button">Close advanced case report</button>
-    <h2 id="advancedPreliminaryDialogHeading">Advanced preliminary case report</h2>
+    <button id="advancedPreliminaryDialogClose" type="button">Close Stage 1 case report</button>
+    <h2 id="advancedPreliminaryDialogHeading">Stage 1 Meaning Units</h2>
     <p id="advancedPreliminaryDialogProvenance" class="transcriptIdentity"></p>
     <div id="advancedPreliminaryDialogContent"></div>
 </dialog>
@@ -2080,7 +2099,7 @@ loadStatistics();
 
 </script>
 <script src="researcher-automatic-analysis.js?version=20260831-advanced-preliminary-v1"></script>
-<script src="researcher-advanced-preliminary.js?version=20260831-advanced-preliminary-v1"></script>
+<script src="researcher-advanced-preliminary.js?version=20260901-stage1-meaning-units-v1"></script>
     
 </body>
 </html>

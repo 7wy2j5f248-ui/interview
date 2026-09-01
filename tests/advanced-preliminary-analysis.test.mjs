@@ -6,29 +6,28 @@ import {
     ADVANCED_PRELIMINARY_MODEL,
     ADVANCED_PRELIMINARY_PROMPT_VERSION,
     ADVANCED_PRELIMINARY_REASONING_EFFORT,
+    ADVANCED_PRELIMINARY_STOP_LAYER,
     validateAdvancedPreliminaryAnalysis,
     validateAdvancedPreliminaryAudit
 } from "../server/advancedPreliminaryAnalysis.js";
+import {
+    configuredStage1DefaultModel,
+    configuredStage1Models
+} from "../server/analysisModelCatalog.js";
 
 const root = new URL("../", import.meta.url);
 const source = path => readFile(new URL(path, root), "utf8");
 
 const messages = [{
     id: "00000000-0000-4000-8000-000000000001",
-    sessionId: "S1",
-    participantId: "P1",
     language: "en",
     originalText: "I normally do not go to bed until around 12:30, and I feel tired the next day.",
-    englishTranslation: null,
     analysisText: "I normally do not go to bed until around 12:30, and I feel tired the next day."
 }, {
     id: "00000000-0000-4000-8000-000000000002",
-    sessionId: "S1",
-    participantId: "P1",
     language: "en",
-    originalText: "I stay awake really late most nights.",
-    englishTranslation: null,
-    analysisText: "I stay awake really late most nights."
+    originalText: "I want a quieter environment, although I stay awake really late most nights.",
+    analysisText: "I want a quieter environment, although I stay awake really late most nights."
 }];
 
 function validDraft() {
@@ -37,206 +36,145 @@ function validDraft() {
             message_id: messages[0].id,
             exact_source_text: "do not go to bed until around 12:30",
             occurrence_index: 1,
-            context_note: "Bedtime timing"
+            context_note: "Exact sleep-timing evidence."
         }, {
             message_id: messages[0].id,
             exact_source_text: "I feel tired the next day",
             occurrence_index: 1,
-            context_note: "Daytime consequence"
+            context_note: "Exact next-day consequence."
         }, {
             message_id: messages[1].id,
-            exact_source_text: "stay awake really late most nights",
+            exact_source_text: "I want a quieter environment",
             occurrence_index: 1,
-            context_note: "Repeated late timing"
-        }],
-        codes: [{
-            label: "Late bedtime",
-            definition: "Habitually delayed sleep onset timing.",
-            rationale: "Two distinct meaning units express delayed bedtime.",
-            meaning_unit_numbers: [1, 3]
+            context_note: "Exact desired sleep-environment change."
         }, {
-            label: "Daytime fatigue",
-            definition: "Tiredness experienced during the following day.",
-            rationale: "The participant explicitly reports next-day tiredness.",
-            meaning_unit_numbers: [2]
-        }],
-        categories: [{
-            label: "Sleep timing consequences",
-            definition: "Relationships between sleep timing and daytime condition.",
-            rationale: "Groups delayed bedtime with its stated daytime consequence.",
-            code_numbers: [1, 2]
-        }],
-        case_summary: "This case describes delayed bedtime and next-day fatigue."
+            message_id: messages[1].id,
+            exact_source_text: "I stay awake really late most nights",
+            occurrence_index: 1,
+            context_note: "Exact repeated sleep-timing evidence."
+        }]
     };
 }
 
-test("advanced preliminary validation preserves reusable codes and exact MU lineage", () => {
-    const result = validateAdvancedPreliminaryAnalysis(validDraft(), messages);
-    assert.equal(result.complete, true);
-    assert.equal(result.meaningUnits.length, 3);
-    assert.deepEqual(result.codes[0].meaningUnitNumbers, [1, 3]);
-    assert.deepEqual(result.categories[0].codeNumbers, [1, 2]);
-    assert.deepEqual(result.unassignedCodeNumbers, []);
-    assert.equal(result.meaningUnits[0].exactSourceText,
-        "do not go to bed until around 12:30");
-    assert.equal(result.meaningUnits[0].messageId, messages[0].id);
-});
-
-test("advanced preliminary categories may reuse analytically related codes", () => {
-    const draft = validDraft();
-    draft.categories.push({
-        label: "Daily effects",
-        definition: "Ways sleep timing is connected with daytime experience.",
-        rationale: "The same timing and fatigue codes support a distinct daily-effects grouping.",
-        code_numbers: [1, 2]
-    });
-
-    const result = validateAdvancedPreliminaryAnalysis(draft, messages);
-
-    assert.equal(result.complete, true);
-    assert.equal(result.categories.length, 2);
-    assert.deepEqual(result.categories[1].codeNumbers, [1, 2]);
-    assert.deepEqual(result.unassignedCodeNumbers, []);
-});
-
-test("advanced preliminary validation rejects rewritten or non-source meaning units", () => {
-    const draft = validDraft();
-    draft.meaning_units[0].exact_source_text = "Usually sleeps late";
-    const result = validateAdvancedPreliminaryAnalysis(draft, messages);
-    assert.equal(result.complete, false);
-    assert.match(result.invalidReasons.join(" "), /exact substantive span/);
-});
-
-test("independent audit makes case-paraphrase and reusability explicit gates", () => {
-    const analysis = validateAdvancedPreliminaryAnalysis(validDraft(), messages);
-    const audit = validateAdvancedPreliminaryAudit(analysis, {
-        code_checks: analysis.codes.map((code, index) => ({
-            code_number: index + 1,
-            label: code.label,
-            transcript_grounded: true,
-            analytical_concept: true,
-            not_case_paraphrase: index !== 0,
-            potentially_reusable: true,
-            appropriately_specific: true,
-            meaning_unit_fit: true,
-            explanation: index === 0 ? "Still too close to one utterance." : "Accepted."
+function acceptedAudit(analysis, overrides = {}) {
+    return {
+        meaning_unit_checks: analysis.meaningUnits.map((unit, index) => ({
+            unit_number: index + 1,
+            message_id: unit.messageId,
+            exact_source_match: true,
+            research_relevant: true,
+            smallest_sufficient_span: true,
+            context_preserved: true,
+            explanation: "Accepted exact Meaning Unit."
         })),
-        category_checks: [{
-            category_number: 1,
-            label: analysis.categories[0].label,
-            derived_from_codes: true,
-            coherent_grouping: true,
-            higher_order_abstraction: true,
-            no_theme_claim: true,
-            explanation: "Accepted."
-        }],
         full_transcript_coverage: true,
         omitted_relevant_evidence: [],
-        summary_uses_only_coded_evidence: true,
-        overall_summary: "One code requires repair."
+        stage1_only: true,
+        overall_summary: "Full transcript coverage verified at Meaning Units only.",
+        ...overrides
+    };
+}
+
+test("Stage 1 preserves exact Meaning Units and generates no higher layers", () => {
+    const result = validateAdvancedPreliminaryAnalysis(validDraft(), messages);
+    assert.equal(result.complete, true);
+    assert.equal(result.meaningUnits.length, 4);
+    assert.deepEqual(result.codes, []);
+    assert.deepEqual(result.categories, []);
+    assert.match(result.caseSummary, /No codes, categories, or themes were generated/);
+    assert.equal(result.meaningUnits[2].exactSourceText, "I want a quieter environment");
+});
+
+test("Stage 1 rejects rewritten, courtesy, duplicate, and overlapping evidence", () => {
+    const rewritten = validDraft();
+    rewritten.meaning_units[0].exact_source_text = "Usually sleeps late";
+    assert.equal(validateAdvancedPreliminaryAnalysis(rewritten, messages).complete, false);
+
+    const overlap = validDraft();
+    overlap.meaning_units.push({
+        message_id: messages[0].id,
+        exact_source_text: "around 12:30, and I feel tired",
+        occurrence_index: 1,
+        context_note: "Overlapping span."
     });
-    assert.equal(audit.complete, false);
-    assert.equal(audit.codeChecks[0].notCaseParaphrase, false);
+    const result = validateAdvancedPreliminaryAnalysis(overlap, messages);
+    assert.equal(result.complete, false);
+    assert.match(result.invalidReasons.join(" "), /overlaps another Meaning Unit/);
 });
 
-test("advanced run is versioned, uses a stronger reasoning model, and stops at categories", async () => {
-    assert.equal(ADVANCED_PRELIMINARY_MODEL, "gpt-5.6-sol");
-    assert.equal(ADVANCED_PRELIMINARY_REASONING_EFFORT, "high");
-    assert.match(ADVANCED_PRELIMINARY_ANALYSIS_VERSION, /advanced-preliminary/);
-    assert.match(ADVANCED_PRELIMINARY_ANALYSIS_VERSION, /overlapping-categories/);
-    assert.match(ADVANCED_PRELIMINARY_PROMPT_VERSION, /many-to-many-categories/);
-    const worker = await source("server/advancedPreliminaryAnalysis.js");
-    assert.match(worker, /Stop at preliminary categories/);
-    assert.match(worker, /Do not generate themes/);
-    assert.match(worker, /not a shortened retelling/);
-    assert.match(worker, /exact_source_text verbatim from original_text/);
-    assert.match(worker, /Full-transcript coverage is mandatory/);
-    assert.match(worker, /do not rank or renumber them by frequency/);
-    assert.doesNotMatch(worker, /sharedVocabulary/);
-    assert.doesNotMatch(worker, /at most one category/);
-    assert.doesNotMatch(worker, /unshared codes/);
-});
-
-test("advanced audit rejects omitted relevant transcript evidence", () => {
+test("independent Stage 1 audit requires exact MU checks, coverage, and no higher layer", () => {
     const analysis = validateAdvancedPreliminaryAnalysis(validDraft(), messages);
-    const audit = validateAdvancedPreliminaryAudit(analysis, {
-        code_checks: analysis.codes.map((code, index) => ({
-            code_number: index + 1,
-            label: code.label,
-            transcript_grounded: true,
-            analytical_concept: true,
-            not_case_paraphrase: true,
-            potentially_reusable: true,
-            appropriately_specific: true,
-            meaning_unit_fit: true,
-            explanation: "Accepted."
-        })),
-        category_checks: [{
-            category_number: 1,
-            label: analysis.categories[0].label,
-            derived_from_codes: true,
-            coherent_grouping: true,
-            higher_order_abstraction: true,
-            no_theme_claim: true,
-            explanation: "Accepted."
-        }],
+    const accepted = validateAdvancedPreliminaryAudit(analysis, acceptedAudit(analysis));
+    assert.equal(accepted.complete, true);
+    assert.equal(accepted.meaningUnitChecks.length, 4);
+
+    const rejected = validateAdvancedPreliminaryAudit(analysis, acceptedAudit(analysis, {
         full_transcript_coverage: false,
         omitted_relevant_evidence: [{
             message_id: messages[1].id,
-            exact_source_text: "stay awake really late most nights",
-            explanation: "Relevant later evidence was not represented."
+            exact_source_text: "I want a quieter environment",
+            explanation: "Relevant later evidence was omitted."
         }],
-        summary_uses_only_coded_evidence: true,
-        overall_summary: "Coverage failed."
+        stage1_only: false
+    }));
+    assert.equal(rejected.complete, false);
+    assert.equal(rejected.omittedRelevantEvidence.length, 1);
+    assert.equal(rejected.stage1Only, false);
+});
+
+test("Stage 1 is versioned, stronger-model capable, and stops at Meaning Units", async () => {
+    assert.equal(ADVANCED_PRELIMINARY_MODEL, "gpt-5.6-sol");
+    assert.equal(ADVANCED_PRELIMINARY_REASONING_EFFORT, "high");
+    assert.equal(ADVANCED_PRELIMINARY_STOP_LAYER, "meaning_units");
+    assert.match(ADVANCED_PRELIMINARY_ANALYSIS_VERSION, /stage1-v1-meaning-units-only/);
+    assert.match(ADVANCED_PRELIMINARY_PROMPT_VERSION, /stage1-prompt-v1-exact-coverage/);
+    const worker = await source("server/advancedPreliminaryAnalysis.js");
+    assert.match(worker, /Stop at Meaning Units/);
+    assert.match(worker, /Do not generate, name, imply, copy, or evaluate codes, categories, themes/);
+    assert.match(worker, /Full-transcript coverage is mandatory/);
+    assert.doesNotMatch(worker, /sharedVocabulary/);
+});
+
+test("model selector is driven by a server catalog or configured allowlist", () => {
+    const configured = configuredStage1Models({
+        ADVANCED_PRELIMINARY_ANALYSIS_MODELS: "gpt-5.6-sol,gpt-5.5,gpt-5.6-sol"
     });
-    assert.equal(audit.complete, false);
-    assert.equal(audit.fullTranscriptCoverage, false);
-    assert.equal(audit.omittedRelevantEvidence.length, 1);
+    assert.deepEqual(configured, ["gpt-5.6-sol", "gpt-5.5"]);
+    assert.equal(configuredStage1DefaultModel(configured, {
+        ADVANCED_PRELIMINARY_ANALYSIS_MODEL: "gpt-5.5"
+    }), "gpt-5.5");
 });
 
-test("advanced schema has stable MU to code to category IDs and allows overlap", async () => {
+test("database migration scopes Stage 1 to one project and preserves all prior analysis", async () => {
     const migration = await source(
-        "supabase/migrations/20260831235500_add_advanced_preliminary_analysis.sql"
+        "supabase/migrations/20260901013000_stage1_meaning_units_only.sql"
     );
-    const overlappingCategoryMigration = await source(
-        "supabase/migrations/20260901010000_allow_overlapping_preliminary_categories.sql"
-    );
-    assert.match(migration, /advanced_preliminary_analysis_runs/);
-    assert.match(migration, /advanced_preliminary_meaning_units/);
-    assert.match(migration, /advanced_preliminary_code_meaning_units/);
-    assert.match(migration, /advanced_preliminary_category_codes/);
-    assert.match(migration, /source_report_id uuid references public\.qualitative_case_reports/);
-    assert.match(migration, /pg_advisory_xact_lock\(hashtext\('advanced_preliminary_analysis_worker'\)\)/);
+    assert.match(migration, /create_stage1_meaning_unit_run/);
+    assert.match(migration, /single_project_formally_completed_transcripts/);
+    assert.match(migration, /'meaning_units'/);
+    assert.match(migration, /design\.project_id = selected_project\.id/);
+    assert.match(migration, /SLEEPING-HABITS/);
+    assert.doesNotMatch(migration, /delete from public\./i);
     assert.doesNotMatch(migration, /update public\.qualitative_case_reports/i);
-    assert.doesNotMatch(migration, /delete from public\.qualitative_case_/i);
-    assert.doesNotMatch(migration, /insert into public\.qualitative_case_/i);
-    assert.match(
-        overlappingCategoryMigration,
-        /drop constraint if exists advanced_preliminary_category_codes_report_id_code_id_key/
-    );
 });
 
-test("researcher UI exposes model provenance and transcript-only traceability", async () => {
+test("researcher UI locks later stages and exposes model, audit, evidence, and export provenance", async () => {
     const html = await source("researcher.html");
     const script = await source("researcher-advanced-preliminary.js");
     const dashboard = await source("server/advancedPreliminaryDashboard.js");
-    assert.match(html, /New Advanced-Model Preliminary Analysis/);
-    assert.match(html, /Meaning Units → Preliminary Analytical Codes → Preliminary Categories/);
-    assert.match(html, /researcher-advanced-preliminary\.js/);
-    assert.doesNotMatch(script, /Previous preliminary analysis/);
-    assert.match(script, /Inspect MU → Code → Category/);
-    assert.match(script, /Stable code ID/);
-    assert.match(script, /Advanced annotated transcript \(review format\)/);
-    assert.match(script, /advancedHighlightedText/);
+    assert.match(html, /Stage 1 · Meaning Units/);
+    assert.match(html, /Stage 2 · Cross-Case Code Refinement — locked/);
+    assert.match(html, /Stage 5 · Theme Development — locked/);
+    assert.match(html, /advancedPreliminaryModel/);
+    assert.match(script, /payload\.availableModels/);
+    assert.match(script, /modelSelect\.disabled = active/);
+    assert.match(script, /Inspect Meaning Units/);
+    assert.match(script, /Stage 1 annotated transcript/);
     assert.match(script, /meaningUnitAnnotation/);
-    assert.match(script, /meaningUnitCodeLabel \$\{colorClass\}/);
-    assert.match(script, /mark\.className = colorClass/);
-    assert.match(script, /codeIdsByUnit = report\.codeMeaningUnits\.reduce/);
-    assert.match(script, /map\.get\(link\.meaning_unit_id\)/);
-    assert.match(script, /detail, report, codeById, codeIdsByUnit/);
-    assert.match(script, /no earlier analysis report was used/);
-    assert.match(script, /Full-transcript coverage:/);
-    assert.doesNotMatch(dashboard, /qualitative_case_codes/);
-    assert.doesNotMatch(dashboard, /qualitative_case_categories/);
-    assert.doesNotMatch(dashboard, /qualitative_case_themes/);
+    assert.match(script, /Full-transcript coverage/iu);
+    assert.match(script, /download=stage1-csv/);
+    assert.match(dashboard, /configuredStage1Models/);
+    assert.match(dashboard, /probeAdvancedPreliminaryModel/);
+    assert.match(dashboard, /Requested model/);
+    assert.match(dashboard, /Exact source text/);
 });
