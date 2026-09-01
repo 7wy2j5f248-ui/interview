@@ -79,7 +79,7 @@ export async function processTranscriptTranslation(
             supabaseClient,
             openaiClient,
             pending,
-            { concurrency: 4, failOnError: true }
+            { concurrency: 1, failOnError: true }
         );
 
         const { data: completed, error: completionError } =

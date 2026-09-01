@@ -1,13 +1,6 @@
-import OpenAI from "openai";
 import { createClient } from "@supabase/supabase-js";
 import { authorizeResearcher } from "../server/researcherAuth.js";
 import { loadParticipantCodeMap } from "../server/participantCodes.js";
-import {
-    ensureEnglishTranslations,
-    translateMessageToEnglish
-} from "../server/messageTranslation.js";
-
-export { translateMessageToEnglish };
 
 function normalizedLanguage(item) {
     return typeof item.Language === "string"
@@ -39,31 +32,12 @@ function translationState(item) {
     return null;
 }
 
-function logTranslationFailure(item, stage, error) {
-    const details = {
-        messageId: item.id,
-        language: normalizedLanguage(item),
-        stage,
-        reason: error?.message === "Message translation was empty."
-            ? "empty_translation"
-            : `translation_${stage}_failed`
-    };
-
-    if (typeof error?.status === "number") {
-        details.status = error.status;
-    }
-
-    console.error("Researcher message translation failed:", details);
-}
-
 export async function handleMessages(
     req,
     res,
     {
         supabaseClient,
-        openaiClient,
-        configuredToken,
-        translateMessage = translateMessageToEnglish
+        configuredToken
     }
 ) {
     const authorization = authorizeResearcher(req, configuredToken);
@@ -120,17 +94,6 @@ export async function handleMessages(
             });
         }
 
-        await ensureEnglishTranslations(
-            supabaseClient,
-            openaiClient,
-            messages,
-            {
-                concurrency: 4,
-                translateMessage,
-                onError: logTranslationFailure
-            }
-        );
-
         return res.status(200).json({
             identity: {
                 sessionId: session,
@@ -177,13 +140,8 @@ export default async function handler(req, res) {
             }
         }
     );
-    const openaiClient = new OpenAI({
-        apiKey: process.env.OPENAI_API_KEY
-    });
-
     return handleMessages(req, res, {
         supabaseClient,
-        openaiClient,
         configuredToken
     });
 }

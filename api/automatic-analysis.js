@@ -1,5 +1,4 @@
 import { waitUntil } from "@vercel/functions";
-import OpenAI from "openai";
 import { createClient } from "@supabase/supabase-js";
 import {
     continueStagedAnalysis,
@@ -18,6 +17,7 @@ import {
 import {
     handleAdvancedPreliminaryDashboard
 } from "../server/advancedPreliminaryDashboard.js";
+import { createTranslationClient } from "../server/translationProvider.js";
 
 export const config = { maxDuration: 300 };
 
@@ -47,16 +47,15 @@ async function processStagedAndContinue(req) {
 async function processTranslationAndContinue(req) {
     const supabaseUrl = process.env.SUPABASE_URL;
     const secretKey = process.env.SUPABASE_SECRET_KEY;
-    const openaiKey = process.env.OPENAI_API_KEY;
 
-    if (!supabaseUrl || !secretKey || !openaiKey) {
+    if (!supabaseUrl || !secretKey) {
         throw new Error("Transcript translation configuration is incomplete.");
     }
 
     const supabaseClient = createClient(supabaseUrl, secretKey, {
         auth: { persistSession: false, autoRefreshToken: false }
     });
-    const openaiClient = new OpenAI({ apiKey: openaiKey });
+    const openaiClient = createTranslationClient();
     const requestedSessionId = typeof req.body?.sessionId === "string"
         ? req.body.sessionId.trim() || null
         : null;
