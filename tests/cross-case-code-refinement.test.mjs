@@ -120,6 +120,6 @@ test("Stage 2 schema is automatic, case-grounded, traceable, and stops before Ca
     assert.match(dashboard, /downloadStage2Csv/);
     assert.deepEqual(vercel.crons, [{
         path: "/api/automatic-analysis?cron=staged",
-        schedule: "* * * * *"
+        schedule: "0 0 * * *"
     }]);
 });
