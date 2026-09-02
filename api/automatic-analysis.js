@@ -15,6 +15,9 @@ import {
 import {
     handleAdvancedPreliminaryDashboard
 } from "../server/advancedPreliminaryDashboard.js";
+import {
+    handleStage1ValidationRulesDashboard
+} from "../server/stage1ValidationRulesDashboard.js";
 import { createTranslationClient } from "../server/translationProvider.js";
 
 export const config = { maxDuration: 300 };
@@ -64,10 +67,13 @@ async function processTranslationAndContinue(req) {
 }
 
 export default async function handler(req, res) {
+    if (req.query?.view === "stage1-validation-rules") {
+        return handleStage1ValidationRulesDashboard(req, res);
+    }
     if (req.query?.view === "advanced-preliminary"
         && (req.method === "GET"
             || (req.method === "POST"
-                && ["preflight", "start", "cancel", "mark-legacy"]
+                && ["preflight", "start", "cancel"]
                     .includes(req.body?.action)))) {
         return handleAdvancedPreliminaryDashboard(req, res);
     }

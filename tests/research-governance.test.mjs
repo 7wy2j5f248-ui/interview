@@ -8,6 +8,11 @@ test("independent governance page states every mandatory platform rule", async (
     const html = await readFile(pageUrl, "utf8");
 
     assert.match(html, /Global Research Governance \/ Participant Privacy Rules/);
+    assert.match(html, /GOV-PART-001/);
+    assert.match(html, /GOV-PART-002/);
+    assert.match(html, /No analytical validator/);
+    assert.match(html, /No administrative participant or transcript exclusion/i);
+    assert.match(html, /No AI output, model judgment,[\s\S]*has authority to disqualify a participant/i);
     assert.match(html, /Participants remain anonymous at all times/i);
     assert.match(html, /must not be introduced merely to satisfy database or Row Level Security architecture/i);
     assert.match(html, /Access protection must preserve anonymity/i);
@@ -26,6 +31,8 @@ test("independent governance page states every mandatory platform rule", async (
 test("governance page is read-only, versioned, and explicit about the RLS boundary", async () => {
     const html = await readFile(pageUrl, "utf8");
 
+    assert.match(html, /GRG-PPR-1\.2\.0/g);
+    assert.match(html, /GRG-PPR-1\.1\.0/g);
     assert.match(html, /GRG-PPR-1\.0\.0/g);
     assert.match(html, /Append-only change record/i);
     assert.match(html, /does not enable Row Level Security/i);

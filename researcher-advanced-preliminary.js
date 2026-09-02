@@ -8,15 +8,13 @@
 
     const workspace = document.getElementById("automaticAnalysisWorkspace");
     const gate = document.getElementById("automaticAnalysisTokenGate");
-    // Keep the current staged task above every historical form, regardless of
-    // how many legacy case rows are rendered below it.
+    // Keep the current staged task above every historical form.
     workspace?.prepend(section);
     section.classList.add("stagedAnalysisPrimary");
     const status = document.getElementById("advancedPreliminaryStatus");
     const provenance = document.getElementById("advancedPreliminaryProvenance");
     const tableHost = document.getElementById("advancedPreliminaryTable");
     const attentionHost = document.getElementById("advancedPreliminaryAttentionTable");
-    const legacyHost = document.getElementById("advancedPreliminaryLegacyTable");
     const stage2Status = document.getElementById("crossCaseCodeStatus");
     const stage2Provenance = document.getElementById("crossCaseCodeProvenance");
     const stage2Host = document.getElementById("crossCaseCodeTable");
@@ -40,7 +38,6 @@
     const dialogContent = document.getElementById("advancedPreliminaryDialogContent");
     let payload = {
         run: null, cases: [], attentionCases: [], attentionCount: 0,
-        legacyCases: [], legacyCount: 0,
         stage2: { run: null, mappings: [] },
         page: 1, pageSize: 50
     };
@@ -164,7 +161,7 @@
             ["Operation", plan.operation],
             ["Provider and exact model", `${plan.provider} / ${plan.model}`],
             ["Authoritative source", plan.authoritativeSource],
-            ["Eligible completed transcripts", plan.sourceCaseCount],
+            ["Completed transcripts ready for this Stage 1 run", plan.sourceCaseCount],
             ["Participant source messages", plan.participantMessageCount],
             ["Stored translations available", plan.storedTranslationCount],
             ["Stored translations missing", plan.missingStoredTranslationCount],
@@ -196,7 +193,6 @@
     function render() {
         tableHost.replaceChildren();
         attentionHost?.replaceChildren();
-        legacyHost?.replaceChildren();
         stage2Host?.replaceChildren();
         renderModels();
         renderProviders();
@@ -206,7 +202,6 @@
             ["advancedPreliminaryProcessing", run?.processing_count || 0],
             ["advancedPreliminaryCompleted", run?.completed_count || 0],
             ["advancedPreliminaryFailed", payload.attentionCount || 0]
-            ,["advancedPreliminaryLegacy", payload.legacyCount || 0]
         ].forEach(([id, value]) => {
             document.getElementById(id).textContent = value;
         });
@@ -276,15 +271,15 @@
             const row = document.createElement("tr");
             cell(row, item.case_number);
             cell(row, item.project_binding_status === "project_bound"
-                ? "Sleeping habits" : "Out of scope");
-            cell(row, mode === "legacy"
-                ? `Legacy unusable · ${item.disposition_reason || "Historical interview data is not analytically usable."}`
-                : mode === "attention"
+                ? "Sleeping habits" : "Historical project binding pending");
+            cell(row, mode === "attention"
                 ? item.report
                     ? "Historical stopped-run output"
-                    : `Needs attention${item.last_error ? `: ${item.last_error}` : ""}`
+                    : `System needs attention · participant remains included${item.last_error ? `: ${item.last_error}` : ""}`
                 : item.status === "failed"
-                ? `Needs attention${item.last_error ? `: ${item.last_error}` : ""}`
+                ? `System needs attention · participant remains included${item.last_error ? `: ${item.last_error}` : ""}`
+                : item.status === "completed" && item.report?.system_processing_notes?.length
+                ? `completed · ${item.report.system_processing_notes.length} system processing note${item.report.system_processing_notes.length === 1 ? "" : "s"} · participant unaffected`
                 : item.status.replaceAll("_", " "));
             cell(row, item.report?.meaningUnitCount ?? "—");
             cell(row, item.report?.codeCount ?? "—");
@@ -301,18 +296,10 @@
             button.type = "button";
             button.textContent = item.report
                 ? "Inspect complete case report"
-                : mode === "legacy" ? "Inspect transcript"
-                : item.status === "processing" ? "Processing" : "Not ready";
-            button.disabled = !item.report && mode !== "legacy";
+                : item.status === "processing" ? "Processing" : "Inspect transcript";
+            button.disabled = item.status === "processing" && !item.report;
             button.addEventListener("click", () => openCase(item.case_number));
             action.appendChild(button);
-            if (mode === "attention") {
-                const legacyButton = document.createElement("button");
-                legacyButton.type = "button";
-                legacyButton.textContent = "Move to Legacy cases";
-                legacyButton.addEventListener("click", () => markLegacy(item));
-                action.appendChild(legacyButton);
-            }
             row.appendChild(action);
             body.appendChild(row);
         });
@@ -321,7 +308,6 @@
         };
         renderCaseTable(payload.cases, tableHost);
         renderCaseTable(payload.attentionCases || [], attentionHost, "attention");
-        renderCaseTable(payload.legacyCases || [], legacyHost, "legacy");
         renderStage2();
         pageLabel.textContent = `Page ${payload.page}`;
         previousButton.disabled = payload.page <= 1;
@@ -591,19 +577,15 @@
             const report = detail.report;
             if (!report) {
                 dialogContent.appendChild(paragraph(
-                    detail.job.disposition === "legacy_unusable"
-                        ? `Legacy unusable: ${detail.job.disposition_reason || "The respondent content did not qualify for this analysis framework."}`
-                        : `This case is ${detail.job.status}; no Stage 1 proposal is available yet.`
+                    `The analysis system has not produced a Stage 1 report. The participant and transcript remain included and processible. Current system state: ${detail.job.status}.`
                 ));
-                if (detail.job.disposition === "legacy_unusable") {
-                    const rawReport = {
-                        participant_code: null,
-                        participant_id: detail.job.participant_id,
-                        session_id: detail.job.session_id,
-                        meaningUnits: []
-                    };
-                    dialogContent.appendChild(annotatedTranscript(detail, rawReport));
-                }
+                const rawReport = {
+                    participant_code: null,
+                    participant_id: detail.job.participant_id,
+                    session_id: detail.job.session_id,
+                    meaningUnits: []
+                };
+                dialogContent.appendChild(annotatedTranscript(detail, rawReport));
                 return;
             }
             dialogProvenance.textContent = [
@@ -620,6 +602,26 @@
                 "source: transcripts and stored translations only"
             ].join(" · ");
             dialogContent.appendChild(paragraph(report.case_summary));
+            if (report.system_processing_notes?.length) {
+                dialogContent.appendChild(heading(
+                    "System processing notes — participant and transcript unaffected"
+                ));
+                const notes = document.createElement("ul");
+                report.system_processing_notes.forEach(note => {
+                    const item = document.createElement("li");
+                    item.textContent = `${note.code || "SYSTEM_NOTE"}${note.item ? ` · ${note.item}` : ""}: ${note.detail || "System processing follow-up is required."}`;
+                    notes.appendChild(item);
+                });
+                dialogContent.appendChild(notes);
+            }
+            const preservedOutput = document.createElement("details");
+            const preservedSummary = document.createElement("summary");
+            preservedSummary.textContent = "Exact preserved model output";
+            const preservedText = document.createElement("pre");
+            preservedText.textContent = report.raw_model_output_text
+                || "The provider returned no readable output text.";
+            preservedOutput.append(preservedSummary, preservedText);
+            dialogContent.appendChild(preservedOutput);
             dialogContent.appendChild(annotatedTranscript(detail, report));
             dialogContent.appendChild(preliminaryHierarchy(report));
             const singlePass = report.analytical_audit?.aiAnalysisPassCount === 1
@@ -634,7 +636,7 @@
             if (singlePass) {
                 dialogContent.appendChild(paragraph(
                     `AI analysis passes: 1; prior analysis used: no; `
-                    + `local source/relationship integrity check: completed; `
+                    + `analytical validator: none; raw model output preserved; `
                     + `Meaning Units: ${report.meaningUnits.length}; Codes: ${report.codes.length}; `
                     + `Categories: ${report.categories.length}; Tentative Themes: ${report.tentativeThemes.length}.`,
                     "muted"
@@ -656,26 +658,6 @@
         } catch (error) {
             dialogContent.appendChild(paragraph(error.message, "errorMessage"));
         }
-    }
-
-    async function markLegacy(item) {
-        const defaultReason =
-            "Historical interview model did not elicit sufficiently clear or complete evidence; data is not usable for staged analysis.";
-        const reason = window.prompt(
-            `Why should ${item.case_number} be classified as a Legacy unusable case?`,
-            defaultReason
-        )?.trim();
-        if (!reason) return;
-        await request(API_PATH, {
-            method: "POST",
-            body: JSON.stringify({
-                action: "mark-legacy",
-                jobId: item.id,
-                reason
-            })
-        });
-        setStatus(`${item.case_number} was moved to Legacy cases. Its transcript and reason remain preserved.`);
-        await load({ quiet: true });
     }
 
     startButton.addEventListener("click", async () => {

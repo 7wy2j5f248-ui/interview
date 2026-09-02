@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="governance-version" content="GRG-PPR-1.0.0">
+<meta name="governance-version" content="GRG-PPR-1.2.0">
 <title>Global Research Governance / Participant Privacy Rules</title>
 <style>
     :root {
@@ -216,10 +216,11 @@
     }
 </style>
 </head>
-<body data-governance-version="GRG-PPR-1.0.0">
+<body data-governance-version="GRG-PPR-1.2.0">
 <header class="pageHeader">
     <nav aria-label="Research governance navigation">
         <a href="/researcher.html">Researcher workspace</a>
+        <a href="/validation-rules.html">Stage 1 processing transparency</a>
         <a href="/global-analysis-rules.html">Global analysis rules</a>
         <a href="/project-analysis-rules.html">Project analysis rules</a>
         <a href="/design.html">Interview protocol</a>
@@ -228,15 +229,15 @@
     <h1>Global Research Governance / Participant Privacy Rules</h1>
     <p class="headerSummary">
         The standing limits on what intervu.quest is allowed to do. Participant
-        anonymity and privacy are hard constraints that every technical,
-        analytical, and operational choice must satisfy.
+        transcript non-exclusion, anonymity, and privacy are hard constraints that
+        every technical, analytical, and operational choice must satisfy.
     </p>
 </header>
 
 <main>
     <section class="statusGrid" aria-label="Governance document status">
         <div class="statusItem"><span>Status</span><strong class="inForce">In force</strong></div>
-        <div class="statusItem"><span>Version</span><strong>GRG-PPR-1.0.0</strong></div>
+        <div class="statusItem"><span>Version</span><strong>GRG-PPR-1.2.0</strong></div>
         <div class="statusItem"><span>Effective date</span><strong>September 1, 2026</strong></div>
         <div class="statusItem"><span>Scope</span><strong>Entire intervu.quest platform</strong></div>
     </section>
@@ -260,8 +261,10 @@
         <aside class="panel hardConstraint" aria-labelledby="hardConstraintHeading">
             <h2 id="hardConstraintHeading">Hard constraint</h2>
             <p>
-                <strong>Participants remain anonymous at all times, whoever they are.</strong>
-                Privacy protection cannot be traded away for database convenience,
+                <strong>No participant transcript may be administratively excluded or
+                rendered non-processible, and participants remain anonymous at all times.</strong>
+                AI and system outcomes have no authority to disqualify a contribution.
+                These protections cannot be traded away for database convenience,
                 easier authentication, analytical automation, or operational speed.
             </p>
         </aside>
@@ -276,6 +279,38 @@
         </p>
 
         <div class="rules">
+            <article class="rule" id="GOV-PART-001">
+                <p class="ruleId">GOV-PART-001 · Mandatory · Top global rule</p>
+                <h3>No administrative participant or transcript exclusion</h3>
+                <p>Human rights and each participant’s right to be heard take precedence over analytical, administrative, technical, and operational convenience. Participant contributions are research source material. No AI output, model judgment, parsing result, validation rule, numbering issue, relationship error, persistence failure, database state, worker failure, or analytical label has authority to disqualify a participant, exclude a transcript, classify it as unusable, or permanently render it non-processible.</p>
+                <dl>
+                    <dt>Required</dt>
+                    <dd>Every transcript remains retained and processible or reprocessable. Formal incompleteness is recorded as not ready yet for complete-case analysis, never as participant exclusion. System and computational failures remain visible as system-owned attention states with a reason, a retry or reprocessing path, and escalation to researchers or system experts when unresolved.</dd>
+                    <dt>Prohibited</dt>
+                    <dd>“Unusable,” “legacy unusable,” “excluded,” or equivalent administrative dispositions based on model output, missing analytical objects, validation rejection, numbering, evidence-link failure, database failure, or any other computational result.</dd>
+                    <dt>Responsibility</dt>
+                    <dd>The platform and its operators bear system failure. A failure must never be silently transferred to a participant through an adverse label, hidden omission, loss of processibility, or removal from researcher attention.</dd>
+                    <dt>Review evidence</dt>
+                    <dd>Queue and disposition states, failure handling, database constraints and functions, dashboard actions and labels, transcript retention, and safe retry or reprocessing paths.</dd>
+                </dl>
+            </article>
+
+            <article class="rule" id="GOV-PART-002">
+                <p class="ruleId">GOV-PART-002 · Mandatory · Researcher directive</p>
+                <h3>No analytical validator</h3>
+                <p>Stage 1 must not use an application, schema, prompt, model, or database validator to accept or reject Meaning Units, Codes, Categories, Themes, relationships, counts, summaries, reports, participants, or transcripts.</p>
+                <dl>
+                    <dt>Required</dt>
+                    <dd>Preserve the exact completed model response first. Relational display is a non-rejecting system projection. Anything the system cannot project remains in the preserved output with a visible system-owned note and a path for investigation.</dd>
+                    <dt>Prohibited</dt>
+                    <dd>Discarding model objects, accumulating invalid-reason lists, rejecting a whole report, or converting a projection or storage limitation into an adverse case status.</dd>
+                    <dt>Responsibility</dt>
+                    <dd>Researchers judge analytical usefulness. The platform and its experts diagnose and resolve technical problems.</dd>
+                    <dt>Review evidence</dt>
+                    <dd>Exact raw model output, processing notes, database projection, worker failure behavior, dashboard visibility, and withdrawn validator history.</dd>
+                </dl>
+            </article>
+
             <article class="rule" id="GOV-PRIV-001">
                 <p class="ruleId">GOV-PRIV-001 · Mandatory</p>
                 <h3>Participant anonymity at all times</h3>
@@ -442,6 +477,8 @@
                     <tr><th scope="col">Rule family</th><th scope="col">What reviewers should be able to inspect</th><th scope="col">Acceptance condition</th></tr>
                 </thead>
                 <tbody>
+                    <tr><td>Participant rights and transcript inclusion</td><td>Source retention, readiness states, analysis failures, disposition functions, dashboard labels, retry paths, escalation paths, and historical classifications.</td><td>No system or AI outcome can exclude a participant or transcript or make it permanently non-processible; unresolved system failures remain visible and escalatable.</td></tr>
+                    <tr><td>No analytical validator</td><td>Raw model output, non-rejecting projection, processing notes, worker behavior, and withdrawn validator history.</td><td>No model object or whole report is rejected by a validator; technical problems remain system-owned.</td></tr>
                     <tr><td>Privacy and access</td><td>Participant flow, identifiers, data-access paths, grants, exports, and authorization tests.</td><td>No identity requirement; access remains least-privilege and anonymous.</td></tr>
                     <tr><td>Researcher control</td><td>Provider/model selector, previewed plan, confirmation action, stop action, and run audit.</td><td>No computation begins without the authorized researcher’s explicit confirmation.</td></tr>
                     <tr><td>Analytical independence</td><td>Input manifests, transcript source links, stage boundaries, and cross-case start controls.</td><td>Fresh runs use original sources; cross-case work has a separate trigger and run.</td></tr>
@@ -459,10 +496,38 @@
             methodological, operational, and implementation consequences before it takes effect.
         </p>
         <article class="changeRecord">
-            <h3>GRG-PPR-1.0.0 · Initial standing specification</h3>
+            <h3>GRG-PPR-1.2.0 · Stage 1 validator withdrawn</h3>
             <ul class="changeMeta">
                 <li><strong>Effective:</strong> September 1, 2026</li>
                 <li><strong>Status:</strong> In force</li>
+                <li><strong>Affected rule:</strong> GOV-PART-002</li>
+            </ul>
+            <p>
+                Withdrew the system-derived Stage-1 analytical validator and its
+                whole-report rejection behavior. Requires exact model-output
+                preservation, non-rejecting relational projection, and visible
+                system-owned processing notes.
+            </p>
+        </article>
+        <article class="changeRecord">
+            <h3>GRG-PPR-1.1.0 · Participant transcript non-exclusion</h3>
+            <ul class="changeMeta">
+                <li><strong>Effective:</strong> September 1, 2026</li>
+                <li><strong>Status:</strong> Superseded by GRG-PPR-1.2.0</li>
+                <li><strong>Affected rule:</strong> GOV-PART-001</li>
+            </ul>
+            <p>
+                Established the top global rule that no administrative, AI, analytical,
+                computational, or database outcome may disqualify a participant, exclude
+                a transcript, classify it as unusable, or permanently render it
+                non-processible. Formal completion is a readiness state only.
+            </p>
+        </article>
+        <article class="changeRecord">
+            <h3>GRG-PPR-1.0.0 · Initial standing specification</h3>
+            <ul class="changeMeta">
+                <li><strong>Effective:</strong> September 1, 2026</li>
+                <li><strong>Status:</strong> Superseded by GRG-PPR-1.1.0</li>
                 <li><strong>Affected rules:</strong> GOV-PRIV-001 through GOV-CHANGE-001</li>
             </ul>
             <p>

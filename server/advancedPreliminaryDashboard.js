@@ -155,7 +155,7 @@ async function loadSummary(supabase, req) {
     const reports = jobIds.length ? await requireData(
         supabase
             .from("advanced_preliminary_case_reports")
-            .select("id, job_id, session_id, case_number, participant_code, language, project_id, source_report_id, case_summary, model, resolved_model, reasoning_effort, analysis_version, prompt_version, analytical_audit, input_token_count, output_token_count, completed_at")
+            .select("id, job_id, session_id, case_number, participant_code, language, project_id, source_report_id, case_summary, model, resolved_model, reasoning_effort, analysis_version, prompt_version, analytical_audit, system_processing_notes, input_token_count, output_token_count, completed_at")
             .in("job_id", jobIds),
         "Advanced preliminary case reports could not be loaded."
     ) : [];
@@ -187,7 +187,7 @@ async function loadSummary(supabase, req) {
     const attentionReports = await requireData(
         supabase
             .from("advanced_preliminary_case_reports")
-            .select("id, job_id, session_id, case_number, participant_code, language, project_id, source_report_id, case_summary, model, resolved_model, reasoning_effort, analysis_version, prompt_version, analytical_audit, input_token_count, output_token_count, completed_at")
+            .select("id, job_id, session_id, case_number, participant_code, language, project_id, source_report_id, case_summary, model, resolved_model, reasoning_effort, analysis_version, prompt_version, analytical_audit, system_processing_notes, input_token_count, output_token_count, completed_at")
             .eq("run_id", run.id)
             .contains("analytical_audit", { coverageReviewRequired: true }),
         "Stage 1 cases requiring researcher attention could not be loaded."
@@ -217,12 +217,22 @@ async function loadSummary(supabase, req) {
             .order("source_completed_at", { ascending: true }),
         "Audited Stage 1 cases requiring attention could not be loaded."
     ) : [];
-    const attentionJobs = [...failedJobs, ...reportOnlyJobs]
-        .filter(job => job.disposition === "active")
-        .sort((left, right) =>
-            String(left.source_completed_at).localeCompare(String(right.source_completed_at))
-            || String(left.session_id).localeCompare(String(right.session_id))
-        );
+    const historicalDispositionJobs = await requireData(
+        supabase
+            .from("advanced_preliminary_analysis_jobs")
+            .select("id, session_id, participant_id, case_number, source_completed_at, project_id, analysis_framework_id, source_report_id, project_binding_status, status, attempt_count, completed_at, updated_at, last_error, disposition, disposition_reason, disposition_evidence, disposition_at, disposition_by")
+            .eq("run_id", run.id)
+            .neq("disposition", "active")
+            .order("source_completed_at", { ascending: true }),
+        "Historical system dispositions could not be loaded for restoration review."
+    );
+    const attentionJobs = [...new Map(
+        [...failedJobs, ...reportOnlyJobs, ...historicalDispositionJobs]
+            .map(job => [job.id, job])
+    ).values()].sort((left, right) =>
+        String(left.source_completed_at).localeCompare(String(right.source_completed_at))
+        || String(left.session_id).localeCompare(String(right.session_id))
+    );
     const attentionReportIds = attentionReports.map(report => report.id);
     const attentionMeaningUnits = attentionReportIds.length ? await requireData(
         supabase
@@ -233,16 +243,6 @@ async function loadSummary(supabase, req) {
     ) : [];
     const attentionMuCount = countByReport(attentionMeaningUnits);
     const attentionJobIds = new Set(attentionJobs.map(job => job.id));
-    const legacyJobs = await requireData(
-        supabase
-            .from("advanced_preliminary_analysis_jobs")
-            .select("id, session_id, participant_id, case_number, source_completed_at, project_id, analysis_framework_id, source_report_id, project_binding_status, status, attempt_count, completed_at, updated_at, last_error, disposition, disposition_reason, disposition_evidence, disposition_at, disposition_by")
-            .eq("run_id", run.id)
-            .eq("disposition", "legacy_unusable")
-            .order("source_completed_at", { ascending: true }),
-        "Legacy unusable cases could not be loaded."
-    );
-    const legacyJobIds = new Set(legacyJobs.map(job => job.id));
     const decorateJob = (job, reportMap, counts, hierarchyCounts = {}) => {
         const report = reportMap.get(job.id) || null;
         return {
@@ -267,14 +267,10 @@ async function loadSummary(supabase, req) {
         stage2,
         attentionCount: attentionJobs.length,
         attentionCases: attentionJobs.map(job =>
-            decorateJob(job, attentionReportByJob, attentionMuCount)
-        ),
-        legacyCount: legacyJobs.length,
-        legacyCases: legacyJobs.map(job =>
-            decorateJob(job, attentionReportByJob, attentionMuCount)
+            decorateJob(job, new Map([...reportByJob, ...attentionReportByJob]), attentionMuCount)
         ),
         cases: jobs
-            .filter(job => !attentionJobIds.has(job.id) && !legacyJobIds.has(job.id))
+            .filter(job => !attentionJobIds.has(job.id))
             .map(job => decorateJob(job, reportByJob, muCount, {
                 codes: codeCount,
                 categories: categoryCount,
@@ -380,7 +376,7 @@ async function loadCase(supabase, req) {
     }
     const { data: report, error: reportError } = await supabase
         .from("advanced_preliminary_case_reports")
-        .select("id, run_id, job_id, session_id, case_number, participant_id, participant_code, language, project_id, analysis_framework_id, source_report_id, provider, model, resolved_model, reasoning_effort, analysis_version, prompt_version, case_summary, unassigned_code_numbers, analytical_audit, input_token_count, output_token_count, created_at, completed_at")
+        .select("id, run_id, job_id, session_id, case_number, participant_id, participant_code, language, project_id, analysis_framework_id, source_report_id, provider, model, resolved_model, reasoning_effort, analysis_version, prompt_version, case_summary, unassigned_code_numbers, analytical_audit, raw_model_output_text, parsed_model_output, system_processing_notes, input_token_count, output_token_count, created_at, completed_at")
         .eq("job_id", job.id)
         .maybeSingle();
     if (reportError) throw new Error("The selected advanced report could not be loaded.");
@@ -458,7 +454,7 @@ async function downloadStage1Csv(supabase, req, res) {
     const reports = await requireData(
         supabase
             .from("advanced_preliminary_case_reports")
-            .select("id, run_id, session_id, case_number, participant_code, language, project_id, analysis_version, prompt_version, analytical_audit, completed_at")
+            .select("id, run_id, session_id, case_number, participant_code, language, project_id, analysis_version, prompt_version, analytical_audit, system_processing_notes, completed_at")
             .eq("run_id", run.id)
             .order("case_number"),
         "Stage 1 reports could not be exported."
@@ -508,7 +504,7 @@ async function downloadStage1Csv(supabase, req, res) {
         "Stable Category ID", "Category label", "Category definition",
         "Category rationale", "Preliminary Tentative Theme", "Stable Theme ID",
         "Tentative Theme label", "Tentative Theme rationale", "Analysis source",
-        "AI analysis passes", "Local source and relationship validation"
+        "AI analysis passes", "Analytical validator", "System processing notes"
     ];
     const codeById = new Map(codes.map(item => [item.id, item]));
     const categoryById = new Map(categories.map(item => [item.id, item]));
@@ -562,9 +558,10 @@ async function downloadStage1Csv(supabase, req, res) {
             report.analytical_audit?.priorAnalysisUsed === false
                 ? "original transcript only" : "historical stopped workflow",
             report.analytical_audit?.aiAnalysisPassCount || "historical",
-            report.analytical_audit?.validationType
-                === "local_deterministic_source_and_relationship_integrity"
-                ? "passed" : "historical"
+            report.analytical_audit?.validationType === "none_no_analytical_validator"
+                ? "none" : "withdrawn historical implementation",
+            Array.isArray(report.system_processing_notes)
+                ? report.system_processing_notes.length : 0
         ];
     });
     const csv = [headers, ...rows]
@@ -778,36 +775,6 @@ async function cancelRun(supabase, req) {
     return data;
 }
 
-async function markLegacyCase(supabase, req) {
-    const jobId = typeof req.body?.jobId === "string"
-        ? req.body.jobId.trim() : "";
-    const reason = typeof req.body?.reason === "string"
-        ? req.body.reason.trim() : "";
-    if (!jobId || !reason) {
-        throw Object.assign(
-            new Error("A Stage 1 case and a human-visible legacy reason are required."),
-            { status: 400 }
-        );
-    }
-    const { data, error } = await supabase.rpc(
-        "set_advanced_preliminary_case_disposition",
-        {
-            p_job_id: jobId,
-            p_disposition: "legacy_unusable",
-            p_reason: reason,
-            p_actor: "researcher-dashboard",
-            p_evidence: { source: "researcher-dashboard" }
-        }
-    );
-    if (error || !data) {
-        throw Object.assign(
-            new Error("The case could not be classified as legacy unusable."),
-            { status: 500 }
-        );
-    }
-    return { jobId, disposition: "legacy_unusable", reason };
-}
-
 export async function handleAdvancedPreliminaryDashboard(req, res) {
     res.setHeader("Cache-Control", "private, no-store, no-cache, must-revalidate");
     const authorization = authorizeResearcher(
@@ -839,9 +806,6 @@ export async function handleAdvancedPreliminaryDashboard(req, res) {
         }
         if (req.method === "POST" && req.body?.action === "cancel") {
             return res.status(200).json(await cancelRun(supabase, req));
-        }
-        if (req.method === "POST" && req.body?.action === "mark-legacy") {
-            return res.status(200).json(await markLegacyCase(supabase, req));
         }
         res.setHeader("Allow", "GET, POST");
         return res.status(405).json({ error: "Method not allowed." });

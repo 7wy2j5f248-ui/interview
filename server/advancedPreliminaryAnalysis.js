@@ -1,7 +1,4 @@
-import {
-    isConversationalCourtesy,
-    prepareParticipantMessages
-} from "./stagedTranscript.js";
+import { prepareParticipantMessages } from "./stagedTranscript.js";
 import { loadParticipantCodeMap } from "./participantCodes.js";
 import { normalizeAnalysisModel } from "./modelConfiguration.js";
 import { createAnalysisProviderClient } from "./analysisProvider.js";
@@ -19,89 +16,6 @@ export const LEGACY_ANALYSIS_INPUT = "excluded";
 export const EXECUTION_CONTRACT_VERSION = "researcher-operation-contract-v1";
 export const ADVANCED_PRELIMINARY_MAX_OUTPUT_TOKENS = 20000;
 export const ADVANCED_PRELIMINARY_STALE_RESPONSE_MINUTES = 45;
-
-const analysisSchema = {
-    type: "object",
-    properties: {
-        meaning_units: {
-            type: "array",
-            items: {
-                type: "object",
-                properties: {
-                    message_id: { type: "string" },
-                    exact_source_text: { type: "string" },
-                    occurrence_index: { type: "integer" },
-                    context_note: { type: "string" }
-                },
-                required: [
-                    "message_id",
-                    "exact_source_text",
-                    "occurrence_index",
-                    "context_note"
-                ],
-                additionalProperties: false
-            }
-        },
-        codes: {
-            type: "array",
-            items: {
-                type: "object",
-                properties: {
-                    label: { type: "string" },
-                    definition: { type: "string" },
-                    rationale: { type: "string" },
-                    meaning_unit_numbers: {
-                        type: "array",
-                        items: { type: "integer" }
-                    }
-                },
-                required: [
-                    "label", "definition", "rationale", "meaning_unit_numbers"
-                ],
-                additionalProperties: false
-            }
-        },
-        categories: {
-            type: "array",
-            items: {
-                type: "object",
-                properties: {
-                    label: { type: "string" },
-                    definition: { type: "string" },
-                    rationale: { type: "string" },
-                    code_numbers: {
-                        type: "array",
-                        items: { type: "integer" }
-                    }
-                },
-                required: ["label", "definition", "rationale", "code_numbers"],
-                additionalProperties: false
-            }
-        },
-        tentative_themes: {
-            type: "array",
-            items: {
-                type: "object",
-                properties: {
-                    label: { type: "string" },
-                    rationale: { type: "string" },
-                    category_numbers: {
-                        type: "array",
-                        items: { type: "integer" }
-                    }
-                },
-                required: ["label", "rationale", "category_numbers"],
-                additionalProperties: false
-            }
-        },
-        case_summary: { type: "string" }
-    },
-    required: [
-        "meaning_units", "codes", "categories", "tentative_themes",
-        "case_summary"
-    ],
-    additionalProperties: false
-};
 
 const modelProbeSchema = {
     type: "object",
@@ -159,16 +73,29 @@ function occurrences(source, phrase) {
     return matches;
 }
 
-export function validateAdvancedPreliminaryAnalysis(value, messages) {
+function arrayValue(value) {
+    return Array.isArray(value) ? value : [];
+}
+
+function textValue(value) {
+    return typeof value === "string" ? value.trim() : "";
+}
+
+function referencedPositions(value) {
+    return [...new Set(arrayValue(value).filter(number =>
+        Number.isInteger(number) && number > 0
+    ))];
+}
+
+export function projectAdvancedPreliminaryAnalysis(value, messages) {
     const messagesById = new Map((messages || []).map(message => [
         message.id,
         message
     ]));
     const meaningUnits = [];
-    const meaningUnitKeys = new Set();
-    const invalidReasons = [];
+    const systemProcessingNotes = [];
 
-    (Array.isArray(value?.meaning_units) ? value.meaning_units : [])
+    arrayValue(value?.meaning_units)
         .forEach((raw, index) => {
             const messageId = normalizedText(raw?.message_id);
             const message = messagesById.get(messageId);
@@ -179,31 +106,16 @@ export function validateAdvancedPreliminaryAnalysis(value, messages) {
                 raw?.exact_source_text
             );
             const occurrence = found[requestedOccurrence - 1];
-            if (!message || !occurrence
-                || isConversationalCourtesy(occurrence.exactSourceText)) {
-                invalidReasons.push(
-                    `MU${index + 1} is not an exact substantive span in its original transcript message.`
-                );
+            if (!message || !occurrence) {
+                systemProcessingNotes.push({
+                    code: "MU_RELATIONAL_PROJECTION_UNAVAILABLE",
+                    item: `MU${index + 1}`,
+                    detail: "The model item could not be located as an exact span in the referenced transcript message. It remains preserved in the raw model output."
+                });
                 return;
             }
-            const key = `${messageId}:${occurrence.startOffset}:${occurrence.endOffset}`;
-            if (meaningUnitKeys.has(key)) {
-                invalidReasons.push(`MU${index + 1} duplicates an earlier meaning unit.`);
-                return;
-            }
-            const overlaps = meaningUnits.some(unit =>
-                unit.messageId === messageId
-                && occurrence.startOffset < unit.endOffset
-                && occurrence.endOffset > unit.startOffset
-            );
-            if (overlaps) {
-                invalidReasons.push(
-                    `MU${index + 1} overlaps another Meaning Unit in the same transcript message.`
-                );
-                return;
-            }
-            meaningUnitKeys.add(key);
             meaningUnits.push({
+                unitNumber: index + 1,
                 messageId,
                 exactSourceText: occurrence.exactSourceText,
                 sourceLanguage: message.language || null,
@@ -215,62 +127,76 @@ export function validateAdvancedPreliminaryAnalysis(value, messages) {
             });
         });
 
-    const normalizeNumbers = (values, maximum) => [...new Set(
-        (Array.isArray(values) ? values : []).filter(number =>
-            Number.isInteger(number) && number > 0 && number <= maximum
-        )
-    )];
-    const codes = [];
-    (Array.isArray(value?.codes) ? value.codes : []).forEach((raw, index) => {
-        const label = normalizedText(raw?.label);
-        const definition = normalizedText(raw?.definition);
-        const rationale = normalizedText(raw?.rationale);
-        const meaningUnitNumbers = normalizeNumbers(
-            raw?.meaning_unit_numbers,
-            meaningUnits.length
+    const codes = arrayValue(value?.codes).map((raw, index) => ({
+        codeNumber: index + 1,
+        label: textValue(raw?.label),
+        definition: textValue(raw?.definition),
+        rationale: textValue(raw?.rationale),
+        meaningUnitNumbers: referencedPositions(raw?.meaning_unit_numbers)
+    }));
+
+    const categories = arrayValue(value?.categories).map((raw, index) => ({
+        categoryNumber: index + 1,
+        label: textValue(raw?.label),
+        definition: textValue(raw?.definition),
+        rationale: textValue(raw?.rationale),
+        codeNumbers: referencedPositions(raw?.code_numbers)
+    }));
+
+    const tentativeThemes = arrayValue(value?.tentative_themes)
+        .map((raw, index) => ({
+            themeNumber: index + 1,
+            label: textValue(raw?.label),
+            rationale: textValue(raw?.rationale),
+            categoryNumbers: referencedPositions(raw?.category_numbers)
+        }));
+
+    const projectedMeaningUnitNumbers = new Set(
+        meaningUnits.map(item => item.unitNumber)
+    );
+    const codeNumbers = new Set(codes.map(item => item.codeNumber));
+    const categoryNumbers = new Set(
+        categories.map(item => item.categoryNumber)
+    );
+    codes.forEach(item => {
+        const unavailable = item.meaningUnitNumbers.filter(
+            number => !projectedMeaningUnitNumbers.has(number)
         );
-        if (!label || !definition || !rationale || !meaningUnitNumbers.length) {
-            invalidReasons.push(
-                `CO${index + 1} is missing a label, explanation, or valid Meaning Unit link.`
-            );
-            return;
+        if (unavailable.length) {
+            systemProcessingNotes.push({
+                code: "CODE_LINK_PROJECTION_UNAVAILABLE",
+                item: `CO${item.codeNumber}`,
+                referencedMeaningUnits: unavailable,
+                detail: "Some model-supplied Meaning Unit links could not be represented relationally. The original links remain in the raw model output."
+            });
         }
-        codes.push({ label, definition, rationale, meaningUnitNumbers });
     });
-
-    const categories = [];
-    (Array.isArray(value?.categories) ? value.categories : [])
-        .forEach((raw, index) => {
-            const label = normalizedText(raw?.label);
-            const definition = normalizedText(raw?.definition);
-            const rationale = normalizedText(raw?.rationale);
-            const codeNumbers = normalizeNumbers(raw?.code_numbers, codes.length);
-            if (!label || !definition || !rationale || !codeNumbers.length) {
-                invalidReasons.push(
-                    `CA${index + 1} is missing a label, explanation, or valid Code link.`
-                );
-                return;
-            }
-            categories.push({ label, definition, rationale, codeNumbers });
-        });
-
-    const tentativeThemes = [];
-    (Array.isArray(value?.tentative_themes) ? value.tentative_themes : [])
-        .forEach((raw, index) => {
-            const label = normalizedText(raw?.label);
-            const rationale = normalizedText(raw?.rationale);
-            const categoryNumbers = normalizeNumbers(
-                raw?.category_numbers,
-                categories.length
-            );
-            if (!label || !rationale || !categoryNumbers.length) {
-                invalidReasons.push(
-                    `TH${index + 1} is missing a label, explanation, or valid Category link.`
-                );
-                return;
-            }
-            tentativeThemes.push({ label, rationale, categoryNumbers });
-        });
+    categories.forEach(item => {
+        const unavailable = item.codeNumbers.filter(
+            number => !codeNumbers.has(number)
+        );
+        if (unavailable.length) {
+            systemProcessingNotes.push({
+                code: "CATEGORY_LINK_PROJECTION_UNAVAILABLE",
+                item: `CA${item.categoryNumber}`,
+                referencedCodes: unavailable,
+                detail: "Some model-supplied Code links could not be represented relationally. The original links remain in the raw model output."
+            });
+        }
+    });
+    tentativeThemes.forEach(item => {
+        const unavailable = item.categoryNumbers.filter(
+            number => !categoryNumbers.has(number)
+        );
+        if (unavailable.length) {
+            systemProcessingNotes.push({
+                code: "THEME_LINK_PROJECTION_UNAVAILABLE",
+                item: `TH${item.themeNumber}`,
+                referencedCategories: unavailable,
+                detail: "Some model-supplied Category links could not be represented relationally. The original links remain in the raw model output."
+            });
+        }
+    });
 
     const linkedCodeNumbers = new Set(categories.flatMap(item => item.codeNumbers));
     const linkedCategoryNumbers = new Set(
@@ -282,10 +208,14 @@ export function validateAdvancedPreliminaryAnalysis(value, messages) {
     const unassignedCategoryNumbers = categories
         .map((_, index) => index + 1)
         .filter(number => !linkedCategoryNumbers.has(number));
-    const caseSummary = normalizedText(value?.case_summary);
-    const complete = Boolean(
-        meaningUnits.length && codes.length && caseSummary && !invalidReasons.length
-    );
+    const caseSummary = textValue(value?.case_summary)
+        || "The model output was preserved without a case summary.";
+    if (!textValue(value?.case_summary)) {
+        systemProcessingNotes.push({
+            code: "CASE_SUMMARY_NOT_SUPPLIED",
+            detail: "No case summary was supplied. The model output remains preserved and the report remains processible."
+        });
+    }
 
     return {
         meaningUnits,
@@ -294,9 +224,8 @@ export function validateAdvancedPreliminaryAnalysis(value, messages) {
         tentativeThemes,
         unassignedCodeNumbers,
         unassignedCategoryNumbers,
-        caseSummary: caseSummary || "The independent case analysis was incomplete.",
-        invalidReasons,
-        complete
+        caseSummary,
+        systemProcessingNotes
     };
 }
 
@@ -329,7 +258,7 @@ function analysisInstruction({
         "Create case-specific Preliminary Categories as broader descriptive groupings of supported codes. Link them by code_numbers. Relationships are many-to-many: a code may contribute to more than one justified category. Do not force unrelated codes together and do not require exclusive or unshared children.",
         "Create Preliminary Tentative Themes that express the patterned meaning supported by the case's categories. Link them by category_numbers. Relationships are many-to-many. A tentative theme is not a cross-case final theme and must not claim prevalence beyond this participant.",
         "Use English for code, category, tentative-theme, definition, rationale, and case-summary text. Preserve exact_source_text in the original transcript language. If a higher layer is genuinely unsupported, leave that array empty and explain the unsynthesized result in case_summary; never invent support merely to fill a form.",
-        "Return the complete structured case report. This is the only AI analysis pass for this case. The application assigns stable MU, CO, CA, and TH positions and performs only local deterministic checks of exact transcript spans and relationship references. No previous analysis, second AI audit, repair call, or human approval gate will be used.",
+        "Return the complete structured case report. This is the only AI analysis pass for this case. The platform preserves the response as generated and assigns local MU, CO, CA, and TH display positions without using an analytical validator to accept or reject the report. No previous analysis, second AI audit, repair call, or human approval gate will be used.",
         rulesSnapshot
             ? `Researcher-selected rules frozen for this run (JSON):\n${JSON.stringify(rulesSnapshot)}`
             : "No additional researcher-selected rule snapshot was supplied."
@@ -346,10 +275,10 @@ function responseOptions(model, reasoningEffort, schema, name, input, background
             effort: reasoningEffort,
             context: "current_turn"
         },
-        text: {
+        text: schema ? {
             verbosity: "medium",
             format: { type: "json_schema", name, strict: true, schema }
-        },
+        } : { verbosity: "medium" },
         input
     };
 }
@@ -364,21 +293,42 @@ function analysisInput(messages, context) {
     ];
 }
 
-function completedAnalysisFromResponse(response, messages, normalizedModel) {
-    const analysis = validateAdvancedPreliminaryAnalysis(
-        parseResponse(response, "Advanced preliminary case analysis"),
+function preservedAnalysisFromResponse(response, messages, normalizedModel) {
+    const rawModelOutputText = responseText(response);
+    const responseNotes = [];
+    let rawModelOutput = null;
+    if (!rawModelOutputText) {
+        responseNotes.push({
+            code: "MODEL_OUTPUT_EMPTY",
+            detail: "The provider completed without readable output text. The empty response is preserved as a system issue."
+        });
+    } else {
+        try {
+            rawModelOutput = JSON.parse(rawModelOutputText);
+        } catch {
+            responseNotes.push({
+                code: "MODEL_OUTPUT_NOT_JSON",
+                detail: "The provider output is not parseable JSON. The exact raw response is preserved for system investigation."
+            });
+        }
+    }
+    const analysis = projectAdvancedPreliminaryAnalysis(
+        rawModelOutput || {},
         messages
     );
-    if (!analysis.complete) {
-        throw new Error(
-            `The single-pass analysis failed deterministic transcript traceability validation: ${analysis.invalidReasons.join(" | ")}`
-        );
-    }
+    const systemProcessingNotes = [
+        ...responseNotes,
+        ...analysis.systemProcessingNotes
+    ];
     return {
         ...analysis,
+        rawModelOutputText,
+        rawModelOutput,
+        systemProcessingNotes,
         audit: {
-            reviewStatus: "independent_complete_preliminary_case_analysis",
-            validationType: "local_deterministic_source_and_relationship_integrity",
+            reviewStatus: "model_output_preserved_without_validator",
+            validationType: "none_no_analytical_validator",
+            relationalProjectionType: "non_rejecting_system_projection",
             priorAnalysisUsed: false,
             aiAnalysisPassCount: 1,
             stage1Only: false,
@@ -386,7 +336,8 @@ function completedAnalysisFromResponse(response, messages, normalizedModel) {
             codeCount: analysis.codes.length,
             categoryCount: analysis.categories.length,
             tentativeThemeCount: analysis.tentativeThemes.length,
-            overallSummary: `Generated independently from the original transcript in one ${normalizedModel} analysis pass. No prior-model analysis, AI audit, repair call, or per-case approval was used.`
+            systemProcessingNoteCount: systemProcessingNotes.length,
+            overallSummary: `Generated independently from the original transcript in one ${normalizedModel} analysis pass and preserved without an analytical validator. No prior-model analysis, AI audit, repair call, or per-case approval was used.`
         },
         inputTokenCount: response?.usage?.input_tokens || null,
         outputTokenCount: response?.usage?.output_tokens || null
@@ -439,11 +390,28 @@ export async function generateAdvancedPreliminaryAnalysis(
     const response = await analysisClient.responses.create(responseOptions(
         normalizedModel,
         reasoningEffort,
-        analysisSchema,
+        null,
         "advanced_preliminary_case_analysis",
         input
     ));
-    return completedAnalysisFromResponse(response, messages, normalizedModel);
+    return preservedAnalysisFromResponse(response, messages, normalizedModel);
+}
+
+async function savePreservedModelOutput(supabase, claim, analysis) {
+    const { error } = await supabase.rpc(
+        "save_advanced_preliminary_model_output",
+        {
+            p_job_id: claim.job_id,
+            p_raw_model_output_text: analysis.rawModelOutputText,
+            p_parsed_model_output: analysis.rawModelOutput,
+            p_system_processing_notes: analysis.systemProcessingNotes
+        }
+    );
+    if (error) {
+        throw new Error("The preserved model output could not be recorded.", {
+            cause: error
+        });
+    }
 }
 
 async function saveProviderResponse(supabase, claim, response) {
@@ -530,7 +498,10 @@ async function persistCompletedAnalysis(supabase, claim, source, analysis) {
         unassignedCodeNumbers: analysis.unassignedCodeNumbers,
         unassignedCategoryNumbers: analysis.unassignedCategoryNumbers,
         caseSummary: analysis.caseSummary,
-        audit: analysis.audit
+        audit: analysis.audit,
+        rawModelOutputText: analysis.rawModelOutputText,
+        rawModelOutput: analysis.rawModelOutput,
+        systemProcessingNotes: analysis.systemProcessingNotes
     };
     const { data: reportId, error: completionError } = await supabase.rpc(
         "complete_advanced_preliminary_analysis",
@@ -605,7 +576,7 @@ async function loadClaimedTranscript(supabase, claim) {
     };
 }
 
-async function failJob(supabase, jobId, error, retryable = false) {
+async function failJob(supabase, jobId, error, retryable = true) {
     const { error: persistenceError } = await supabase.rpc(
         "fail_advanced_preliminary_analysis",
         {
@@ -652,7 +623,7 @@ export async function processNextAdvancedPreliminaryAnalysis(
                 responseOptions(
                     normalizedModel,
                     claim.reasoning_effort,
-                    analysisSchema,
+                    null,
                     "advanced_preliminary_case_analysis",
                     analysisInput(source.messages, source.context),
                     true
@@ -703,11 +674,12 @@ export async function processNextAdvancedPreliminaryAnalysis(
             throw new Error(providerError);
         }
 
-        const analysis = completedAnalysisFromResponse(
+        const analysis = preservedAnalysisFromResponse(
             response,
             source.messages,
             normalizeAnalysisModel(claim.model)
         );
+        await savePreservedModelOutput(supabase, claim, analysis);
         const reportId = await persistCompletedAnalysis(
             supabase, claim, source, analysis
         );
@@ -724,7 +696,7 @@ export async function processNextAdvancedPreliminaryAnalysis(
             reportId
         };
     } catch (error) {
-        await failJob(supabase, claim.job_id, error, false);
+        await failJob(supabase, claim.job_id, error, true);
         console.error("Advanced preliminary case failed", {
             runId: claim.run_id,
             caseNumber: claim.case_number,

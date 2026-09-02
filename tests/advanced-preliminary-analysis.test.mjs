@@ -9,7 +9,7 @@ import {
     ADVANCED_PRELIMINARY_STALE_RESPONSE_MINUTES,
     ADVANCED_PRELIMINARY_STOP_LAYER,
     generateAdvancedPreliminaryAnalysis,
-    validateAdvancedPreliminaryAnalysis
+    projectAdvancedPreliminaryAnalysis
 } from "../server/advancedPreliminaryAnalysis.js";
 import {
     createAnalysisProviderClient,
@@ -105,8 +105,8 @@ function validDraft() {
 }
 
 test("Phase 1 preserves exact Meaning Units and generates the complete case hierarchy", () => {
-    const result = validateAdvancedPreliminaryAnalysis(validDraft(), messages);
-    assert.equal(result.complete, true);
+    const result = projectAdvancedPreliminaryAnalysis(validDraft(), messages);
+    assert.deepEqual(result.systemProcessingNotes, []);
     assert.equal(result.meaningUnits.length, 4);
     assert.equal(result.codes.length, 3);
     assert.equal(result.categories.length, 4);
@@ -117,10 +117,16 @@ test("Phase 1 preserves exact Meaning Units and generates the complete case hier
     assert.equal(result.meaningUnits[2].exactSourceText, "I want a quieter environment");
 });
 
-test("Stage 1 rejects rewritten, courtesy, duplicate, and overlapping evidence", () => {
+test("Stage 1 has no validator and never rejects the model report", () => {
     const rewritten = validDraft();
     rewritten.meaning_units[0].exact_source_text = "Usually sleeps late";
-    assert.equal(validateAdvancedPreliminaryAnalysis(rewritten, messages).complete, false);
+    const projected = projectAdvancedPreliminaryAnalysis(rewritten, messages);
+    assert.equal(projected.meaningUnits.length, 3);
+    assert.equal(projected.codes.length, 3);
+    assert.match(
+        JSON.stringify(projected.systemProcessingNotes),
+        /MU_RELATIONAL_PROJECTION_UNAVAILABLE/
+    );
 
     const overlap = validDraft();
     overlap.meaning_units.push({
@@ -129,9 +135,9 @@ test("Stage 1 rejects rewritten, courtesy, duplicate, and overlapping evidence",
         occurrence_index: 1,
         context_note: "Overlapping span."
     });
-    const result = validateAdvancedPreliminaryAnalysis(overlap, messages);
-    assert.equal(result.complete, false);
-    assert.match(result.invalidReasons.join(" "), /overlaps another Meaning Unit/);
+    const result = projectAdvancedPreliminaryAnalysis(overlap, messages);
+    assert.equal(result.meaningUnits.length, 5);
+    assert.deepEqual(result.systemProcessingNotes, []);
 });
 
 test("Stage 1 performs one fresh model call from the original transcript only", async () => {
@@ -160,9 +166,31 @@ test("Stage 1 performs one fresh model call from the original transcript only", 
     assert.equal(result.audit.priorAnalysisUsed, false);
     assert.equal(result.audit.aiAnalysisPassCount, 1);
     assert.equal(result.audit.validationType,
-        "local_deterministic_source_and_relationship_integrity");
+        "none_no_analytical_validator");
+    assert.equal(result.rawModelOutputText, JSON.stringify(validDraft()));
     assert.equal(result.codes.length, 3);
     assert.equal(result.tentativeThemes.length, 1);
+});
+
+test("unparseable completed model output is preserved instead of rejected", async () => {
+    const result = await generateAdvancedPreliminaryAnalysis(
+        {
+            responses: {
+                create: async () => ({
+                    model: "gpt-5.6-sol",
+                    output_text: "not-json-but-still-preserved",
+                    usage: { input_tokens: 10, output_tokens: 5 }
+                })
+            }
+        },
+        messages,
+        { projectName: "Sleeping habits", researchTopic: "Sleeping habits" },
+        { model: "gpt-5.6-sol" }
+    );
+    assert.equal(result.rawModelOutputText, "not-json-but-still-preserved");
+    assert.equal(result.rawModelOutput, null);
+    assert.match(JSON.stringify(result.systemProcessingNotes), /MODEL_OUTPUT_NOT_JSON/);
+    assert.equal(result.audit.validationType, "none_no_analytical_validator");
 });
 
 test("Phase 1 is versioned, stronger-model capable, and completes tentative themes", async () => {
@@ -176,6 +204,9 @@ test("Phase 1 is versioned, stronger-model capable, and completes tentative them
     assert.match(worker, /Relationships are many-to-many/);
     assert.match(worker, /Full-transcript coverage is mandatory/);
     assert.match(worker, /This is the only AI analysis pass for this case/);
+    assert.match(worker, /without using an analytical validator/);
+    assert.doesNotMatch(worker, /invalidReasons/);
+    assert.doesNotMatch(worker, /validateAdvancedPreliminaryAnalysis/);
     assert.match(worker, /No previous analysis, second AI audit, repair call, or human approval gate will be used/);
     assert.doesNotMatch(worker, /auditAnalysis\(/);
     assert.doesNotMatch(worker, /advanced_preliminary_analysis_audit/);
@@ -404,12 +435,14 @@ test("researcher UI exposes the complete one-pass case hierarchy and locks later
     assert.match(script, /prior analysis used: no/);
     assert.match(html, /single-pass output could not be stored safely/);
     assert.match(html, /without an additional paid AI audit/);
-    assert.match(html, /These are not researcher archives/);
-    assert.match(html, /Legacy cases/);
+    assert.match(html, /failure belongs to the system, not the participant/);
+    assert.match(html, /Stage 1 Processing Transparency/);
+    assert.doesNotMatch(html, /Legacy cases/);
     assert.match(script, /attentionCases/);
-    assert.match(script, /Move to Legacy cases/);
-    assert.match(script, /mark-legacy/);
-    assert.match(dashboard, /set_advanced_preliminary_case_disposition/);
+    assert.doesNotMatch(script, /Move to Legacy cases/);
+    assert.doesNotMatch(script, /mark-legacy/);
+    assert.doesNotMatch(dashboard, /set_advanced_preliminary_case_disposition/);
+    assert.match(script, /participant and transcript remain included and processible/);
     assert.match(script, /download=stage1-csv/);
     assert.match(dashboard, /configuredStage1Models/);
     assert.match(dashboard, /probeAdvancedPreliminaryModel/);

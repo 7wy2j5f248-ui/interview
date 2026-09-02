@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Stage 1 Processing Transparency</title>
+<style>
+    :root {
+        color-scheme: light;
+        --ink: #172033;
+        --muted: #52657f;
+        --paper: #ffffff;
+        --canvas: #f3f6fa;
+        --navy: #153d70;
+        --blue: #245fbd;
+        --line: #c6d3e3;
+        --warning: #7b263c;
+        --warning-bg: #fff3f5;
+        --safe: #155b45;
+        --safe-bg: #eaf6f0;
+        --gold: #c5a24a;
+        font-family: Arial, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body { background: var(--canvas); color: var(--ink); line-height: 1.55; margin: 0; }
+    a { color: #155f78; }
+    a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible {
+        outline: 3px solid var(--gold); outline-offset: 3px;
+    }
+    .pageHeader {
+        background: var(--navy); border-block-end: 5px solid var(--gold); color: #fff;
+        padding: 1rem max(1rem, calc((100vw - 78rem) / 2)) 2.4rem;
+    }
+    .pageHeader nav { display: flex; flex-wrap: wrap; gap: 0.7rem 1.2rem; margin-block-end: 2rem; }
+    .pageHeader a { color: #fff; }
+    .eyebrow { font-size: 0.78rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; }
+    h1 { font-family: Georgia, "Times New Roman", serif; font-size: clamp(2.1rem, 5vw, 4rem); line-height: 1; margin: 0; }
+    .headerSummary { max-width: 68rem; }
+    main { margin: 0 auto; max-width: 78rem; padding: 2rem 1rem 4rem; }
+    .panel, .ruleCard {
+        background: var(--paper); border: 1px solid var(--line); border-radius: 0.55rem;
+        box-shadow: 0 0.35rem 1rem rgba(23, 57, 104, 0.07); padding: 1rem;
+    }
+    .participantProtection { background: var(--safe-bg); border: 2px solid var(--safe); color: #103f31; margin-block-end: 1rem; }
+    .participantProtection h2 { color: var(--safe); }
+    .systemBoundary { background: var(--warning-bg); border-inline-start: 5px solid var(--warning); }
+    .tokenGate { margin-block: 1rem; }
+    .actionRow { align-items: end; display: flex; flex-wrap: wrap; gap: 0.75rem; }
+    label { display: grid; gap: 0.3rem; }
+    button, input, select { font: inherit; padding: 0.55rem 0.7rem; }
+    button { cursor: pointer; }
+    .statusGrid { display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); margin-block: 1rem; }
+    .statusItem { background: #f7f9fc; border: 1px solid var(--line); border-radius: 0.45rem; padding: 0.8rem; }
+    .statusItem span { color: var(--muted); display: block; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+    .statusItem strong { color: var(--navy); display: block; margin-block-start: 0.2rem; overflow-wrap: anywhere; }
+    .filters { display: grid; gap: 0.75rem; grid-template-columns: 2fr 1fr 1fr; margin-block: 1.2rem; }
+    .rules { display: grid; gap: 1rem; }
+    .ruleCard { border-block-start: 4px solid var(--blue); }
+    .ruleCard[data-authority="system_derived_researcher_review_required"] { border-block-start-color: var(--warning); }
+    .ruleHeader { align-items: start; display: flex; flex-wrap: wrap; gap: 0.6rem 1rem; justify-content: space-between; }
+    .ruleId { color: var(--warning); font-size: 0.75rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+    .ruleCard h3 { margin-block: 0.2rem 0.55rem; }
+    .badge { background: #edf3fb; border-radius: 999px; display: inline-block; font-size: 0.78rem; margin: 0.15rem; padding: 0.22rem 0.6rem; }
+    .reviewBadge { background: #f9e4e8; color: #681d31; }
+    dl { display: grid; gap: 0.15rem 1rem; grid-template-columns: minmax(9rem, 0.25fr) 1fr; margin-block-end: 0; }
+    dt { font-weight: 700; }
+    dd { margin: 0; overflow-wrap: anywhere; }
+    .muted { color: var(--muted); }
+    .error { background: var(--warning-bg); border-inline-start: 4px solid var(--warning); color: #681d31; padding: 0.75rem; }
+    pre { background: #f7f9fc; border: 1px solid var(--line); overflow: auto; padding: 0.75rem; white-space: pre-wrap; }
+    [hidden] { display: none !important; }
+    @media (max-width: 46rem) { .filters { grid-template-columns: 1fr; } dl { grid-template-columns: 1fr; } }
+    @media print { .tokenGate, .filters { display: none; } body { background: #fff; } .ruleCard { break-inside: avoid; } }
+</style>
+</head>
+<body>
+<header class="pageHeader">
+    <nav aria-label="Researcher governance navigation">
+        <a href="/researcher.html">Researcher workspace</a>
+        <a href="/research-governance.html">Research governance &amp; privacy</a>
+        <a href="/global-analysis-rules.html">Global analysis rules</a>
+        <a href="/project-analysis-rules.html">Project analysis rules</a>
+    </nav>
+    <p class="eyebrow">Researcher-visible effective contract</p>
+    <h1>Stage 1 Processing Transparency</h1>
+    <p class="headerSummary">
+        Every current processing step and every withdrawn validation control,
+        including where it came from, when it appeared, which model it affected,
+        whether it was authorized, and what replaced it.
+    </p>
+</header>
+<main>
+    <section class="panel participantProtection" aria-labelledby="participantProtectionHeading">
+        <h2 id="participantProtectionHeading">Participant protection boundary</h2>
+        <p><strong>A system-analysis failure is not a participant failure.</strong></p>
+        <p id="participantPolicyText">
+            No AI output, model judgment, parser, validator, numbering issue,
+            database state, or worker failure may disqualify a participant, exclude
+            a transcript, classify it as unusable, or permanently render it
+            non-processible. Formal completion controls readiness for complete-case
+            analysis only; incomplete sessions remain retained and reviewable as
+            not ready yet. Human rights and the participant's right to be heard
+            take precedence; system failures remain visible, system-owned, and
+            escalatable to researchers or system experts.
+        </p>
+    </section>
+
+    <section class="panel systemBoundary">
+        <h2>No current analytical validator</h2>
+        <p><strong>Stage 1 preserves every completed model response before attempting a relational display projection. Projection problems are system notes, not rejection grounds.</strong></p>
+        <p>
+            Historical controls marked <strong>Withdrawn system-derived rule · prohibited</strong>
+            became effective through code or migrations without a recorded researcher
+            authorization. Repository authorship does not establish informed approval.
+        </p>
+    </section>
+
+    <section class="panel tokenGate" id="validationRulesTokenGate">
+        <div class="actionRow">
+            <label>
+                Researcher dashboard token
+                <input id="validationRulesToken" type="password" autocomplete="current-password">
+            </label>
+            <button id="validationRulesLoadButton" type="button">Load effective rules</button>
+        </div>
+        <p id="validationRulesStatus" class="muted" role="status">
+            Unlock to load current processing controls, withdrawn rule history, and model association.
+        </p>
+    </section>
+
+    <div id="validationRulesWorkspace" hidden>
+        <section class="statusGrid" aria-label="Validation registry status">
+            <div class="statusItem"><span>Registry version</span><strong id="registryVersion">—</strong></div>
+            <div class="statusItem"><span>Current + withdrawn controls</span><strong id="registryTotal">—</strong></div>
+            <div class="statusItem"><span>Researcher review required</span><strong id="registryReviewCount">—</strong></div>
+            <div class="statusItem"><span>Current technical write blockers</span><strong id="registryBlockerCount">—</strong></div>
+            <div class="statusItem"><span>Withdrawn report-rejection controls</span><strong id="registryWithdrawnBlockerCount">—</strong></div>
+            <div class="statusItem"><span>Repository commit</span><strong id="registryCommit">—</strong></div>
+        </section>
+
+        <section class="panel" aria-labelledby="modelContextHeading">
+            <h2 id="modelContextHeading">Current model and frozen researcher-rule context</h2>
+            <div id="validationModelContext" class="muted">No Stage-1 run context loaded.</div>
+            <details>
+                <summary>Show the global and project rules frozen onto this run</summary>
+                <pre id="frozenResearcherRules">No frozen run rules are available.</pre>
+            </details>
+        </section>
+
+        <section class="panel" aria-labelledby="recentControlsHeading">
+            <h2 id="recentControlsHeading">Recent repository control inventory</h2>
+            <p>
+                This chronology identifies controls added on 31 August and
+                1 September 2026. A configured Git author name is shown only as
+                repository metadata; it is not treated as proof that the researcher
+                designed, understood, or authorized a control.
+            </p>
+            <p id="recentControlInventoryVersion" class="muted"></p>
+            <section id="recentPlatformControlList" class="rules" aria-live="polite"></section>
+        </section>
+
+        <section class="filters panel" aria-label="Rule filters">
+            <label>
+                Search every field
+                <input id="validationRuleSearch" type="search" placeholder="e.g. overlap, database, CO32, model">
+            </label>
+            <label>
+                Layer
+                <select id="validationRuleLayer"><option value="">All layers</option></select>
+            </label>
+            <label>
+                Authority
+                <select id="validationRuleAuthority">
+                    <option value="">All authority states</option>
+                    <option value="system_derived_researcher_review_required">System-derived · review required</option>
+                    <option value="researcher_directive">Researcher directive</option>
+                    <option value="withdrawn_system_derived">Withdrawn system-derived · prohibited</option>
+                </select>
+            </label>
+        </section>
+
+        <p id="validationRuleResultCount" class="muted"></p>
+        <section id="validationRuleList" class="rules" aria-live="polite"></section>
+    </div>
+</main>
+<script src="researcher-validation-rules.js?v=20260901-v2"></script>
+</body>
+</html>

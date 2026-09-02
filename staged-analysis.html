@@ -147,8 +147,11 @@
     <p class="governanceNotice">
         <strong>Independent governance:</strong>
         <a href="/research-governance.html">Global Research Governance / Participant Privacy Rules</a>
-        state what the platform is allowed to do, including the hard requirements for
-        participant anonymity, privacy, researcher control, and inspectable provenance.
+        state what the platform is allowed to do. The top rule is that no participant
+        or transcript may be administratively excluded or rendered non-processible.
+        <a href="/validation-rules.html">Stage 1 Processing Transparency</a> exposes every
+        current processing control and withdrawn validation rule, including its origin,
+        model association, authorization status, and historical effect.
         These rules are separate from this operational dashboard.
     </p>
     <section class="panel" aria-labelledby="workflowHeading">
@@ -237,7 +240,6 @@
                     <div class="analysisMetric"><strong id="advancedPreliminaryProcessing">0</strong>Processing</div>
                     <div class="analysisMetric"><strong id="advancedPreliminaryCompleted">0</strong>Completed</div>
                     <div class="analysisMetric"><strong id="advancedPreliminaryFailed">0</strong>Needs attention</div>
-                    <div class="analysisMetric"><strong id="advancedPreliminaryLegacy">0</strong>Legacy unusable</div>
                 </div>
                 <p id="advancedPreliminaryProvenance" class="muted"></p>
                 <div id="advancedPreliminaryTable"></div>
@@ -250,18 +252,11 @@
                     <summary><strong>Needs attention</strong> — single-pass output could not be stored safely</summary>
                     <p class="muted">
                         These cases are kept separate without an additional paid AI audit or
-                        repair call. Their transcripts and failure reasons remain available.
+                        repair call. Their transcripts and failure reasons remain available,
+                        included, and processible. The failure belongs to the system, not the participant,
+                        and remains visible for researcher or system-expert escalation.
                     </p>
                     <div id="advancedPreliminaryAttentionTable"></div>
-                </details>
-                <details id="advancedPreliminaryLegacyPanel">
-                    <summary><strong>Legacy cases</strong> — historical interviews classified as unusable</summary>
-                    <p class="muted">
-                        These are not researcher archives. Their source transcripts and
-                        classification reasons remain preserved, but they are excluded from
-                        the active staged analysis sequence.
-                    </p>
-                    <div id="advancedPreliminaryLegacyTable"></div>
                 </details>
                 <section id="crossCaseCodeRefinement" class="automaticReanalysisPanel" aria-labelledby="crossCaseCodeHeading">
                     <h3 id="crossCaseCodeHeading">Phase 2A · Cross-Case Code Refinement</h3>
@@ -289,6 +284,6 @@
 </dialog>
 
 <script src="researcher-staged-access.js?version=20260901-stage2-code-v1"></script>
-<script src="researcher-advanced-preliminary.js?version=20260901-stage2-code-v1"></script>
+<script src="researcher-advanced-preliminary.js?version=20260901-non-exclusion-v1"></script>
 </body>
 </html>
