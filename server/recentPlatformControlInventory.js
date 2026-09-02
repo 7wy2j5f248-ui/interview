@@ -164,5 +164,16 @@ export const RECENT_PLATFORM_CONTROLS = [
         currentStatus: "Current top-level researcher governance.",
         classification: "explicit researcher directive",
         authorization: "Explicitly directed by the researcher in this task on 2026-09-01."
+    }),
+    control({
+        id: "RECENT-016",
+        title: "Concurrent GPT-5.6 Stage-1 processing",
+        introduced: "2026-09-01 · explicit researcher throughput directive",
+        effect: "Allows up to eight participant cases to have durable GPT-5.6 responses in flight together and polls each response in turn, instead of blocking the entire queue behind one case.",
+        source: "server/advancedPreliminaryAnalysis.js; api/automatic-analysis.js; supabase/migrations/20260902032000_parallelize_stage1_processing.sql",
+        modelAssociation: "The exact Stage-1 model selected for the run; currently GPT-5.6-sol.",
+        currentStatus: "Active operational scheduling rule. It changes throughput only and cannot reject, exclude, or alter participant evidence.",
+        classification: "explicit researcher directive",
+        authorization: "Explicitly directed by the researcher on 2026-09-01 after serial processing produced unacceptable throughput."
     })
 ];

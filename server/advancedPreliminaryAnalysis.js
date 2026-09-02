@@ -16,6 +16,7 @@ export const LEGACY_ANALYSIS_INPUT = "excluded";
 export const EXECUTION_CONTRACT_VERSION = "researcher-operation-contract-v1";
 export const ADVANCED_PRELIMINARY_MAX_OUTPUT_TOKENS = 20000;
 export const ADVANCED_PRELIMINARY_STALE_RESPONSE_MINUTES = 45;
+export const ADVANCED_PRELIMINARY_PARALLEL_CASES = 8;
 
 const modelProbeSchema = {
     type: "object",
@@ -593,12 +594,13 @@ async function failJob(supabase, jobId, error, retryable = true) {
 export async function processNextAdvancedPreliminaryAnalysis(
     supabase,
     {
+        claimFunction = "claim_next_advanced_preliminary_analysis",
         providerClientFactory = provider =>
             createAnalysisProviderClient(provider).client
     } = {}
 ) {
     const { data, error } = await supabase.rpc(
-        "claim_next_advanced_preliminary_analysis"
+        claimFunction
     );
     if (error) {
         throw new Error("The next advanced preliminary case could not be claimed.", {

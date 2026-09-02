@@ -4,6 +4,7 @@ import {
     stagedAnalysisWorkerRequestIsAuthorized
 } from "../server/stagedAnalysisWorker.js";
 import {
+    ADVANCED_PRELIMINARY_PARALLEL_CASES,
     processNextAdvancedPreliminaryAnalysis
 } from "../server/advancedPreliminaryAnalysis.js";
 import {
@@ -33,9 +34,23 @@ async function processStagedAndContinue(req) {
     const supabaseClient = createClient(supabaseUrl, secretKey, {
         auth: { persistSession: false, autoRefreshToken: false }
     });
-    const result = await processNextAdvancedPreliminaryAnalysis(supabaseClient);
+    const results = [];
+    for (let index = 0;
+        index < ADVANCED_PRELIMINARY_PARALLEL_CASES * 2;
+        index += 1) {
+        const result = await processNextAdvancedPreliminaryAnalysis(
+            supabaseClient,
+            { claimFunction: "claim_available_advanced_preliminary_analysis" }
+        );
+        results.push(result);
+        if (!result.claimed) break;
+    }
 
-    return result;
+    return {
+        claimed: results.some(result => result.claimed),
+        completed: results.filter(result => result.completed).length,
+        activeTickOperations: results.filter(result => result.claimed).length
+    };
 }
 
 async function processTranslationAndContinue(req) {

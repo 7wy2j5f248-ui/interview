@@ -72,18 +72,20 @@ test("the dedicated researcher page exposes authority, provenance, models, and f
 
 test("recent system-derived controls and their authorization boundary are disclosed", async () => {
     const sourceText = await source("server/recentPlatformControlInventory.js");
-    assert.equal(RECENT_PLATFORM_CONTROLS.length, 15);
-    assert.equal(new Set(RECENT_PLATFORM_CONTROLS.map(item => item.id)).size, 15);
+    assert.equal(RECENT_PLATFORM_CONTROLS.length, 16);
+    assert.equal(new Set(RECENT_PLATFORM_CONTROLS.map(item => item.id)).size, 16);
     assert.match(sourceText, /RECENT-006/);
     assert.match(sourceText, /Stronger-model preliminary-analysis pipeline/);
     assert.match(sourceText, /RECENT-010/);
     assert.match(sourceText, /Legacy unusable case disposition/);
+    assert.match(sourceText, /RECENT-016/);
+    assert.match(sourceText, /Concurrent GPT-5\.6 Stage-1 processing/);
     assert.match(sourceText, /Git author identity or commit title is not evidence of informed approval/);
     assert.match(sourceText, /No explicit researcher authorization record was found/);
     assert.equal(
         RECENT_PLATFORM_CONTROLS.filter(item =>
             item.classification === "explicit researcher directive").length,
-        1
+        2
     );
 });
 

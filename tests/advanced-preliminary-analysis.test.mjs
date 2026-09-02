@@ -4,6 +4,7 @@ import test from "node:test";
 import {
     ADVANCED_PRELIMINARY_ANALYSIS_VERSION,
     ADVANCED_PRELIMINARY_MAX_OUTPUT_TOKENS,
+    ADVANCED_PRELIMINARY_PARALLEL_CASES,
     ADVANCED_PRELIMINARY_PROMPT_VERSION,
     ADVANCED_PRELIMINARY_REASONING_EFFORT,
     ADVANCED_PRELIMINARY_STALE_RESPONSE_MINUTES,
@@ -197,6 +198,7 @@ test("Phase 1 is versioned, stronger-model capable, and completes tentative them
     assert.equal(ADVANCED_PRELIMINARY_REASONING_EFFORT, "high");
     assert.equal(ADVANCED_PRELIMINARY_STOP_LAYER, "preliminary_tentative_themes");
     assert.equal(ADVANCED_PRELIMINARY_MAX_OUTPUT_TOKENS, 20000);
+    assert.equal(ADVANCED_PRELIMINARY_PARALLEL_CASES, 8);
     assert.match(ADVANCED_PRELIMINARY_ANALYSIS_VERSION, /v4-researcher-controlled-independent/);
     assert.match(ADVANCED_PRELIMINARY_PROMPT_VERSION, /v4-explicit-run-contract/);
     const worker = await source("server/advancedPreliminaryAnalysis.js");
@@ -297,6 +299,22 @@ test("the server resumes durable analysis without recursive function calls", asy
     assert.match(migration, /\* \* \* \* \*/);
     assert.match(migration, /authorized-run-tick/);
     assert.match(migration, /spend_guard_status = 'active'/);
+});
+
+test("authorized Stage 1 ticks fill and poll a bounded parallel GPT-5.6 queue", async () => {
+    const endpoint = await source("api/automatic-analysis.js");
+    const worker = await source("server/advancedPreliminaryAnalysis.js");
+    const migration = await source(
+        "supabase/migrations/20260902032000_parallelize_stage1_processing.sql"
+    );
+    assert.match(endpoint, /ADVANCED_PRELIMINARY_PARALLEL_CASES \* 2/);
+    assert.match(endpoint, /claim_available_advanced_preliminary_analysis/);
+    assert.match(worker, /claimFunction/);
+    assert.match(migration, /maximum_parallel_cases constant integer := 8/);
+    assert.match(migration, /provider_response_checked_at <= now\(\) - interval '20 seconds'/);
+    assert.match(migration, /current_processing \+ 1/);
+    assert.doesNotMatch(migration, /legacy_unusable/);
+    assert.doesNotMatch(migration, /delete from public\./i);
 });
 
 test("run-level spend includes completed, orphaned, and uncertain usage", async () => {
