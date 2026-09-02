@@ -122,6 +122,14 @@
             addDefinition(definitions, "Execution plan hash", run.executionPlanHash);
             addDefinition(definitions, "Authoritative source", run.authoritativeSource);
             addDefinition(definitions, "Legacy analysis input", run.legacyAnalysisInput);
+            addDefinition(definitions, "Analytical independence",
+                payload.operationalExecutionContext?.analyticalIndependence);
+            addDefinition(definitions, "Execution concurrency",
+                payload.operationalExecutionContext?.executionConcurrency);
+            addDefinition(definitions, "Current worker concurrency",
+                payload.operationalExecutionContext?.currentWorkerConcurrency);
+            addDefinition(definitions, "Concurrency source",
+                payload.operationalExecutionContext?.configurationSource);
             host.replaceChildren(definitions);
         }
         document.getElementById("frozenResearcherRules").textContent =

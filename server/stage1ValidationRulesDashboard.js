@@ -10,6 +10,9 @@ import {
     RECENT_PLATFORM_CONTROL_INVENTORY_VERSION,
     RECENT_PLATFORM_CONTROLS
 } from "./recentPlatformControlInventory.js";
+import {
+    configuredAdvancedPreliminaryWorkerConcurrency
+} from "./advancedPreliminaryAnalysis.js";
 
 function client() {
     return createClient(
@@ -86,6 +89,14 @@ export async function handleStage1ValidationRulesDashboard(req, res) {
                 requestedAt: run.requested_at
             } : null,
             frozenResearcherRules: run?.rules_snapshot || null,
+            operationalExecutionContext: {
+                analyticalIndependence: "mandatory_case_by_case",
+                executionConcurrency: "technical_configurable",
+                currentWorkerConcurrency:
+                    configuredAdvancedPreliminaryWorkerConcurrency(),
+                configurationSource:
+                    "ADVANCED_PRELIMINARY_WORKER_CONCURRENCY server setting; documented default applies only when it is unset"
+            },
             rules: STAGE1_VALIDATION_RULES,
             recentPlatformControlInventoryVersion:
                 RECENT_PLATFORM_CONTROL_INVENTORY_VERSION,

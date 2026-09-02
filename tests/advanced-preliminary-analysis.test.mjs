@@ -4,11 +4,12 @@ import test from "node:test";
 import {
     ADVANCED_PRELIMINARY_ANALYSIS_VERSION,
     ADVANCED_PRELIMINARY_MAX_OUTPUT_TOKENS,
-    ADVANCED_PRELIMINARY_PARALLEL_CASES,
+    DEFAULT_ADVANCED_PRELIMINARY_WORKER_CONCURRENCY,
     ADVANCED_PRELIMINARY_PROMPT_VERSION,
     ADVANCED_PRELIMINARY_REASONING_EFFORT,
     ADVANCED_PRELIMINARY_STALE_RESPONSE_MINUTES,
     ADVANCED_PRELIMINARY_STOP_LAYER,
+    configuredAdvancedPreliminaryWorkerConcurrency,
     generateAdvancedPreliminaryAnalysis,
     projectAdvancedPreliminaryAnalysis
 } from "../server/advancedPreliminaryAnalysis.js";
@@ -198,7 +199,7 @@ test("Phase 1 is versioned, stronger-model capable, and completes tentative them
     assert.equal(ADVANCED_PRELIMINARY_REASONING_EFFORT, "high");
     assert.equal(ADVANCED_PRELIMINARY_STOP_LAYER, "preliminary_tentative_themes");
     assert.equal(ADVANCED_PRELIMINARY_MAX_OUTPUT_TOKENS, 20000);
-    assert.equal(ADVANCED_PRELIMINARY_PARALLEL_CASES, 8);
+    assert.equal(DEFAULT_ADVANCED_PRELIMINARY_WORKER_CONCURRENCY, 8);
     assert.match(ADVANCED_PRELIMINARY_ANALYSIS_VERSION, /v4-researcher-controlled-independent/);
     assert.match(ADVANCED_PRELIMINARY_PROMPT_VERSION, /v4-explicit-run-contract/);
     const worker = await source("server/advancedPreliminaryAnalysis.js");
@@ -301,16 +302,25 @@ test("the server resumes durable analysis without recursive function calls", asy
     assert.match(migration, /spend_guard_status = 'active'/);
 });
 
-test("authorized Stage 1 ticks fill and poll a bounded parallel GPT-5.6 queue", async () => {
+test("Stage 1 analytical independence is separate from configurable worker concurrency", async () => {
     const endpoint = await source("api/automatic-analysis.js");
     const worker = await source("server/advancedPreliminaryAnalysis.js");
     const migration = await source(
-        "supabase/migrations/20260902032000_parallelize_stage1_processing.sql"
+        "supabase/migrations/20260902040232_configure_stage1_worker_concurrency.sql"
     );
-    assert.match(endpoint, /ADVANCED_PRELIMINARY_PARALLEL_CASES \* 2/);
+    assert.equal(configuredAdvancedPreliminaryWorkerConcurrency({}), 8);
+    assert.equal(configuredAdvancedPreliminaryWorkerConcurrency({
+        ADVANCED_PRELIMINARY_WORKER_CONCURRENCY: "13"
+    }), 13);
+    assert.throws(() => configuredAdvancedPreliminaryWorkerConcurrency({
+        ADVANCED_PRELIMINARY_WORKER_CONCURRENCY: "0"
+    }), /positive integer/);
+    assert.match(endpoint, /workerConcurrency \* 2/);
+    assert.match(endpoint, /p_maximum_parallel_cases: workerConcurrency/);
     assert.match(endpoint, /claim_available_advanced_preliminary_analysis/);
-    assert.match(worker, /claimFunction/);
-    assert.match(migration, /maximum_parallel_cases constant integer := 8/);
+    assert.match(worker, /claimParameters/);
+    assert.match(migration, /p_maximum_parallel_cases integer/);
+    assert.match(migration, /current_processing < p_maximum_parallel_cases/);
     assert.match(migration, /provider_response_checked_at <= now\(\) - interval '20 seconds'/);
     assert.match(migration, /current_processing \+ 1/);
     assert.doesNotMatch(migration, /legacy_unusable/);

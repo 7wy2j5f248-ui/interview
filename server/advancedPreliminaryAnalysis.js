@@ -16,7 +16,24 @@ export const LEGACY_ANALYSIS_INPUT = "excluded";
 export const EXECUTION_CONTRACT_VERSION = "researcher-operation-contract-v1";
 export const ADVANCED_PRELIMINARY_MAX_OUTPUT_TOKENS = 20000;
 export const ADVANCED_PRELIMINARY_STALE_RESPONSE_MINUTES = 45;
-export const ADVANCED_PRELIMINARY_PARALLEL_CASES = 8;
+export const DEFAULT_ADVANCED_PRELIMINARY_WORKER_CONCURRENCY = 8;
+
+export function configuredAdvancedPreliminaryWorkerConcurrency(
+    environment = process.env
+) {
+    const configured = environment.ADVANCED_PRELIMINARY_WORKER_CONCURRENCY;
+    if (configured === undefined || configured === null
+        || String(configured).trim() === "") {
+        return DEFAULT_ADVANCED_PRELIMINARY_WORKER_CONCURRENCY;
+    }
+    const normalized = String(configured).trim();
+    if (!/^\d+$/.test(normalized) || Number(normalized) < 1) {
+        throw new Error(
+            "ADVANCED_PRELIMINARY_WORKER_CONCURRENCY must be a positive integer."
+        );
+    }
+    return Number(normalized);
+}
 
 const modelProbeSchema = {
     type: "object",
@@ -595,13 +612,14 @@ export async function processNextAdvancedPreliminaryAnalysis(
     supabase,
     {
         claimFunction = "claim_next_advanced_preliminary_analysis",
+        claimParameters = null,
         providerClientFactory = provider =>
             createAnalysisProviderClient(provider).client
     } = {}
 ) {
-    const { data, error } = await supabase.rpc(
-        claimFunction
-    );
+    const { data, error } = claimParameters
+        ? await supabase.rpc(claimFunction, claimParameters)
+        : await supabase.rpc(claimFunction);
     if (error) {
         throw new Error("The next advanced preliminary case could not be claimed.", {
             cause: error
