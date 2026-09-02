@@ -78,8 +78,8 @@ test("the dedicated researcher page exposes authority, provenance, models, and f
 
 test("recent system-derived controls and their authorization boundary are disclosed", async () => {
     const sourceText = await source("server/recentPlatformControlInventory.js");
-    assert.equal(RECENT_PLATFORM_CONTROLS.length, 16);
-    assert.equal(new Set(RECENT_PLATFORM_CONTROLS.map(item => item.id)).size, 16);
+    assert.equal(RECENT_PLATFORM_CONTROLS.length, 17);
+    assert.equal(new Set(RECENT_PLATFORM_CONTROLS.map(item => item.id)).size, 17);
     assert.match(sourceText, /RECENT-006/);
     assert.match(sourceText, /Stronger-model preliminary-analysis pipeline/);
     assert.match(sourceText, /RECENT-010/);
@@ -87,19 +87,22 @@ test("recent system-derived controls and their authorization boundary are disclo
     assert.match(sourceText, /RECENT-016/);
     assert.match(sourceText, /Stage-1 execution concurrency/);
     assert.match(sourceText, /explicitly required removal of the system-derived fixed value of eight/);
+    assert.match(sourceText, /RECENT-017/);
+    assert.match(sourceText, /Remove relational projection as a Stage-1 report gate/);
     assert.match(sourceText, /Git author identity or commit title is not evidence of informed approval/);
     assert.match(sourceText, /No explicit researcher authorization record was found/);
     assert.equal(
         RECENT_PLATFORM_CONTROLS.filter(item =>
             item.classification === "explicit researcher directive").length,
-        1
+        2
     );
 });
 
 test("the Stage 1 validator is withdrawn and every model output is preserved", async () => {
-    const [worker, migration] = await Promise.all([
+    const [worker, migration, nonBlockingProjection] = await Promise.all([
         source("server/advancedPreliminaryAnalysis.js"),
-        source("supabase/migrations/20260902020000_withdraw_stage1_validator.sql")
+        source("supabase/migrations/20260902020000_withdraw_stage1_validator.sql"),
+        source("supabase/migrations/20260902140632_make_stage1_projection_non_blocking.sql")
     ]);
 
     assert.doesNotMatch(worker, /validateAdvancedPreliminaryAnalysis/);
@@ -113,6 +116,12 @@ test("the Stage 1 validator is withdrawn and every model output is preserved", a
     assert.match(migration, /system_processing_notes/);
     assert.match(migration, /drop constraint if exists advanced_preliminary_codes_meaning_unit_count_check/);
     assert.match(migration, /non-rejecting/);
+    assert.match(nonBlockingProjection, /exception when others/);
+    assert.match(nonBlockingProjection, /RELATIONAL_PROJECTION_STORAGE_UNAVAILABLE/);
+    assert.match(nonBlockingProjection, /status = 'completed'/);
+    assert.match(nonBlockingProjection, /case remains completed/);
+    assert.doesNotMatch(nonBlockingProjection, /delete from public\./i);
+    assert.doesNotMatch(nonBlockingProjection, /update public\.interview_(sessions|messages)/i);
 });
 
 test("the exclusion path is removed and the database migration restores processibility", async () => {

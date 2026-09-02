@@ -1,5 +1,5 @@
 export const STAGE1_VALIDATION_REGISTRY_VERSION =
-    "stage1-processing-transparency-v2-validator-withdrawn";
+    "stage1-processing-transparency-v3-executable-gates-removed";
 
 export const STAGE1_PARTICIPANT_INCLUSION_POLICY = {
     id: "GOV-PART-001",
@@ -76,6 +76,8 @@ const NON_EXCLUSION_MIGRATION =
     "supabase/migrations/20260902013000_prohibit_participant_transcript_exclusion.sql";
 const VALIDATOR_WITHDRAWAL_MIGRATION =
     "supabase/migrations/20260902020000_withdraw_stage1_validator.sql";
+const NON_BLOCKING_PROJECTION_MIGRATION =
+    "supabase/migrations/20260902140632_make_stage1_projection_non_blocking.sql";
 
 const STAGE1_RULE_HISTORY = [
     rule({
@@ -92,9 +94,9 @@ const STAGE1_RULE_HISTORY = [
         id: "GOV-NOVAL-001", title: "Stage 1 has no analytical validator",
         text: "Every completed provider response is preserved before relational projection. No Meaning Unit, Code, Category, Theme, relationship, count, or case summary is accepted or rejected by an application validator.",
         layer: "researcher governance", object: "model output and participant case",
-        origin: `${ADVANCED_SOURCE} and ${VALIDATOR_WITHDRAWAL_MIGRATION}`,
+        origin: `${ADVANCED_SOURCE}, ${VALIDATOR_WITHDRAWAL_MIGRATION}, and ${NON_BLOCKING_PROJECTION_MIGRATION}`,
         introduced: "2026-09-01 · researcher directive",
-        effect: "The raw model output is always retained. Technical projection issues become system-owned notes and never reject the report or participant.",
+        effect: "The raw model output and report are retained. Technical projection issues become system-owned notes and never reject the report or participant.",
         rationale: "Analytical judgment belongs to the researcher; software problems belong to the system.",
         authority: "researcher_directive",
         modelAssociation: "Model-independent researcher directive; no current or future Stage-1 model is governed by an analytical validator."
@@ -583,7 +585,8 @@ const WITHDRAWN_VALIDATOR_RULE_IDS = new Set([
     "MU-001", "MU-002", "MU-003", "MU-004", "MU-005", "MU-006", "MU-007",
     "REF-001", "REF-002", "REF-003", "CO-001", "CA-001", "TH-001",
     "COMP-001", "COMP-002", "COMP-003", "COMP-004",
-    "NUM-002", "DB-004", "DB-005", "DB-006", "DB-007", "DB-009"
+    "NUM-002", "DB-004", "DB-005", "DB-006", "DB-007", "DB-009",
+    "DB-010"
 ]);
 
 export const STAGE1_VALIDATION_RULES = STAGE1_RULE_HISTORY.map(item => {

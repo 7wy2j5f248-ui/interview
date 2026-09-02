@@ -24,7 +24,7 @@ function control({
 }
 
 export const RECENT_PLATFORM_CONTROL_INVENTORY_VERSION =
-    "recent-platform-controls-2026-09-01-v1";
+    "recent-platform-controls-2026-09-02-v2";
 
 // Disclosure register only: none of these entries execute policy.
 export const RECENT_PLATFORM_CONTROLS = [
@@ -174,5 +174,16 @@ export const RECENT_PLATFORM_CONTROLS = [
         modelAssociation: "Model-independent execution configuration; it does not change the selected Stage-1 model, prompt, evidence, or report.",
         currentStatus: "Active technical configuration with no system-derived fixed default. The current capacity and its source are shown on the researcher validation page. No concurrency value has analytical or participant-eligibility meaning.",
         authorization: "The researcher required the analysis to finish, rejected serial execution, and on 2026-09-02 explicitly required removal of the system-derived fixed value of eight."
+    }),
+    control({
+        id: "RECENT-017",
+        title: "Remove relational projection as a Stage-1 report gate",
+        introduced: "2026-09-02 · explicit researcher directive",
+        effect: "Makes the preserved case report authoritative and changes MU/CO/CA/TH relational storage into a best-effort display projection. A cast, link, numbering, or child-table constraint failure becomes a system-owned note and cannot reject the report.",
+        source: "supabase/migrations/20260902140632_make_stage1_projection_non_blocking.sql; server/advancedPreliminaryAnalysis.js",
+        modelAssociation: "Model-independent; applies to every current or future Stage-1 generator.",
+        currentStatus: "Current top-level researcher governance. No analytical or structural output gate may block a completed Stage-1 provider response.",
+        classification: "explicit researcher directive",
+        authorization: "Explicitly directed by the researcher in this task on 2026-09-02."
     })
 ];
