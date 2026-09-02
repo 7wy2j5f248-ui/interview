@@ -3,11 +3,13 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
     ADVANCED_PRELIMINARY_ANALYSIS_VERSION,
-    ADVANCED_PRELIMINARY_MAX_OUTPUT_TOKENS,
+    DEFAULT_ADVANCED_PRELIMINARY_MAX_OUTPUT_TOKENS,
     DEFAULT_ADVANCED_PRELIMINARY_WORKER_CONCURRENCY,
     ADVANCED_PRELIMINARY_PROMPT_VERSION,
     ADVANCED_PRELIMINARY_REASONING_EFFORT,
-    ADVANCED_PRELIMINARY_STALE_RESPONSE_MINUTES,
+    DEFAULT_ADVANCED_PRELIMINARY_STALE_RESPONSE_MINUTES,
+    configuredAdvancedPreliminaryMaxOutputTokens,
+    configuredAdvancedPreliminaryStaleResponseMinutes,
     ADVANCED_PRELIMINARY_STOP_LAYER,
     configuredAdvancedPreliminaryWorkerConcurrency,
     generateAdvancedPreliminaryAnalysis,
@@ -198,7 +200,7 @@ test("unparseable completed model output is preserved instead of rejected", asyn
 test("Phase 1 is versioned, stronger-model capable, and completes tentative themes", async () => {
     assert.equal(ADVANCED_PRELIMINARY_REASONING_EFFORT, "high");
     assert.equal(ADVANCED_PRELIMINARY_STOP_LAYER, "preliminary_tentative_themes");
-    assert.equal(ADVANCED_PRELIMINARY_MAX_OUTPUT_TOKENS, 20000);
+    assert.equal(DEFAULT_ADVANCED_PRELIMINARY_MAX_OUTPUT_TOKENS, 40000);
     assert.equal(DEFAULT_ADVANCED_PRELIMINARY_WORKER_CONCURRENCY, 8);
     assert.match(ADVANCED_PRELIMINARY_ANALYSIS_VERSION, /v4-researcher-controlled-independent/);
     assert.match(ADVANCED_PRELIMINARY_PROMPT_VERSION, /v4-explicit-run-contract/);
@@ -338,21 +340,28 @@ test("run-level spend includes completed, orphaned, and uncertain usage", async 
     assert.match(migration, /unverified_spend_reserve_usd/);
 });
 
-test("a stale background response is cancelled, preserved, and retried at most once", async () => {
-    assert.equal(ADVANCED_PRELIMINARY_STALE_RESPONSE_MINUTES, 45);
+test("technical output and stale-response limits are configurable and system failures can be requeued", async () => {
+    assert.equal(DEFAULT_ADVANCED_PRELIMINARY_STALE_RESPONSE_MINUTES, 120);
+    assert.equal(configuredAdvancedPreliminaryMaxOutputTokens({}), 40000);
+    assert.equal(configuredAdvancedPreliminaryMaxOutputTokens({
+        ADVANCED_PRELIMINARY_MAX_OUTPUT_TOKENS: "50000"
+    }), 50000);
+    assert.equal(configuredAdvancedPreliminaryStaleResponseMinutes({}), 120);
+    assert.equal(configuredAdvancedPreliminaryStaleResponseMinutes({
+        ADVANCED_PRELIMINARY_STALE_RESPONSE_MINUTES: "180"
+    }), 180);
     const worker = await source("server/advancedPreliminaryAnalysis.js");
     const migration = await source(
-        "supabase/migrations/20260902004107_handle_stale_stage1_responses.sql"
+        "supabase/migrations/20260902133500_requeue_stage1_system_failures.sql"
     );
     assert.match(worker, /responses\.cancel\(response\.id\)/);
-    assert.match(worker, /resolve_stalled_advanced_preliminary_response/);
     assert.match(worker, /attempt-\$\{claim\.attempt_count\}/);
     assert.match(migration, /provider_response_history/);
-    assert.match(migration, /stale_response_retry_count/);
-    assert.match(migration, /interval '45 minutes'/);
-    assert.match(migration, /retry_scheduled/);
-    assert.match(migration, /terminal_failure/);
-    assert.match(migration, /unverified_spend_reserve_usd = unverified_spend_reserve_usd/);
+    assert.match(migration, /system_retry_scheduled/);
+    assert.match(migration, /attempt_count = 0/);
+    assert.match(migration, /job\.status = 'failed'/);
+    assert.match(migration, /not exists/);
+    assert.match(migration, /unverified_spend_reserve_usd/);
     assert.doesNotMatch(migration, /delete from public\./i);
 });
 

@@ -14,25 +14,51 @@ export const FRESH_ANALYSIS_OPERATION = "fresh_independent_analysis";
 export const AUTHORITATIVE_SOURCE = "original_completed_transcripts";
 export const LEGACY_ANALYSIS_INPUT = "excluded";
 export const EXECUTION_CONTRACT_VERSION = "researcher-operation-contract-v1";
-export const ADVANCED_PRELIMINARY_MAX_OUTPUT_TOKENS = 20000;
-export const ADVANCED_PRELIMINARY_STALE_RESPONSE_MINUTES = 45;
+export const DEFAULT_ADVANCED_PRELIMINARY_MAX_OUTPUT_TOKENS = 40000;
+export const DEFAULT_ADVANCED_PRELIMINARY_STALE_RESPONSE_MINUTES = 120;
 export const DEFAULT_ADVANCED_PRELIMINARY_WORKER_CONCURRENCY = 8;
+
+function configuredPositiveInteger(environment, name, fallback) {
+    const configured = environment[name];
+    if (configured === undefined || configured === null
+        || String(configured).trim() === "") {
+        return fallback;
+    }
+    const normalized = String(configured).trim();
+    if (!/^\d+$/.test(normalized) || Number(normalized) < 1) {
+        throw new Error(`${name} must be a positive integer.`);
+    }
+    return Number(normalized);
+}
+
+export function configuredAdvancedPreliminaryMaxOutputTokens(
+    environment = process.env
+) {
+    return configuredPositiveInteger(
+        environment,
+        "ADVANCED_PRELIMINARY_MAX_OUTPUT_TOKENS",
+        DEFAULT_ADVANCED_PRELIMINARY_MAX_OUTPUT_TOKENS
+    );
+}
+
+export function configuredAdvancedPreliminaryStaleResponseMinutes(
+    environment = process.env
+) {
+    return configuredPositiveInteger(
+        environment,
+        "ADVANCED_PRELIMINARY_STALE_RESPONSE_MINUTES",
+        DEFAULT_ADVANCED_PRELIMINARY_STALE_RESPONSE_MINUTES
+    );
+}
 
 export function configuredAdvancedPreliminaryWorkerConcurrency(
     environment = process.env
 ) {
-    const configured = environment.ADVANCED_PRELIMINARY_WORKER_CONCURRENCY;
-    if (configured === undefined || configured === null
-        || String(configured).trim() === "") {
-        return DEFAULT_ADVANCED_PRELIMINARY_WORKER_CONCURRENCY;
-    }
-    const normalized = String(configured).trim();
-    if (!/^\d+$/.test(normalized) || Number(normalized) < 1) {
-        throw new Error(
-            "ADVANCED_PRELIMINARY_WORKER_CONCURRENCY must be a positive integer."
-        );
-    }
-    return Number(normalized);
+    return configuredPositiveInteger(
+        environment,
+        "ADVANCED_PRELIMINARY_WORKER_CONCURRENCY",
+        DEFAULT_ADVANCED_PRELIMINARY_WORKER_CONCURRENCY
+    );
 }
 
 const modelProbeSchema = {
@@ -288,7 +314,7 @@ function responseOptions(model, reasoningEffort, schema, name, input, background
         model,
         store: background,
         background,
-        max_output_tokens: ADVANCED_PRELIMINARY_MAX_OUTPUT_TOKENS,
+        max_output_tokens: configuredAdvancedPreliminaryMaxOutputTokens(),
         reasoning: {
             effort: reasoningEffort,
             context: "current_turn"
@@ -462,9 +488,11 @@ async function providerResponseIsStale(supabase, claim, now = new Date()) {
         });
     }
     const submittedAt = Date.parse(data?.provider_response_submitted_at || "");
+    const staleResponseMinutes =
+        configuredAdvancedPreliminaryStaleResponseMinutes();
     return Number.isFinite(submittedAt)
         && now.getTime() - submittedAt
-            >= ADVANCED_PRELIMINARY_STALE_RESPONSE_MINUTES * 60 * 1000;
+            >= staleResponseMinutes * 60 * 1000;
 }
 
 async function resolveStalledProviderResponse(
@@ -491,12 +519,14 @@ async function resolveStalledProviderResponse(
     }
     await saveProviderResponse(supabase, claim, cancelledResponse);
 
+    const staleResponseMinutes =
+        configuredAdvancedPreliminaryStaleResponseMinutes();
     const { data: resolution, error } = await supabase.rpc(
         "resolve_stalled_advanced_preliminary_response",
         {
             p_job_id: claim.job_id,
             p_provider_response_id: response.id,
-            p_reason: `Provider response remained ${response.status} for at least ${ADVANCED_PRELIMINARY_STALE_RESPONSE_MINUTES} minutes.`
+            p_reason: `Provider response remained ${response.status} for at least ${staleResponseMinutes} minutes.`
         }
     );
     if (error || !resolution) {

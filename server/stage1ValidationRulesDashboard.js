@@ -11,6 +11,8 @@ import {
     RECENT_PLATFORM_CONTROLS
 } from "./recentPlatformControlInventory.js";
 import {
+    configuredAdvancedPreliminaryMaxOutputTokens,
+    configuredAdvancedPreliminaryStaleResponseMinutes,
     configuredAdvancedPreliminaryWorkerConcurrency
 } from "./advancedPreliminaryAnalysis.js";
 
@@ -95,7 +97,17 @@ export async function handleStage1ValidationRulesDashboard(req, res) {
                 currentWorkerConcurrency:
                     configuredAdvancedPreliminaryWorkerConcurrency(),
                 configurationSource:
-                    "ADVANCED_PRELIMINARY_WORKER_CONCURRENCY server setting; documented default applies only when it is unset"
+                    "ADVANCED_PRELIMINARY_WORKER_CONCURRENCY server setting; documented default applies only when it is unset",
+                maximumOutputTokensPerAttempt:
+                    configuredAdvancedPreliminaryMaxOutputTokens(),
+                maximumOutputTokensSource:
+                    "ADVANCED_PRELIMINARY_MAX_OUTPUT_TOKENS server setting; technical capacity, not a participant qualification rule",
+                stalledResponseMinutesBeforeSystemRetry:
+                    configuredAdvancedPreliminaryStaleResponseMinutes(),
+                stalledResponseSource:
+                    "ADVANCED_PRELIMINARY_STALE_RESPONSE_MINUTES server setting; technical recovery timing, not a participant qualification rule",
+                systemRetryPolicy:
+                    "Technical failures are requeued as system work; failure counts are not participant qualification rules"
             },
             rules: STAGE1_VALIDATION_RULES,
             recentPlatformControlInventoryVersion:
