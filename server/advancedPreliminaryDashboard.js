@@ -94,10 +94,34 @@ async function loadSummary(supabase, req) {
     const reports = jobIds.length ? await requireData(
         supabase
             .from("advanced_preliminary_case_reports")
-            .select("id, job_id, session_id, case_number, participant_code, language, project_id, source_report_id, model, resolved_model, reasoning_effort, analysis_version, prompt_version, analytical_audit, raw_model_output_text, input_token_count, output_token_count, completed_at")
+            .select("id, job_id, session_id, case_number, participant_code, language, project_id, source_report_id, case_summary, model, resolved_model, reasoning_effort, analysis_version, prompt_version, analytical_audit, system_processing_notes, raw_model_output_text, input_token_count, output_token_count, completed_at")
             .in("job_id", jobIds),
         "Advanced preliminary case reports could not be loaded."
     ) : [];
+    const reportIds = reports.map(report => report.id);
+    const [meaningUnits, codes, categories, themes] = reportIds.length
+        ? await Promise.all([
+            requireData(supabase.from("advanced_preliminary_meaning_units")
+                .select("report_id").in("report_id", reportIds),
+            "Preliminary Meaning Unit counts could not be loaded."),
+            requireData(supabase.from("advanced_preliminary_codes")
+                .select("report_id").in("report_id", reportIds),
+            "Preliminary Code counts could not be loaded."),
+            requireData(supabase.from("advanced_preliminary_categories")
+                .select("report_id").in("report_id", reportIds),
+            "Preliminary Category counts could not be loaded."),
+            requireData(supabase.from("advanced_preliminary_themes")
+                .select("report_id").in("report_id", reportIds),
+            "Preliminary Theme counts could not be loaded.")
+        ]) : [[], [], [], []];
+    const countByReport = rows => rows.reduce((counts, row) => {
+        counts.set(row.report_id, (counts.get(row.report_id) || 0) + 1);
+        return counts;
+    }, new Map());
+    const muCount = countByReport(meaningUnits);
+    const codeCount = countByReport(codes);
+    const categoryCount = countByReport(categories);
+    const themeCount = countByReport(themes);
     const reportByJob = new Map(reports.map(report => [report.job_id, report]));
     const allRunReports = await requireData(
         supabase
@@ -144,6 +168,10 @@ async function loadSummary(supabase, req) {
             ...job,
             report: report ? {
                 ...report,
+                meaningUnitCount: muCount.get(report.id) || 0,
+                codeCount: codeCount.get(report.id) || 0,
+                categoryCount: categoryCount.get(report.id) || 0,
+                themeCount: themeCount.get(report.id) || 0,
                 exactOutputAvailable:
                     report.analytical_audit?.exactFirstResponseAuthoritative === true
                     || Boolean(report.raw_model_output_text)
@@ -270,7 +298,7 @@ async function loadCase(supabase, req) {
     }
     const { data: report, error: reportError } = await supabase
         .from("advanced_preliminary_case_reports")
-        .select("id, run_id, job_id, session_id, case_number, participant_id, participant_code, language, project_id, analysis_framework_id, source_report_id, provider, model, resolved_model, reasoning_effort, analysis_version, prompt_version, analytical_audit, raw_model_output_text, input_token_count, output_token_count, created_at, completed_at")
+        .select("id, run_id, job_id, session_id, case_number, participant_id, participant_code, language, project_id, analysis_framework_id, source_report_id, provider, model, resolved_model, reasoning_effort, analysis_version, prompt_version, case_summary, unassigned_code_numbers, unassigned_category_numbers, analytical_audit, raw_model_output_text, parsed_model_output, system_processing_notes, input_token_count, output_token_count, created_at, completed_at")
         .eq("job_id", job.id)
         .maybeSingle();
     if (reportError) throw new Error("The selected advanced report could not be loaded.");
@@ -283,7 +311,52 @@ async function loadCase(supabase, req) {
             .order("Timestamp", { ascending: true }),
         "The preserved source transcript could not be loaded."
     );
-    return { run, job, report: report || null, transcript };
+    if (!report) return { run, job, report: null, transcript };
+
+    const [meaningUnits, codes, codeMeaningUnits, categories, categoryCodes,
+        tentativeThemes, themeCategories] = await Promise.all([
+        requireData(supabase.from("advanced_preliminary_meaning_units")
+            .select("id, report_id, unit_number, message_id, exact_source_text, source_language, start_offset, end_offset, occurrence_index, context_note")
+            .eq("report_id", report.id).order("unit_number"),
+        "Preliminary Meaning Units could not be loaded."),
+        requireData(supabase.from("advanced_preliminary_codes")
+            .select("id, report_id, code_number, code_label, definition, rationale")
+            .eq("report_id", report.id).order("code_number"),
+        "Preliminary Codes could not be loaded."),
+        requireData(supabase.from("advanced_preliminary_code_meaning_units")
+            .select("code_id, meaning_unit_id").eq("report_id", report.id),
+        "Code-to-Meaning-Unit links could not be loaded."),
+        requireData(supabase.from("advanced_preliminary_categories")
+            .select("id, report_id, category_number, category_label, definition, rationale")
+            .eq("report_id", report.id).order("category_number"),
+        "Preliminary Categories could not be loaded."),
+        requireData(supabase.from("advanced_preliminary_category_codes")
+            .select("category_id, code_id").eq("report_id", report.id),
+        "Category-to-Code links could not be loaded."),
+        requireData(supabase.from("advanced_preliminary_themes")
+            .select("id, report_id, theme_number, theme_label, rationale")
+            .eq("report_id", report.id).order("theme_number"),
+        "Preliminary Themes could not be loaded."),
+        requireData(supabase.from("advanced_preliminary_theme_categories")
+            .select("theme_id, category_id").eq("report_id", report.id),
+        "Theme-to-Category links could not be loaded.")
+    ]);
+
+    return {
+        run,
+        job,
+        report: {
+            ...report,
+            meaningUnits,
+            codes,
+            codeMeaningUnits,
+            categories,
+            categoryCodes,
+            tentativeThemes,
+            themeCategories
+        },
+        transcript
+    };
 }
 
 function csvCell(value) {

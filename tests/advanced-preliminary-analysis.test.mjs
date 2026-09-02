@@ -208,17 +208,35 @@ test("researcher UI exposes exact responses and keeps Stage 2 unavailable", asyn
     assert.match(html, /one completed transcript → one independent/);
     assert.match(html, /displays that first response exactly as returned/);
     assert.match(html, /without a capability-test call/);
-    assert.match(script, /Inspect exact response/);
+    assert.match(script, /Inspect complete report/);
     assert.match(script, /Exact first model response/);
     assert.match(script, /provider call is still running|provider request is still running/);
     assert.match(script, /participant and transcript remain included and processible/);
-    assert.doesNotMatch(script, /meaningUnitAnnotation|preliminaryHierarchy/);
+    assert.match(script, /meaningUnitAnnotation/);
+    assert.match(script, /preliminaryHierarchy/);
+    assert.match(script, /displayed read-only and are not validation/);
     assert.doesNotMatch(script, /download=stage2-csv/);
     assert.match(dashboard, /modelProbeCalls: 0/);
     assert.match(dashboard, /p_rules_snapshot: \{\}/);
     assert.doesNotMatch(dashboard, /probeAdvancedPreliminaryModel/);
     assert.doesNotMatch(dashboard, /downloadStage2Csv/);
     assert.match(dashboard, /Exact first model response/);
+});
+
+test("archived completed report structures are restored for read-only inspection", async () => {
+    const [migration, dashboard] = await Promise.all([
+        source("supabase/migrations/20260902180000_restore_completed_stage1_report_structure.sql"),
+        source("server/advancedPreliminaryDashboard.js")
+    ]);
+    assert.match(migration, /jsonb_populate_recordset/);
+    assert.match(migration, /storedReportStructureRole/);
+    assert.match(migration, /read_only_researcher_inspection/);
+    assert.match(migration, /storedReportStructureHasNoRejectionAuthority/);
+    assert.doesNotMatch(migration, /delete from/);
+    assert.match(dashboard, /advanced_preliminary_meaning_units/);
+    assert.match(dashboard, /advanced_preliminary_codes/);
+    assert.match(dashboard, /advanced_preliminary_categories/);
+    assert.match(dashboard, /advanced_preliminary_themes/);
 });
 
 test("ordinary Stage 1 activity cannot start cross-case work", async () => {

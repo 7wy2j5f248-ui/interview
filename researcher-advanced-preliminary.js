@@ -182,8 +182,8 @@
 
     function renderCaseTable(items, host, mode = "active") {
         const built = table([
-            "Case ID", "Project lineage", "Status", "Exact first response",
-            "Generation", "Inspect"
+            "Case ID", "Project lineage", "Status", "Meaning Units", "Codes",
+            "Categories", "Themes", "Exact first response", "Generation", "Inspect"
         ]);
         const body = document.createElement("tbody");
         items.forEach(item => {
@@ -194,6 +194,10 @@
             cell(row, mode === "attention" || item.status === "failed"
                 ? `System needs attention · participant remains included${item.last_error ? `: ${item.last_error}` : ""}`
                 : item.status.replaceAll("_", " "));
+            cell(row, item.report?.meaningUnitCount ?? "—");
+            cell(row, item.report?.codeCount ?? "—");
+            cell(row, item.report?.categoryCount ?? "—");
+            cell(row, item.report?.themeCount ?? "—");
             cell(row, item.report?.exactOutputAvailable
                 ? "available"
                 : item.report
@@ -210,7 +214,7 @@
             const button = document.createElement("button");
             button.type = "button";
             button.textContent = item.report
-                ? "Inspect exact response"
+                ? "Inspect complete report"
                 : item.status === "processing"
                 ? "Inspect transcript and status" : "Inspect transcript";
             button.addEventListener("click", () => openCase(item.case_number));
@@ -313,6 +317,145 @@
         return panel;
     }
 
+    function codeColor(codeNumber) {
+        return `keywordColor${((Number(codeNumber) - 1) % 12) + 1}`;
+    }
+
+    function codesForUnit(report, meaningUnitId) {
+        const codeIds = new Set((report.codeMeaningUnits || [])
+            .filter(link => link.meaning_unit_id === meaningUnitId)
+            .map(link => link.code_id));
+        return (report.codes || []).filter(code => codeIds.has(code.id));
+    }
+
+    function highlightedMessage(message, report) {
+        const text = message.Message || "";
+        const highlights = (report.meaningUnits || [])
+            .filter(unit => unit.message_id === message.id)
+            .sort((left, right) => left.start_offset - right.start_offset);
+        const fragment = document.createDocumentFragment();
+        let cursor = 0;
+        highlights.forEach(unit => {
+            if (unit.start_offset < cursor || unit.end_offset > text.length) return;
+            fragment.append(document.createTextNode(text.slice(cursor, unit.start_offset)));
+            const annotation = document.createElement("span");
+            annotation.className = "meaningUnitAnnotation";
+            const linkedCodes = codesForUnit(report, unit.id);
+            const colorClass = codeColor(linkedCodes[0]?.code_number || unit.unit_number);
+            const label = document.createElement("span");
+            label.className = `meaningUnitCodeLabel ${colorClass}`;
+            label.textContent = linkedCodes.length
+                ? linkedCodes.map(code => `CO${code.code_number} ${code.code_label}`).join(" · ")
+                : `MU${unit.unit_number} · no stored Code link`;
+            const mark = document.createElement("mark");
+            mark.className = colorClass;
+            mark.textContent = text.slice(unit.start_offset, unit.end_offset);
+            mark.title = `Stored MU${unit.unit_number} · ${label.textContent}`;
+            annotation.append(label, mark);
+            fragment.append(annotation);
+            cursor = unit.end_offset;
+        });
+        fragment.append(document.createTextNode(text.slice(cursor)));
+        return fragment;
+    }
+
+    function annotatedTranscript(detail, report) {
+        const panel = document.createElement("section");
+        panel.className = "automaticReanalysisPanel";
+        panel.appendChild(heading("Stored report highlights"));
+        panel.appendChild(paragraph(
+            "These highlights reproduce the stored original report structure. They are displayed read-only and are not validation, approval, rejection, or a new analytical judgment.",
+            "muted"
+        ));
+        detail.transcript.forEach(message => {
+            const article = document.createElement("article");
+            article.className = "message";
+            const source = document.createElement("p");
+            const speaker = document.createElement("strong");
+            speaker.textContent = `${message.Speaker || "Speaker"}: `;
+            source.append(speaker, highlightedMessage(message, report));
+            article.appendChild(source);
+            if (message.EnglishTranslation && message.EnglishTranslation !== message.Message) {
+                article.appendChild(paragraph(
+                    `English translation: ${message.EnglishTranslation}`,
+                    "englishTranslation"
+                ));
+            }
+            panel.appendChild(article);
+        });
+        return panel;
+    }
+
+    function preliminaryHierarchy(report) {
+        const panel = document.createElement("section");
+        panel.className = "automaticReanalysisPanel";
+        panel.appendChild(heading("Stored MU → Code → Category → Theme report"));
+        panel.appendChild(paragraph(
+            "This is the original stored hierarchy restored for researcher inspection. The platform does not use it to accept or reject the model output.",
+            "muted"
+        ));
+        const codeById = new Map((report.codes || []).map(code => [code.id, code]));
+        const categoryById = new Map(
+            (report.categories || []).map(category => [category.id, category])
+        );
+        const unitById = new Map(
+            (report.meaningUnits || []).map(unit => [unit.id, unit])
+        );
+        const rows = [];
+        (report.tentativeThemes || []).forEach(theme => {
+            (report.themeCategories || [])
+                .filter(link => link.theme_id === theme.id)
+                .forEach(themeLink => {
+                    const category = categoryById.get(themeLink.category_id);
+                    (report.categoryCodes || [])
+                        .filter(link => link.category_id === themeLink.category_id)
+                        .forEach(categoryLink => {
+                            const code = codeById.get(categoryLink.code_id);
+                            const units = (report.codeMeaningUnits || [])
+                                .filter(link => link.code_id === categoryLink.code_id)
+                                .map(link => unitById.get(link.meaning_unit_id))
+                                .filter(Boolean);
+                            rows.push({ theme, category, code, units });
+                        });
+                });
+        });
+        const representedCodes = new Set(rows.map(row => row.code?.id));
+        (report.codes || []).filter(code => !representedCodes.has(code.id))
+            .forEach(code => {
+                const units = (report.codeMeaningUnits || [])
+                    .filter(link => link.code_id === code.id)
+                    .map(link => unitById.get(link.meaning_unit_id))
+                    .filter(Boolean);
+                rows.push({ theme: null, category: null, code, units });
+            });
+        if (!rows.length && (report.meaningUnits || []).length) {
+            report.meaningUnits.forEach(unit => rows.push({
+                theme: null, category: null, code: null, units: [unit]
+            }));
+        }
+        const built = table([
+            "Tentative Theme", "Preliminary Category", "Preliminary Code",
+            "Supporting Meaning Units"
+        ]);
+        const body = document.createElement("tbody");
+        rows.forEach(item => {
+            const row = document.createElement("tr");
+            cell(row, item.theme
+                ? `TH${item.theme.theme_number} · ${item.theme.theme_label}` : "—");
+            cell(row, item.category
+                ? `CA${item.category.category_number} · ${item.category.category_label}` : "—");
+            cell(row, item.code
+                ? `CO${item.code.code_number} · ${item.code.code_label}` : "—");
+            cell(row, item.units.map(unit =>
+                `MU${unit.unit_number}: ${unit.exact_source_text}`
+            ).join(" | "));
+            body.appendChild(row);
+        });
+        built.element.appendChild(body);
+        panel.appendChild(built.scroll);
+        return panel;
+    }
+
     async function openCase(caseNumber) {
         dialogHeading.textContent = `${caseNumber} · Stage 1 exact first response`;
         dialogProvenance.textContent = "Loading preserved output and transcript…";
@@ -354,7 +497,20 @@
                 report.analytical_audit?.overallSummary
                     || "Historical implementation; exact first response availability is shown above."
             ));
-            dialogContent.appendChild(sourceTranscript(detail));
+            const hasStoredStructure = (report.meaningUnits || []).length
+                || (report.codes || []).length
+                || (report.categories || []).length
+                || (report.tentativeThemes || []).length;
+            if (hasStoredStructure) {
+                dialogContent.appendChild(annotatedTranscript(detail, report));
+                dialogContent.appendChild(preliminaryHierarchy(report));
+            } else {
+                dialogContent.appendChild(paragraph(
+                    "No normalized MU/Code/Category/Theme structure was ever stored for this report. The verbatim model response above remains available without reconstruction.",
+                    "muted"
+                ));
+                dialogContent.appendChild(sourceTranscript(detail));
+            }
         } catch (error) {
             dialogContent.appendChild(paragraph(error.message, "errorMessage"));
         }
