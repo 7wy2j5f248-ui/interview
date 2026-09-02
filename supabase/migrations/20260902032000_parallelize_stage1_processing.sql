@@ -50,13 +50,13 @@ begin
     from public.advanced_preliminary_analysis_runs as run
     where run.status in ('queued', 'processing');
 
-    select * into active_run
-    from public.advanced_preliminary_analysis_runs
-    where status in ('queued', 'processing')
-      and operation_type = 'fresh_independent_analysis'
-      and authoritative_source = 'original_completed_transcripts'
-      and legacy_analysis_input = 'excluded'
-    order by requested_at
+    select run.* into active_run
+    from public.advanced_preliminary_analysis_runs as run
+    where run.status in ('queued', 'processing')
+      and run.operation_type = 'fresh_independent_analysis'
+      and run.authoritative_source = 'original_completed_transcripts'
+      and run.legacy_analysis_input = 'excluded'
+    order by run.requested_at
     for update
     limit 1;
 
