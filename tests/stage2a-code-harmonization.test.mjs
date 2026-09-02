@@ -73,9 +73,10 @@ test("Stage 2A schema preserves HCO to preliminary Code to MU provenance", async
 });
 
 test("researcher form uses positional HCO headers without global column identity", async () => {
-    const [html, script] = await Promise.all([
+    const [html, script, dashboard] = await Promise.all([
         readFile(new URL("../staged-analysis.html", import.meta.url), "utf8"),
-        readFile(new URL("../researcher-advanced-preliminary.js", import.meta.url), "utf8")
+        readFile(new URL("../researcher-advanced-preliminary.js", import.meta.url), "utf8"),
+        readFile(new URL("../server/advancedPreliminaryDashboard.js", import.meta.url), "utf8")
     ]);
     assert.match(html, /Cross-Case Code Harmonization/);
     assert.match(html, /Meaning Units and preliminary Codes remain\s+unchanged/);
@@ -88,4 +89,8 @@ test("researcher form uses positional HCO headers without global column identity
     assert.match(script, /Legacy Stage 2A output used/);
     assert.match(script, /Input batching/);
     assert.match(script, /Paid harmonization calls/);
+    assert.match(dashboard,
+        /import \{[\s\S]*createAnalysisProviderClient,[\s\S]*\} from "\.\/analysisProvider\.js"/);
+    assert.match(dashboard,
+        /createAnalysisProviderClient\(stage1\.provider\)/);
 });

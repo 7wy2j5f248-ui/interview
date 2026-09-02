@@ -18,6 +18,7 @@ import {
 import { configuredStage1Models } from "./analysisModelCatalog.js";
 import { normalizeAnalysisModel } from "./modelConfiguration.js";
 import {
+    createAnalysisProviderClient,
     normalizeAnalysisProviderId,
     publicAnalysisProviderCatalog
 } from "./analysisProvider.js";
