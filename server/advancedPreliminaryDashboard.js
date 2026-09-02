@@ -99,6 +99,17 @@ async function loadSummary(supabase, req) {
         "Advanced preliminary case reports could not be loaded."
     ) : [];
     const reportByJob = new Map(reports.map(report => [report.job_id, report]));
+    const allRunReports = await requireData(
+        supabase
+            .from("advanced_preliminary_case_reports")
+            .select("raw_model_output_text, analytical_audit")
+            .eq("run_id", run.id),
+        "Stage 1 exact-response availability could not be counted."
+    );
+    const exactOutputCount = allRunReports.filter(report =>
+        report.analytical_audit?.exactFirstResponseAuthoritative === true
+        || Boolean(report.raw_model_output_text)
+    ).length;
     const failedJobs = await requireData(
         supabase
             .from("advanced_preliminary_analysis_jobs")
@@ -133,7 +144,9 @@ async function loadSummary(supabase, req) {
             ...job,
             report: report ? {
                 ...report,
-                exactOutputAvailable: Boolean(report.raw_model_output_text)
+                exactOutputAvailable:
+                    report.analytical_audit?.exactFirstResponseAuthoritative === true
+                    || Boolean(report.raw_model_output_text)
             } : null
         };
     };
@@ -145,6 +158,9 @@ async function loadSummary(supabase, req) {
         availableModels: models,
         requiredOperation: FRESH_ANALYSIS_OPERATION,
         stage2: disabledStage2(),
+        exactOutputCount,
+        historicalProjectionOnlyCount:
+            Math.max(0, run.completed_count - exactOutputCount),
         attentionCount: attentionJobs.length,
         attentionCases: attentionJobs.map(job =>
             decorateJob(job, reportByJob)

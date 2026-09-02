@@ -277,7 +277,8 @@
         downloadButton.disabled = run.completed_count < 1;
         setStatus(
             `Stage 1 run ${run.run_number}: ${run.status.replaceAll("_", " ")}. `
-            + `${run.completed_count} of ${run.source_case_count} exact first responses are stored; `
+            + `${payload.exactOutputCount || 0} of ${run.source_case_count} exact first responses are stored; `
+            + `${payload.historicalProjectionOnlyCount || 0} completed historical reports predate exact-response preservation; `
             + `${run.processing_count} existing provider calls are still being polled. `
             + "The platform does not validate, score, repair, retry, parse, normalize, project, or reconstruct them."
         );
