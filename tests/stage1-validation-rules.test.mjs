@@ -133,3 +133,15 @@ test("the exclusion path is removed and the database migration restores processi
     assert.match(migration, /insert into public\.global_analysis_rules/);
     assert.doesNotMatch(migration, /delete\s+from/iu);
 });
+
+test("a preserved validator failure returns to Stage 1 without another model call", async () => {
+    const migration = await source(
+        "supabase/migrations/20260902034000_requeue_preserved_validation_failure.sql"
+    );
+    assert.match(migration, /status = 'pending'/);
+    assert.match(migration, /provider_response_status = 'completed'/);
+    assert.match(migration, /provider_response_id is not null/);
+    assert.match(migration, /not exists/);
+    assert.doesNotMatch(migration, /provider_response_id = null/);
+    assert.doesNotMatch(migration, /delete from public\./i);
+});
