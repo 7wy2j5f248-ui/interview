@@ -653,6 +653,20 @@ async function failJob(supabase, jobId, error, retryable = true) {
     }
 }
 
+async function existingReportIdForJob(supabase, jobId) {
+    const { data, error } = await supabase
+        .from("advanced_preliminary_case_reports")
+        .select("id")
+        .eq("job_id", jobId)
+        .maybeSingle();
+    if (error) {
+        throw new Error("The saved-report state could not be confirmed.", {
+            cause: error
+        });
+    }
+    return data?.id || null;
+}
+
 export async function processNextAdvancedPreliminaryAnalysis(
     supabase,
     {
@@ -761,6 +775,32 @@ export async function processNextAdvancedPreliminaryAnalysis(
             reportId
         };
     } catch (error) {
+        const existingReportId = await existingReportIdForJob(
+            supabase, claim.job_id
+        ).catch(lookupError => {
+            console.error("Advanced preliminary saved-report check failed", {
+                runId: claim.run_id,
+                caseNumber: claim.case_number,
+                error: lookupError instanceof Error
+                    ? lookupError.message : String(lookupError)
+            });
+            return null;
+        });
+        if (existingReportId) {
+            console.log("Advanced preliminary case was already completed", {
+                runId: claim.run_id,
+                caseNumber: claim.case_number,
+                reportId: existingReportId
+            });
+            return {
+                claimed: true,
+                completed: true,
+                alreadyCompleted: true,
+                runId: claim.run_id,
+                caseNumber: claim.case_number,
+                reportId: existingReportId
+            };
+        }
         await failJob(supabase, claim.job_id, error, true);
         console.error("Advanced preliminary case failed", {
             runId: claim.run_id,

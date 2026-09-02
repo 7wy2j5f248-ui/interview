@@ -184,14 +184,6 @@ async function loadSummary(supabase, req) {
     const categoryCount = countByReport(categories);
     const themeCount = countByReport(themes);
     const reportByJob = new Map(reports.map(report => [report.job_id, report]));
-    const attentionReports = await requireData(
-        supabase
-            .from("advanced_preliminary_case_reports")
-            .select("id, job_id, session_id, case_number, participant_code, language, project_id, source_report_id, case_summary, model, resolved_model, reasoning_effort, analysis_version, prompt_version, analytical_audit, system_processing_notes, input_token_count, output_token_count, completed_at")
-            .eq("run_id", run.id)
-            .contains("analytical_audit", { coverageReviewRequired: true }),
-        "Stage 1 cases requiring researcher attention could not be loaded."
-    );
     const failedJobs = await requireData(
         supabase
             .from("advanced_preliminary_analysis_jobs")
@@ -202,46 +194,23 @@ async function loadSummary(supabase, req) {
             .order("source_completed_at", { ascending: true }),
         "Failed Stage 1 cases could not be loaded."
     );
-    const attentionReportByJob = new Map(
-        attentionReports.map(report => [report.job_id, report])
-    );
-    const failedJobIds = new Set(failedJobs.map(job => job.id));
-    const reportOnlyJobIds = attentionReports
-        .map(report => report.job_id)
-        .filter(jobId => !failedJobIds.has(jobId));
-    const reportOnlyJobs = reportOnlyJobIds.length ? await requireData(
+    const failedJobIds = failedJobs.map(job => job.id);
+    const savedFailedReports = failedJobIds.length ? await requireData(
         supabase
-            .from("advanced_preliminary_analysis_jobs")
-            .select("id, session_id, participant_id, case_number, source_completed_at, project_id, analysis_framework_id, source_report_id, project_binding_status, status, attempt_count, completed_at, updated_at, last_error, disposition, disposition_reason, disposition_evidence, disposition_at, disposition_by")
-            .in("id", reportOnlyJobIds)
-            .order("source_completed_at", { ascending: true }),
-        "Audited Stage 1 cases requiring attention could not be loaded."
+            .from("advanced_preliminary_case_reports")
+            .select("job_id")
+            .in("job_id", failedJobIds),
+        "Saved Stage 1 report status could not be reconciled."
     ) : [];
-    const historicalDispositionJobs = await requireData(
-        supabase
-            .from("advanced_preliminary_analysis_jobs")
-            .select("id, session_id, participant_id, case_number, source_completed_at, project_id, analysis_framework_id, source_report_id, project_binding_status, status, attempt_count, completed_at, updated_at, last_error, disposition, disposition_reason, disposition_evidence, disposition_at, disposition_by")
-            .eq("run_id", run.id)
-            .neq("disposition", "active")
-            .order("source_completed_at", { ascending: true }),
-        "Historical system dispositions could not be loaded for restoration review."
+    const jobsWithSavedReports = new Set(
+        savedFailedReports.map(report => report.job_id)
     );
-    const attentionJobs = [...new Map(
-        [...failedJobs, ...reportOnlyJobs, ...historicalDispositionJobs]
-            .map(job => [job.id, job])
-    ).values()].sort((left, right) =>
+    const attentionJobs = failedJobs
+        .filter(job => !jobsWithSavedReports.has(job.id))
+        .sort((left, right) =>
         String(left.source_completed_at).localeCompare(String(right.source_completed_at))
         || String(left.session_id).localeCompare(String(right.session_id))
     );
-    const attentionReportIds = attentionReports.map(report => report.id);
-    const attentionMeaningUnits = attentionReportIds.length ? await requireData(
-        supabase
-            .from("advanced_preliminary_meaning_units")
-            .select("report_id")
-            .in("report_id", attentionReportIds),
-        "Stage 1 attention-case Meaning Unit counts could not be loaded."
-    ) : [];
-    const attentionMuCount = countByReport(attentionMeaningUnits);
     const attentionJobIds = new Set(attentionJobs.map(job => job.id));
     const decorateJob = (job, reportMap, counts, hierarchyCounts = {}) => {
         const report = reportMap.get(job.id) || null;
@@ -267,7 +236,7 @@ async function loadSummary(supabase, req) {
         stage2,
         attentionCount: attentionJobs.length,
         attentionCases: attentionJobs.map(job =>
-            decorateJob(job, new Map([...reportByJob, ...attentionReportByJob]), attentionMuCount)
+            decorateJob(job, reportByJob, muCount)
         ),
         cases: jobs
             .filter(job => !attentionJobIds.has(job.id))

@@ -371,6 +371,32 @@ test("technical output and stale-response limits are configurable and system fai
     assert.doesNotMatch(migration, /delete from public\./i);
 });
 
+test("a delayed duplicate worker cannot turn a saved report into a failed participant case", async () => {
+    const [worker, dashboard, migration] = await Promise.all([
+        source("server/advancedPreliminaryAnalysis.js"),
+        source("server/advancedPreliminaryDashboard.js"),
+        source("supabase/migrations/20260902134840_reconcile_saved_stage1_reports.sql")
+    ]);
+
+    assert.match(worker, /existingReportIdForJob/);
+    assert.match(worker, /alreadyCompleted: true/);
+    assert.match(
+        worker,
+        /existingReportIdForJob[\s\S]*if \(existingReportId\)[\s\S]*await failJob/
+    );
+    assert.doesNotMatch(dashboard, /coverageReviewRequired/);
+    assert.match(dashboard, /savedFailedReports/);
+    assert.match(dashboard, /filter\(job => !jobsWithSavedReports\.has\(job\.id\)\)/);
+    assert.match(migration, /saved_report_job_status_reconciled/);
+    assert.match(migration, /previousStatus/);
+    assert.match(migration, /previousError/);
+    assert.match(migration, /status = 'completed'/);
+    assert.match(migration, /advanced_preliminary_case_reports as report/);
+    assert.match(migration, /run\.model = 'gpt-5\.6-sol'/);
+    assert.doesNotMatch(migration, /delete from public\./i);
+    assert.doesNotMatch(migration, /update public\.interview_(sessions|messages)/i);
+});
+
 test("analysis providers are server-configured and never expose credentials", () => {
     const environment = {
         OPENAI_API_KEY: "server-secret",
