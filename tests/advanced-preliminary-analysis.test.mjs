@@ -82,7 +82,7 @@ test("Stage 1 instructions contain no platform-created analytical rule snapshot"
     assert.match(prompt, /exact first response/i);
 });
 
-test("Stage 1 contract is exact-output-only", async () => {
+test("Stage 1 contract is exact-output-only with researcher-authorized replacement", async () => {
     assert.equal(ADVANCED_PRELIMINARY_REASONING_EFFORT, "high");
     assert.equal(ADVANCED_PRELIMINARY_STOP_LAYER, "exact_first_response");
     assert.match(ADVANCED_PRELIMINARY_ANALYSIS_VERSION, /v5-exact-first-response/);
@@ -92,7 +92,9 @@ test("Stage 1 contract is exact-output-only", async () => {
     const worker = await source("server/advancedPreliminaryAnalysis.js");
     assert.doesNotMatch(worker, /projectAdvancedPreliminaryAnalysis/);
     assert.doesNotMatch(worker, /JSON\.parse/);
-    assert.doesNotMatch(worker, /responses\.cancel/);
+    assert.match(worker, /researcherReplacementState/);
+    assert.match(worker, /responses\.cancel/);
+    assert.match(worker, /researcher_replacement_authorized_at/);
     assert.doesNotMatch(worker, /resolve_stalled_advanced_preliminary_response/);
     assert.doesNotMatch(worker, /probeAdvancedPreliminaryModel/);
     assert.match(worker, /rawModelOutputText/);
@@ -103,7 +105,8 @@ test("durable background calls are submitted once and then polled by response ID
     assert.match(worker, /background/);
     assert.match(worker, /responses\.retrieve/);
     assert.match(worker, /save_advanced_preliminary_provider_response/);
-    assert.match(worker, /advanced-preliminary-\$\{claim\.job_id\}-attempt-\$\{claim\.attempt_count\}/);
+    assert.match(worker, /currentProviderAttemptCount/);
+    assert.match(worker, /advanced-preliminary-\$\{claim\.job_id\}-attempt-\$\{attemptCount\}/);
     assert.match(worker, /\["queued", "in_progress"\]/);
 });
 
@@ -123,10 +126,11 @@ test("execution concurrency remains technical and workload-derived", async () =>
     assert.match(endpoint, /p_maximum_parallel_cases: maximumParallelCases/);
 });
 
-test("database contract stores exact output only and never retries", async () => {
-    const migration = await source(
-        "supabase/migrations/20260902150000_remove_stage1_gatekeepers.sql"
-    );
+test("database contract stores exact output and never retries without researcher authority", async () => {
+    const [migration, authorizedReplacement] = await Promise.all([
+        source("supabase/migrations/20260902150000_remove_stage1_gatekeepers.sql"),
+        source("supabase/migrations/20260902182500_complete_researcher_authorized_provider_replacements.sql")
+    ]);
     assert.match(migration, /exact first provider response/i);
     assert.match(migration, /parsed_model_output = null/);
     assert.match(migration, /candidate\.status = 'pending'/);
@@ -139,6 +143,21 @@ test("database contract stores exact output only and never retries", async () =>
     assert.match(migration, /relationalProjectionType', 'none_removed'/);
     assert.match(migration, /historicalProjectionOnly/);
     assert.match(migration, /GOV-STAGE1-EXACT-001/);
+    assert.match(authorizedReplacement, /authorizedBy', 'researcher'/);
+    assert.match(authorizedReplacement, /researcher_authorized_replacement/);
+    assert.match(authorizedReplacement, /preservePriorProviderAttempts', true/);
+    assert.match(authorizedReplacement, /No unused researcher-authorized replacement/);
+    assert.match(authorizedReplacement, /provider_response_history/);
+    assert.doesNotMatch(authorizedReplacement, /delete from public\.advanced_preliminary/);
+});
+
+test("terminal provider output is preserved instead of rejected", async () => {
+    const worker = await source("server/advancedPreliminaryAnalysis.js");
+    assert.doesNotMatch(worker, /response\.status !== "completed"/);
+    assert.match(worker, /providerIncompleteDetails/);
+    assert.match(worker, /providerError/);
+    assert.match(worker, /recoverableHistoricalAttempt/);
+    assert.match(worker, /researcherAuthorizedHistoricalResponseRecovery/);
 });
 
 test("a delayed duplicate worker cannot overwrite a saved report", async () => {

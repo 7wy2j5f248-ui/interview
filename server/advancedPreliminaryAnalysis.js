@@ -207,6 +207,169 @@ async function saveProviderResponse(supabase, claim, response) {
     }
 }
 
+async function researcherReplacementState(supabase, jobId) {
+    const { data, error } = await supabase
+        .from("advanced_preliminary_analysis_jobs")
+        .select("researcher_replacement_authorized_at, researcher_replacement_consumed_at, provider_response_history")
+        .eq("id", jobId)
+        .maybeSingle();
+    if (error) {
+        throw new Error("The researcher-authorized replacement state could not be loaded.", {
+            cause: error
+        });
+    }
+    if (!data?.researcher_replacement_authorized_at
+        || data.researcher_replacement_consumed_at) {
+        return null;
+    }
+    return data;
+}
+
+async function currentProviderAttemptCount(supabase, jobId) {
+    const { data, error } = await supabase
+        .from("advanced_preliminary_analysis_jobs")
+        .select("attempt_count")
+        .eq("id", jobId)
+        .maybeSingle();
+    if (error || !Number.isInteger(data?.attempt_count)) {
+        throw new Error("The provider attempt number could not be loaded.", {
+            cause: error || undefined
+        });
+    }
+    return data.attempt_count;
+}
+
+function recoverableHistoricalAttempt(history) {
+    if (!Array.isArray(history)) return null;
+    return [...history].reverse().find(attempt =>
+        typeof attempt?.responseId === "string"
+        && ["completed", "failed", "incomplete"].includes(attempt.status)
+    ) || null;
+}
+
+async function prepareHistoricalResponseRecovery(
+    supabase,
+    claim,
+    currentResponse,
+    historicalResponse
+) {
+    const { error } = await supabase.rpc(
+        "prepare_researcher_authorized_historical_response_restore",
+        {
+            p_job_id: claim.job_id,
+            p_current_provider_response_id: currentResponse.id,
+            p_historical_provider_response_id: historicalResponse.id,
+            p_historical_provider_response_status:
+                historicalResponse.status || "unknown",
+            p_historical_input_token_count:
+                historicalResponse?.usage?.input_tokens || null,
+            p_historical_output_token_count:
+                historicalResponse?.usage?.output_tokens || null
+        }
+    );
+    if (error) {
+        throw new Error("The historical provider response could not be activated.", {
+            cause: error
+        });
+    }
+}
+
+async function requeueResearcherAuthorizedReplacement(
+    supabase,
+    claim,
+    cancelledResponse
+) {
+    const { error } = await supabase.rpc(
+        "replace_researcher_authorized_advanced_preliminary_response",
+        {
+            p_job_id: claim.job_id,
+            p_provider_response_id: cancelledResponse.id,
+            p_reason: "Researcher authorized replacement of the outstanding provider response."
+        }
+    );
+    if (error) {
+        throw new Error("The researcher-authorized replacement was not queued.", {
+            cause: error
+        });
+    }
+}
+
+async function handleResearcherAuthorizedReplacement(
+    supabase,
+    claim,
+    analysisClient,
+    currentResponse
+) {
+    const replacementState = await researcherReplacementState(
+        supabase, claim.job_id
+    );
+    if (!replacementState) return null;
+
+    const historicalAttempt = recoverableHistoricalAttempt(
+        replacementState.provider_response_history
+    );
+    let historicalResponse = null;
+    if (historicalAttempt) {
+        historicalResponse = await analysisClient.responses.retrieve(
+            historicalAttempt.responseId
+        );
+        if (["queued", "in_progress", "cancelled"]
+            .includes(historicalResponse.status)) {
+            historicalResponse = null;
+        }
+    }
+
+    let replacementTarget = currentResponse;
+    if (["queued", "in_progress"].includes(currentResponse.status)) {
+        try {
+            replacementTarget = await analysisClient.responses.cancel(
+                currentResponse.id
+            );
+            await saveProviderResponse(supabase, claim, replacementTarget);
+        } catch (error) {
+            console.error("Researcher-authorized provider cancellation is still pending", {
+                runId: claim.run_id,
+                caseNumber: claim.case_number,
+                providerResponseId: currentResponse.id,
+                error: error instanceof Error ? error.message : String(error)
+            });
+            return { waiting: true };
+        }
+    }
+
+    if (replacementTarget.status === "completed") {
+        return { response: replacementTarget };
+    }
+    if (["failed", "incomplete"].includes(replacementTarget.status)) {
+        return { response: replacementTarget };
+    }
+    if (replacementTarget.status !== "cancelled") {
+        return { waiting: true };
+    }
+
+    if (historicalResponse) {
+        await prepareHistoricalResponseRecovery(
+            supabase,
+            claim,
+            replacementTarget,
+            historicalResponse
+        );
+        return {
+            response: historicalResponse,
+            audit: {
+                researcherAuthorizedHistoricalResponseRecovery: true,
+                recoveredProviderResponseId: historicalResponse.id,
+                replacedQueuedProviderResponseId: replacementTarget.id
+            }
+        };
+    }
+
+    await requeueResearcherAuthorizedReplacement(
+        supabase, claim, replacementTarget
+    );
+    return { requeued: true };
+}
+
 async function persistCompletedAnalysis(supabase, claim, source, analysis) {
     const payload = {
         audit: analysis.audit,
@@ -347,6 +510,9 @@ export async function processNextAdvancedPreliminaryAnalysis(
             await saveProviderResponse(supabase, claim, response);
         } else {
             const normalizedModel = normalizeAnalysisModel(claim.model);
+            const attemptCount = await currentProviderAttemptCount(
+                supabase, claim.job_id
+            );
             response = await analysisClient.responses.create(
                 responseOptions(
                     normalizedModel,
@@ -358,10 +524,45 @@ export async function processNextAdvancedPreliminaryAnalysis(
                 ),
                 {
                     idempotencyKey:
-                        `advanced-preliminary-${claim.job_id}-attempt-${claim.attempt_count}`
+                        `advanced-preliminary-${claim.job_id}-attempt-${attemptCount}`
                 }
             );
             await saveProviderResponse(supabase, claim, response);
+        }
+
+        let replacementAudit = null;
+        if (claim.provider_response_id
+            && ["queued", "in_progress", "cancelled"]
+                .includes(response.status)) {
+            const replacement = await handleResearcherAuthorizedReplacement(
+                supabase, claim, analysisClient, response
+            );
+            if (replacement?.waiting) {
+                return {
+                    claimed: true,
+                    completed: false,
+                    inProgress: true,
+                    replacementPending: true,
+                    runId: claim.run_id,
+                    caseNumber: claim.case_number,
+                    providerResponseId: response.id,
+                    providerResponseStatus: response.status
+                };
+            }
+            if (replacement?.requeued) {
+                return {
+                    claimed: true,
+                    completed: false,
+                    researcherAuthorizedReplacementQueued: true,
+                    runId: claim.run_id,
+                    caseNumber: claim.case_number,
+                    replacedProviderResponseId: response.id
+                };
+            }
+            if (replacement?.response) {
+                response = replacement.response;
+                replacementAudit = replacement.audit || null;
+            }
         }
 
         if (["queued", "in_progress"].includes(response.status)) {
@@ -375,17 +576,14 @@ export async function processNextAdvancedPreliminaryAnalysis(
                 providerResponseStatus: response.status
             };
         }
-        if (response.status !== "completed") {
-            const providerError = response?.error?.message
-                || response?.incomplete_details?.reason
-                || `Model response ended with status ${response.status || "unknown"}.`;
-            throw new Error(providerError);
-        }
 
         const analysis = preservedOutputFromResponse(
             response,
             normalizeAnalysisModel(claim.model)
         );
+        if (replacementAudit) {
+            analysis.audit = { ...analysis.audit, ...replacementAudit };
+        }
         await savePreservedModelOutput(supabase, claim, analysis);
         const reportId = await persistCompletedAnalysis(
             supabase, claim, source, analysis
