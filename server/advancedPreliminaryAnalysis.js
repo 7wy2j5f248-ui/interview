@@ -131,6 +131,7 @@ function analysisInput(messages, context) {
 
 function preservedOutputFromResponse(response, normalizedModel) {
     const rawModelOutputText = responseText(response);
+    const providerStatus = response?.status || "unknown";
     return {
         rawModelOutputText,
         audit: {
@@ -140,7 +141,10 @@ function preservedOutputFromResponse(response, normalizedModel) {
             priorAnalysisUsed: false,
             aiAnalysisPassCount: 1,
             stage1Only: true,
-            overallSummary: `Exact first response from ${normalizedModel}; no prior analysis, model probe, validator, scoring, repair, retry, parsing, normalization, projection, reconstruction, or per-case approval.`
+            providerStatus,
+            providerIncompleteDetails: response?.incomplete_details || null,
+            providerError: response?.error || null,
+            overallSummary: `Exact first response from ${normalizedModel} preserved with provider status ${providerStatus}; no prior analysis, model probe, validator, scoring, repair, retry, parsing, normalization, projection, reconstruction, or per-case approval.`
         },
         inputTokenCount: response?.usage?.input_tokens || null,
         outputTokenCount: response?.usage?.output_tokens || null
@@ -208,8 +212,12 @@ async function persistCompletedAnalysis(supabase, claim, source, analysis) {
         audit: analysis.audit,
         rawModelOutputText: analysis.rawModelOutputText
     };
+    const existingReportId = await existingReportIdForJob(supabase, claim.job_id);
+    const persistenceFunction = existingReportId
+        ? "restore_advanced_preliminary_existing_report_output"
+        : "complete_advanced_preliminary_analysis";
     const { data: reportId, error: completionError } = await supabase.rpc(
-        "complete_advanced_preliminary_analysis",
+        persistenceFunction,
         {
             p_job_id: claim.job_id,
             p_participant_code: source.participantCode,
@@ -220,7 +228,7 @@ async function persistCompletedAnalysis(supabase, claim, source, analysis) {
         }
     );
     if (completionError || !reportId) {
-        throw new Error("The advanced preliminary report was not saved.", {
+        throw new Error("The advanced preliminary report output was not saved.", {
             cause: completionError || undefined
         });
     }

@@ -54,6 +54,9 @@ test("Stage 1 preserves the exact first response without parsing it", async () =
     assert.equal(result.audit.aiAnalysisPassCount, 1);
     assert.equal(result.audit.validationType, "none_no_analytical_validator");
     assert.equal(result.audit.relationalProjectionType, "none_removed");
+    assert.equal(result.audit.providerStatus, "unknown");
+    assert.equal(result.audit.providerIncompleteDetails, null);
+    assert.equal(result.audit.providerError, null);
     assert.doesNotMatch(JSON.stringify(calls[0]), /json_schema|strict/);
     assert.match(calls[0].input[1].content, /Original participant transcript/);
 });
@@ -147,6 +150,19 @@ test("a delayed duplicate worker cannot overwrite a saved report", async () => {
     assert.match(worker, /alreadyCompleted: true/);
     assert.match(migration, /existing_report_id/);
     assert.match(migration, /return existing_report_id/);
+});
+
+test("blank historical reports are restored without overwriting exact output", async () => {
+    const [worker, migration] = await Promise.all([
+        source("server/advancedPreliminaryAnalysis.js"),
+        source("supabase/migrations/20260902173000_restore_missing_stage1_outputs.sql")
+    ]);
+    assert.match(worker, /restore_advanced_preliminary_existing_report_output/);
+    assert.match(migration, /nullif\(selected_report\.raw_model_output_text, ''\) is null/);
+    assert.match(migration, /original_provider_response_retrieval/);
+    assert.match(migration, /researcher_directed_regeneration/);
+    assert.match(migration, /legacyStructuredAnalysisPreserved/);
+    assert.doesNotMatch(migration, /delete from public\.advanced_preliminary/);
 });
 
 test("provider credentials remain server-side", () => {
