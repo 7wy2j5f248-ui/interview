@@ -1,0 +1,152 @@
+create or replace function private.stage1_text_looks_english(p_value text)
+returns boolean
+language sql
+immutable
+set search_path = ''
+as $$
+    select nullif(pg_catalog.btrim(p_value), '') is not null
+       and pg_catalog.regexp_replace(
+            p_value,
+            '[A-Za-zÀ-ÖØ-öø-ÿĀ-žẠ-ỹ]',
+            '',
+            'g'
+        ) !~ '[[:alpha:]]';
+$$;
+
+create or replace function private.populate_stage1_english_meaning_units(
+    p_materialization_run_id uuid
+)
+returns integer
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+    affected_rows integer;
+begin
+    with unit_context as (
+        select
+            unit.id,
+            unit.exact_text,
+            unit.source_message_id,
+            form.session_id,
+            form.language,
+            case
+                when coalesce(form.language, 'en') <> 'en'
+                then private.stage1_inline_english_translation(unit.exact_text)
+            end as inline_translation,
+            private.stage1_markdown_english_meaning_unit(unit.source_object)
+                as markdown_english_text,
+            private.stage1_markdown_source_reference(unit.source_object)
+                as markdown_source_reference,
+            unit.exact_text ~* '^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$'
+                or unit.exact_text ~* '^[0-9a-f]{8}$'
+                as exact_is_source_reference,
+            private.stage1_text_looks_english(unit.exact_text)
+                as exact_looks_english,
+            lower(pg_catalog.btrim(pg_catalog.regexp_replace(
+                unit.exact_text,
+                '^[\s“"]+|[\s”"]+$',
+                '',
+                'g'
+            ))) as normalized_exact_text
+        from public.stage1_preliminary_meaning_units as unit
+        join public.stage1_preliminary_case_forms as form
+          on form.materialization_run_id = unit.materialization_run_id
+         and form.source_job_id = unit.source_job_id
+        where unit.materialization_run_id = p_materialization_run_id
+    ), resolved as (
+        select
+            context.*,
+            message.id as resolved_message_id,
+            nullif(pg_catalog.btrim(message."EnglishTranslation"), '')
+                as stored_message_translation
+        from unit_context as context
+        left join lateral (
+            with candidates as (
+                select candidate.id, candidate."EnglishTranslation",
+                    candidate.id::text = context.source_message_id
+                        or (
+                            context.source_message_id ~ '^[0-9a-f]{8}$'
+                            and candidate.id::text like context.source_message_id || '%'
+                        )
+                        or candidate.id::text = context.markdown_source_reference
+                        or (
+                            context.markdown_source_reference ~ '^[0-9a-f]{8}$'
+                            and candidate.id::text like context.markdown_source_reference || '%'
+                        ) as strong_match,
+                    pg_catalog.length(context.normalized_exact_text) >= 2
+                        and pg_catalog.strpos(
+                            lower(candidate."Message"),
+                            context.normalized_exact_text
+                        ) > 0 as content_match
+                from public.interview_messages as candidate
+                where candidate."Session" = context.session_id
+                  and lower(candidate."Speaker") in ('participant', 'user')
+                  and nullif(pg_catalog.btrim(candidate."EnglishTranslation"), '')
+                      is not null
+            )
+            select candidate.id, candidate."EnglishTranslation"
+            from candidates as candidate
+            where candidate.strong_match
+               or (
+                    candidate.content_match
+                    and 1 = (
+                        select count(*)
+                        from candidates as matching
+                        where matching.content_match
+                    )
+               )
+            order by case when candidate.strong_match then 1 else 2 end,
+                candidate.id
+            limit 1
+        ) as message on true
+    )
+    update public.stage1_preliminary_meaning_units as unit
+    set english_text = case
+            when coalesce(resolved.language, 'en') = 'en'
+                then resolved.exact_text
+            else coalesce(
+                resolved.inline_translation,
+                case when resolved.exact_is_source_reference
+                    then resolved.markdown_english_text end,
+                resolved.stored_message_translation,
+                resolved.markdown_english_text,
+                case
+                    when not resolved.exact_is_source_reference
+                     and resolved.exact_looks_english
+                    then resolved.exact_text
+                end,
+                resolved.exact_text
+            )
+        end,
+        english_text_source = case
+            when coalesce(resolved.language, 'en') = 'en'
+                then 'stage1_english_text'
+            when resolved.inline_translation is not null
+                then 'stage1_inline_translation'
+            when resolved.exact_is_source_reference
+             and resolved.markdown_english_text is not null
+                then 'stage1_english_meaning_unit'
+            when resolved.stored_message_translation is not null
+                then 'stored_message_translation'
+            when resolved.markdown_english_text is not null
+                then 'stage1_english_meaning_unit'
+            when not resolved.exact_is_source_reference
+             and resolved.exact_looks_english
+                then 'stage1_english_text'
+            else 'stage1_text_without_separate_translation'
+        end,
+        english_source_message_id = resolved.resolved_message_id
+    from resolved
+    where unit.id = resolved.id;
+
+    get diagnostics affected_rows = row_count;
+    return affected_rows;
+end;
+$$;
+
+revoke all on function private.stage1_text_looks_english(text) from public;
+revoke all on function private.populate_stage1_english_meaning_units(uuid) from public;
+grant execute on function private.stage1_text_looks_english(text) to service_role;
+grant execute on function private.populate_stage1_english_meaning_units(uuid) to service_role;

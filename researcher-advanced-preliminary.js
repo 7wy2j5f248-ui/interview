@@ -31,6 +31,7 @@
     const cancelButton = element("advancedPreliminaryCancelButton");
     const refreshButton = element("advancedPreliminaryRefreshButton");
     const downloadButton = element("advancedPreliminaryDownloadButton");
+    const formsDownloadButton = element("advancedPreliminaryFormsDownloadButton");
     const lockButton = element("advancedPreliminaryLockButton");
     const previousButton = element("advancedPreliminaryPreviousPage");
     const nextButton = element("advancedPreliminaryNextPage");
@@ -252,6 +253,7 @@
             modelSelect.disabled = false;
             cancelButton.hidden = true;
             downloadButton.disabled = true;
+            formsDownloadButton.disabled = true;
             previousButton.disabled = true;
             nextButton.disabled = true;
             renderStage2();
@@ -277,6 +279,7 @@
         cancelButton.hidden = !active;
         cancelButton.disabled = !active;
         downloadButton.disabled = run.completed_count < 1;
+        formsDownloadButton.disabled = run.completed_count < 1;
         setStatus(
             `Stage 1 run ${run.run_number}: ${run.status.replaceAll("_", " ")}. `
             + `${payload.exactOutputCount || 0} of ${run.source_case_count} exact first responses are stored; `
@@ -823,6 +826,41 @@
         } catch (error) {
             setStatus(error.message, true);
             downloadButton.disabled = false;
+        }
+    });
+
+    formsDownloadButton.addEventListener("click", async () => {
+        formsDownloadButton.disabled = true;
+        setStatus("Materializing all five Stage 1 forms from the active project's stored records…");
+        try {
+            const runId = encodeURIComponent(payload.run?.id || "");
+            const response = await fetch(
+                `${API_PATH}&download=stage1-forms-xlsx&runId=${runId}&_=${Date.now()}`,
+                { headers: { Authorization: `Bearer ${token()}` }, cache: "no-store" }
+            );
+            if (!response.ok) {
+                const body = await response.json().catch(() => ({}));
+                throw new Error(body.error || "The five Stage 1 forms could not be prepared.");
+            }
+            const disposition = response.headers.get("Content-Disposition") || "";
+            const filename = disposition.match(/filename="([^"]+)"/u)?.[1]
+                || "stage1-preliminary-analysis-forms.xlsx";
+            const blob = await response.blob();
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            URL.revokeObjectURL(url);
+            setStatus(
+                `Five Stage 1 forms downloaded for ${response.headers.get("X-Stage1-Participant-Form-Cases") || "all"} cases. No AI/API calls were made.`
+            );
+            render();
+        } catch (error) {
+            setStatus(error.message, true);
+            formsDownloadButton.disabled = false;
         }
     });
 

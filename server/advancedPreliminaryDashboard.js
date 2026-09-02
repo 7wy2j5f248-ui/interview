@@ -31,6 +31,11 @@ import {
     STAGE2A_STOP_LAYER,
     stage2AModelLimits
 } from "./stage2aCodeHarmonization.js";
+import {
+    loadStage1PreliminaryForms,
+    stage1PreliminaryFormsFilename,
+    writeStage1PreliminaryFormsWorkbook
+} from "./stage1PreliminaryForms.js";
 
 export const config = { maxDuration: 300 };
 
@@ -483,6 +488,49 @@ async function downloadStage1Csv(supabase, req, res) {
     return res.status(200).send(`\uFEFF${csv}`);
 }
 
+async function downloadStage1FormsWorkbook(supabase, req, res) {
+    const run = await latestRun(
+        supabase,
+        typeof req.query?.runId === "string" ? req.query.runId : null
+    );
+    if (!run) {
+        throw Object.assign(new Error("No Stage 1 run exists."), { status: 404 });
+    }
+    const data = await loadStage1PreliminaryForms(supabase, run.id);
+    const summary = data.materialization;
+    res.statusCode = 200;
+    res.setHeader(
+        "Content-Type",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${stage1PreliminaryFormsFilename(data)}"`
+    );
+    res.setHeader("X-Stage1-Expected-Cases", summary.source_case_count);
+    res.setHeader(
+        "X-Stage1-Participant-Form-Cases",
+        summary.participant_form_case_count
+    );
+    res.setHeader(
+        "X-Stage1-Meaning-Unit-Form-Cases",
+        summary.meaning_unit_form_case_count
+    );
+    res.setHeader("X-Stage1-Code-Form-Cases", summary.code_form_case_count);
+    res.setHeader(
+        "X-Stage1-Category-Form-Cases",
+        summary.category_form_case_count
+    );
+    res.setHeader(
+        "X-Stage1-Theme-Form-Cases",
+        summary.implied_theme_form_case_count
+    );
+    res.setHeader("X-Stage1-Exception-Cases", summary.exception_case_count);
+    res.setHeader("X-Stage1-New-AI-API-Calls", summary.new_ai_api_call_count);
+    await writeStage1PreliminaryFormsWorkbook(res, data);
+    return undefined;
+}
+
 async function allStage2AProvenanceRows(supabase, runId) {
     const rows = [];
     const pageSize = 1000;
@@ -861,6 +909,9 @@ export async function handleAdvancedPreliminaryDashboard(req, res) {
         if (req.method === "GET") {
             if (req.query?.download === "stage1-csv") {
                 return await downloadStage1Csv(supabase, req, res);
+            }
+            if (req.query?.download === "stage1-forms-xlsx") {
+                return await downloadStage1FormsWorkbook(supabase, req, res);
             }
             if (req.query?.download === "stage2a-csv") {
                 return await downloadStage2ACsv(supabase, req, res);
