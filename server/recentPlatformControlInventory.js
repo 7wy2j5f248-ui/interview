@@ -24,7 +24,7 @@ function control({
 }
 
 export const RECENT_PLATFORM_CONTROL_INVENTORY_VERSION =
-    "recent-platform-controls-2026-09-02-v2";
+    "recent-platform-controls-2026-09-02-v3-exact-output";
 
 // Disclosure register only: none of these entries execute policy.
 export const RECENT_PLATFORM_CONTROLS = [
@@ -53,7 +53,7 @@ export const RECENT_PLATFORM_CONTROLS = [
         effect: "Inserted a prescribed qualitative hierarchy, automatic audits, and feedback/repair behavior across analysis, review, and export paths.",
         source: "server/analysisCore.js; server/analysisFramework.js; supabase/migrations/20260831185820_meaning_units_categories_autonomous_feedback.sql",
         modelAssociation: "Legacy/pre-Stage-1 automatic-analysis and reanalysis models.",
-        currentStatus: "The hierarchy remains a display/data design where referenced; autonomous analytical acceptance is not authorized for current Stage 1."
+        currentStatus: "Withdrawn from current Stage 1. The exact first response is shown without hierarchy parsing or projection. Historical implementations remain listed only for audit."
     }),
     control({
         id: "RECENT-004",
@@ -80,7 +80,7 @@ export const RECENT_PLATFORM_CONTROLS = [
         effect: "Created the Stage-1 pipeline, strict response schema, local Meaning Unit checks, count/link requirements, database constraints, job states, and report-completion function.",
         source: "server/advancedPreliminaryAnalysis.js; server/advancedPreliminaryDashboard.js; supabase/migrations/20260831235500_add_advanced_preliminary_analysis.sql",
         modelAssociation: "Introduced for the stronger-model preliminary generator; later used with the exact model configured for a run, including GPT-5.6 runs.",
-        currentStatus: "Analytical validator withdrawn by GOV-PART-002. Exact output preservation and non-rejecting relational projection replace it."
+        currentStatus: "Withdrawn from current Stage 1 by GOV-STAGE1-EXACT-001. Exact output preservation replaces the schema, validator, and relational projection."
     }),
     control({
         id: "RECENT-007",
@@ -89,7 +89,7 @@ export const RECENT_PLATFORM_CONTROLS = [
         effect: "Told the model to cover the full transcript and initially treated coverage gaps as an enforcement concern; later retained gaps for review.",
         source: "server/advancedPreliminaryAnalysis.js; researcher-advanced-preliminary.js",
         modelAssociation: "Stage-1 generator prompt.",
-        currentStatus: "Prompt guidance only. It cannot reject a participant, transcript, report, or model object."
+        currentStatus: "Withdrawn from the current minimal Stage 1 prompt. The selected model receives the research topic and transcript without this platform-created coverage policy."
     }),
     control({
         id: "RECENT-008",
@@ -98,7 +98,7 @@ export const RECENT_PLATFORM_CONTROLS = [
         effect: "Deleted or reset outputs classified as invalid and requeued work for a clean run.",
         source: "server/advancedPreliminaryAnalysis.js; server/analysisCore.js; supabase/migrations/20260901022929_discard_invalid_analysis_outputs.sql",
         modelAssociation: "Stage 1 and legacy automatic-analysis outputs affected by the reset migration.",
-        currentStatus: "Prohibited for current Stage 1. Completed provider output is preserved before projection; historical audit records remain."
+        currentStatus: "Prohibited for current Stage 1. The exact completed provider response is preserved; historical audit records remain."
     }),
     control({
         id: "RECENT-009",
@@ -107,7 +107,7 @@ export const RECENT_PLATFORM_CONTROLS = [
         effect: "Rejected overlapping Meaning Unit spans and staged analysis around Meaning Units.",
         source: "server/advancedPreliminaryAnalysis.js; supabase/migrations/20260901013000_stage1_meaning_units_only.sql",
         modelAssociation: "Stage-1 generator output.",
-        currentStatus: "Withdrawn. Overlap cannot reject an object or report; it may only affect optional relational display projection."
+        currentStatus: "Withdrawn. Current Stage 1 does not inspect or project Meaning Unit spans."
     }),
     control({
         id: "RECENT-010",
@@ -125,16 +125,16 @@ export const RECENT_PLATFORM_CONTROLS = [
         effect: "Required a single response containing Meaning Units, Codes, Categories, Themes, links, and summary, with whole-report failure when stated minima or links did not pass.",
         source: "server/advancedPreliminaryAnalysis.js; supabase/migrations/20260901122121_complete_preliminary_case_reports.sql",
         modelAssociation: "Stage-1 generator model configured for a run.",
-        currentStatus: "Analytical schema and rejection minima withdrawn by GOV-PART-002. Arrays and links are now optional non-rejecting projections of preserved raw output."
+        currentStatus: "Analytical schema, rejection minima, parsing, and projection withdrawn by GOV-STAGE1-EXACT-001."
     }),
     control({
         id: "RECENT-012",
-        title: "Single active run, preflight hash, and exact-model probe",
+        title: "Single active run, preflight hash, and withdrawn exact-model probe",
         introduced: "2026-09-01 11:50 EDT · commit 4ce0761",
         effect: "Allowed only one active Stage-1 run, required the displayed execution-plan hash at start, and tested the exact configured model before running.",
         source: "server/advancedPreliminaryDashboard.js; server/advancedPreliminaryAnalysis.js; supabase/migrations/20260901160500_restore_researcher_execution_contract.sql",
         modelAssociation: "The capability probe targets the exact selected Stage-1 model; other gates are model-independent.",
-        currentStatus: "Active operational safeguards, disclosed for researcher review. They do not decide participant or transcript legitimacy."
+        currentStatus: "Single-active-run and researcher-confirmed plan hash remain operational. The extra paid model capability probe is removed."
     }),
     control({
         id: "RECENT-013",
@@ -152,7 +152,7 @@ export const RECENT_PLATFORM_CONTROLS = [
         effect: "Persists provider response IDs, schedules polling, cancels stale responses after a fixed interval, and limits recovery attempts.",
         source: "server/advancedPreliminaryAnalysis.js; api/automatic-analysis.js; supabase/migrations/20260901223500_make_stage1_responses_durable.sql; supabase/migrations/20260901224500_schedule_durable_stage1_ticks.sql; supabase/migrations/20260902004107_handle_stale_stage1_responses.sql",
         modelAssociation: "Stage-1 provider/model recorded for each run.",
-        currentStatus: "Active system-recovery control. Exhaustion is a visible technical failure requiring expert resolution, never participant exclusion."
+        currentStatus: "Durable response-ID polling remains active. Stale-response cancellation and automatic retry are withdrawn by GOV-STAGE1-EXACT-001; the original response is not replaced."
     }),
     control({
         id: "RECENT-015",
@@ -182,7 +182,18 @@ export const RECENT_PLATFORM_CONTROLS = [
         effect: "Makes the preserved case report authoritative and changes MU/CO/CA/TH relational storage into a best-effort display projection. A cast, link, numbering, or child-table constraint failure becomes a system-owned note and cannot reject the report.",
         source: "supabase/migrations/20260902140632_make_stage1_projection_non_blocking.sql; server/advancedPreliminaryAnalysis.js",
         modelAssociation: "Model-independent; applies to every current or future Stage-1 generator.",
-        currentStatus: "Current top-level researcher governance. No analytical or structural output gate may block a completed Stage-1 provider response.",
+        currentStatus: "Superseded by GOV-STAGE1-EXACT-001. The relational projection is now removed from the active path rather than retained as best effort.",
+        classification: "explicit researcher directive",
+        authorization: "Explicitly directed by the researcher in this task on 2026-09-02."
+    }),
+    control({
+        id: "RECENT-018",
+        title: "Exact-first-response Stage 1 and Stage 2 withdrawal",
+        introduced: "2026-09-02 · explicit researcher directive · commits 27f5075 and 9801703",
+        effect: "Removes the model probe, analytical validator, scoring, repair, retry, parsing, normalization, hierarchy projection, reconstruction, Stage 2 start/claim permissions, and Stage 2 export from the current path. Preserves the exact first response and original transcript for researcher inspection.",
+        source: "server/advancedPreliminaryAnalysis.js; server/advancedPreliminaryDashboard.js; researcher-advanced-preliminary.js; supabase/migrations/20260902150000_remove_stage1_gatekeepers.sql",
+        modelAssociation: "Model-independent researcher governance for every current or future Stage-1 model.",
+        currentStatus: "Active top-level researcher governance. Existing durable provider response IDs continue to be polled without cancellation or replacement. Current-run projections were moved to a read-only recovery archive; projection-only historical reports were retained to prevent data loss.",
         classification: "explicit researcher directive",
         authorization: "Explicitly directed by the researcher in this task on 2026-09-02."
     })

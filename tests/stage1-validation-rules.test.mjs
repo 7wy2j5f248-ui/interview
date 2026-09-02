@@ -78,8 +78,8 @@ test("the dedicated researcher page exposes authority, provenance, models, and f
 
 test("recent system-derived controls and their authorization boundary are disclosed", async () => {
     const sourceText = await source("server/recentPlatformControlInventory.js");
-    assert.equal(RECENT_PLATFORM_CONTROLS.length, 17);
-    assert.equal(new Set(RECENT_PLATFORM_CONTROLS.map(item => item.id)).size, 17);
+    assert.equal(RECENT_PLATFORM_CONTROLS.length, 18);
+    assert.equal(new Set(RECENT_PLATFORM_CONTROLS.map(item => item.id)).size, 18);
     assert.match(sourceText, /RECENT-006/);
     assert.match(sourceText, /Stronger-model preliminary-analysis pipeline/);
     assert.match(sourceText, /RECENT-010/);
@@ -89,12 +89,14 @@ test("recent system-derived controls and their authorization boundary are disclo
     assert.match(sourceText, /explicitly required removal of the system-derived fixed value of eight/);
     assert.match(sourceText, /RECENT-017/);
     assert.match(sourceText, /Remove relational projection as a Stage-1 report gate/);
+    assert.match(sourceText, /RECENT-018/);
+    assert.match(sourceText, /Exact-first-response Stage 1 and Stage 2 withdrawal/);
     assert.match(sourceText, /Git author identity or commit title is not evidence of informed approval/);
     assert.match(sourceText, /No explicit researcher authorization record was found/);
     assert.equal(
         RECENT_PLATFORM_CONTROLS.filter(item =>
             item.classification === "explicit researcher directive").length,
-        2
+        3
     );
 });
 

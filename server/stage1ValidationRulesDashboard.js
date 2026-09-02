@@ -13,7 +13,6 @@ import {
 import {
     availableAdvancedPreliminaryWorkerConcurrency,
     configuredAdvancedPreliminaryMaxOutputTokens,
-    configuredAdvancedPreliminaryStaleResponseMinutes,
     configuredAdvancedPreliminaryWorkerConcurrency
 } from "./advancedPreliminaryAnalysis.js";
 
@@ -70,7 +69,7 @@ export async function handleStage1ValidationRulesDashboard(req, res) {
             configuredAdvancedPreliminaryWorkerConcurrency();
         return res.status(200).json({
             registryVersion: STAGE1_VALIDATION_REGISTRY_VERSION,
-            effectiveAsOf: "2026-09-01",
+            effectiveAsOf: "2026-09-02",
             repositoryCommit: process.env.VERCEL_GIT_COMMIT_SHA || null,
             participantInclusionPolicy: STAGE1_PARTICIPANT_INCLUSION_POLICY,
             summary: stage1ValidationRegistrySummary(),
@@ -93,7 +92,8 @@ export async function handleStage1ValidationRulesDashboard(req, res) {
                 executionPlanHash: run.execution_plan_hash,
                 requestedAt: run.requested_at
             } : null,
-            frozenResearcherRules: run?.rules_snapshot || null,
+            frozenResearcherRules: null,
+            historicalRunRulesSnapshot: run?.rules_snapshot || null,
             operationalExecutionContext: {
                 analyticalIndependence: "mandatory_case_by_case",
                 executionConcurrency: "technical_configurable",
@@ -108,12 +108,11 @@ export async function handleStage1ValidationRulesDashboard(req, res) {
                     configuredAdvancedPreliminaryMaxOutputTokens(),
                 maximumOutputTokensSource:
                     "ADVANCED_PRELIMINARY_MAX_OUTPUT_TOKENS server setting; technical capacity, not a participant qualification rule",
-                stalledResponseMinutesBeforeSystemRetry:
-                    configuredAdvancedPreliminaryStaleResponseMinutes(),
-                stalledResponseSource:
-                    "ADVANCED_PRELIMINARY_STALE_RESPONSE_MINUTES server setting; technical recovery timing, not a participant qualification rule",
-                systemRetryPolicy:
-                    "Technical failures are requeued as system work; failure counts are not participant qualification rules"
+                exactFirstResponseAuthoritative: true,
+                analyticalGatekeepers: "none",
+                modelProbeCalls: 0,
+                automaticRetryPolicy: "none; an existing durable response ID is polled until the provider reaches a terminal state",
+                stage2: "unavailable pending separate researcher authorization"
             },
             rules: STAGE1_VALIDATION_RULES,
             recentPlatformControlInventoryVersion:
