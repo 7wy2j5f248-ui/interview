@@ -192,7 +192,7 @@
                 </p>
                 <ol class="automaticReanalysisPanel" aria-label="Staged qualitative analysis workflow">
                     <li><strong>Phase 1 · Independent complete preliminary case reports</strong> — available now</li>
-                    <li><button type="button" disabled>Phase 2A · Cross-Case Code Refinement — separate researcher-selected operation</button></li>
+                    <li><button type="button" disabled>Stage 2A · Cross-Case Code Harmonization — separate researcher-selected operation</button></li>
                     <li><button type="button" disabled>Phase 2B · Cross-Case Category Refinement — locked</button></li>
                     <li><button type="button" disabled>Phase 2C · Cross-Case Theme Development — locked</button></li>
                 </ol>
@@ -260,11 +260,29 @@
                     <div id="advancedPreliminaryAttentionTable"></div>
                 </details>
                 <section id="crossCaseCodeRefinement" class="automaticReanalysisPanel" aria-labelledby="crossCaseCodeHeading">
-                    <h3 id="crossCaseCodeHeading">Phase 2A · Cross-Case Code Refinement</h3>
+                    <h3 id="crossCaseCodeHeading">Stage 2A · Cross-Case Code Harmonization</h3>
+                    <p class="muted">
+                        This operation compares every existing preliminary Code and its
+                        Meaning Unit evidence in one whole-corpus model input. It creates
+                        Harmonized Codes only. Meaning Units and preliminary Codes remain
+                        unchanged; Categories and Themes are not created or refined.
+                    </p>
                     <p id="crossCaseCodeStatus" class="automaticReviewScopeSummary">
                         Stage 2 is unavailable until the researcher separately authorizes its source contract.
                     </p>
                     <p id="crossCaseCodeProvenance" class="muted"></p>
+                    <div class="actionRow">
+                        <button id="crossCaseCodePreviewButton" type="button">
+                            Check whole-corpus context and preview Stage 2A
+                        </button>
+                        <button id="crossCaseCodeExecuteButton" type="button" hidden disabled>
+                            Start this one whole-corpus harmonization
+                        </button>
+                        <button id="crossCaseCodeDownloadButton" type="button" disabled>
+                            Download HCO provenance CSV
+                        </button>
+                    </div>
+                    <div id="crossCaseCodeExecutionPlan" aria-live="polite"></div>
                     <div id="crossCaseCodeTable"></div>
                 </section>
             </section>
@@ -279,7 +297,7 @@
     <div id="advancedPreliminaryDialogContent"></div>
 </dialog>
 
-<script src="researcher-staged-access.js?version=20260901-stage2-code-v1"></script>
-<script src="researcher-advanced-preliminary.js?version=20260902-restored-report-v1"></script>
+<script src="researcher-staged-access.js?version=20260902-stage2a-hco-v1"></script>
+<script src="researcher-advanced-preliminary.js?version=20260902-stage2a-hco-v1"></script>
 </body>
 </html>

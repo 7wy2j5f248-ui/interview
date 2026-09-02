@@ -18,6 +18,10 @@
     const stage2Status = element("crossCaseCodeStatus");
     const stage2Provenance = element("crossCaseCodeProvenance");
     const stage2Host = element("crossCaseCodeTable");
+    const stage2DownloadButton = element("crossCaseCodeDownloadButton");
+    const stage2PreviewButton = element("crossCaseCodePreviewButton");
+    const stage2ExecuteButton = element("crossCaseCodeExecuteButton");
+    const stage2ExecutionPlan = element("crossCaseCodeExecutionPlan");
     const providerSelect = element("advancedPreliminaryProvider");
     const modelSelect = element("advancedPreliminaryModel");
     const modelSuggestions = element("advancedPreliminaryModelSuggestions");
@@ -37,12 +41,14 @@
     const dialogContent = element("advancedPreliminaryDialogContent");
     let payload = {
         run: null, cases: [], attentionCases: [], attentionCount: 0,
-        stage2: { disabled: true }, page: 1, pageSize: 50
+        stage2a: { run: null, formRows: [], maxHcoPositions: 0 },
+        page: 1, pageSize: 50
     };
     let page = 1;
     let loading = false;
     let refreshTimer = null;
     let preparedExecution = null;
+    let preparedStage2A = null;
 
     function token() {
         return sessionStorage.getItem(TOKEN_STORAGE_KEY) || "";
@@ -226,14 +232,6 @@
         host?.appendChild(built.scroll);
     }
 
-    function renderStage2() {
-        stage2Status.textContent = payload.stage2?.reason
-            || "Stage 2 is unavailable until the researcher separately authorizes its source contract.";
-        stage2Provenance.textContent =
-            "No Stage 2 run is active. Exact Stage 1 outputs will not be parsed, normalized, projected, or reconstructed automatically.";
-        stage2Host?.replaceChildren();
-    }
-
     function render() {
         tableHost.replaceChildren();
         attentionHost?.replaceChildren();
@@ -316,6 +314,198 @@
         });
         return panel;
     }
+
+    function renderStage2() {
+        stage2Host?.replaceChildren();
+        const stage2 = payload.stage2a
+            || { run: null, formRows: [], maxHcoPositions: 0 };
+        const activeStatuses = new Set([
+            "queued", "counting_context", "context_counted", "submitting",
+            "submitted", "processing"
+        ]);
+        if (!stage2.run) {
+            stage2Status.textContent =
+                "No Stage 2A harmonization has started. It remains separate from Stage 1 and will never start automatically.";
+            stage2Provenance.textContent =
+                "The context check uses the complete preliminary-Code corpus in one input. Categories and Themes remain out of scope.";
+            stage2DownloadButton.disabled = true;
+            stage2PreviewButton.disabled = payload.run?.status !== "completed";
+            if (!preparedStage2A) {
+                stage2ExecuteButton.hidden = true;
+                stage2ExecuteButton.disabled = true;
+            }
+            return;
+        }
+        const run = stage2.run;
+        stage2Status.textContent =
+            `Stage 2A is ${run.status.replaceAll("_", " ")}. `
+            + `${run.source_case_count} completed cases and ${run.preliminary_code_count} preliminary Codes were supplied as one corpus; `
+            + `${run.mappedPreliminaryCodeCount} preliminary Codes are mapped to ${run.harmonizedCodeCount} Harmonized Codes.`
+            + (run.last_error ? ` ${run.last_error}` : "");
+        stage2Provenance.textContent = [
+            `Stage 1 run ${run.stage1_run_id}`,
+            `${run.provider} / ${run.resolved_model || run.model}`,
+            `reasoning ${run.reasoning_effort}`,
+            `whole-corpus input ${run.input_token_count ?? "not counted"} tokens`,
+            `context ${run.context_window_tokens ?? "unknown"} tokens`,
+            `${run.analysis_version}`,
+            `${run.prompt_version}`,
+            "stop layer: Harmonized Codes"
+        ].join(" · ");
+        stage2DownloadButton.disabled = run.status !== "completed";
+        stage2PreviewButton.disabled = activeStatuses.has(run.status);
+        stage2ExecuteButton.hidden = true;
+        stage2ExecuteButton.disabled = true;
+        if (run.pre_call_snapshot?.selectedModel) {
+            showStage2APreCallState(run.pre_call_snapshot);
+        }
+        if (!stage2.formRows?.length) return;
+        const headers = ["P#"];
+        for (let position = 1; position <= stage2.maxHcoPositions; position += 1) {
+            headers.push(`HCO${position}`);
+        }
+        const built = table(headers);
+        const body = document.createElement("tbody");
+        stage2.formRows.forEach(item => {
+            const row = document.createElement("tr");
+            cell(row, item.case_number);
+            const codes = Array.isArray(item.harmonized_codes)
+                ? item.harmonized_codes : [];
+            for (let position = 0; position < stage2.maxHcoPositions; position += 1) {
+                cell(row, codes[position]?.label || "");
+            }
+            body.appendChild(row);
+        });
+        built.element.appendChild(body);
+        stage2Host.appendChild(built.scroll);
+    }
+
+    function showStage2APreCallState(snapshot) {
+        const panel = document.createElement("section");
+        panel.className = "automaticReanalysisPanel";
+        panel.appendChild(heading("Final Stage 2A pre-call state"));
+        const items = [
+            ["Cases", snapshot.cases],
+            ["Preliminary code records / assignments",
+                `${snapshot.preliminaryCodeRecords} / ${snapshot.preliminaryCodeAssignments}`],
+            ["Distinct preliminary code labels",
+                snapshot.distinctPreliminaryCodeLabels],
+            ["All cases included", snapshot.allCasesIncluded ? "YES" : "NO"],
+            ["Legacy Stage 2A output used",
+                snapshot.legacyStage2AOutputUsed ? "YES" : "NO"],
+            ["Input batching", snapshot.inputBatching ? "YES" : "NO"],
+            ["Selected model", snapshot.selectedModel],
+            ["Exact provider input token count", snapshot.inputTokenCount],
+            ["Paid harmonization calls", snapshot.paidHarmonizationCalls]
+        ];
+        const list = document.createElement("dl");
+        items.forEach(([label, value]) => {
+            const term = document.createElement("dt");
+            term.textContent = label;
+            const description = document.createElement("dd");
+            description.textContent = String(value);
+            list.append(term, description);
+        });
+        panel.appendChild(list);
+        stage2ExecutionPlan.replaceChildren(panel);
+    }
+
+    function showStage2APlan(prepared) {
+        const plan = prepared.plan;
+        showStage2APreCallState({
+            cases: plan.sourceCaseCount,
+            preliminaryCodeRecords: plan.preliminaryCodeCount,
+            preliminaryCodeAssignments: plan.codeMeaningUnitLinkCount,
+            distinctPreliminaryCodeLabels:
+                plan.distinctPreliminaryCodeLabelCount,
+            allCasesIncluded: plan.allCasesIncluded,
+            legacyStage2AOutputUsed: plan.legacyStage2AOutputUsed,
+            inputBatching: plan.inputBatching,
+            selectedModel: plan.resolvedModel,
+            inputTokenCount: plan.inputTokenCount,
+            paidHarmonizationCalls: plan.paidHarmonizationCalls
+        });
+        stage2ExecuteButton.hidden = false;
+        stage2ExecuteButton.disabled = !plan.fitsWholeCorpus;
+    }
+
+    stage2PreviewButton.addEventListener("click", async () => {
+        stage2PreviewButton.disabled = true;
+        stage2ExecuteButton.hidden = true;
+        stage2ExecutionPlan.replaceChildren();
+        setStatus("Counting the exact whole-corpus Stage 2A input…");
+        try {
+            preparedStage2A = await request(API_PATH, {
+                method: "POST",
+                body: JSON.stringify({
+                    action: "stage2a-preflight",
+                    stage1RunId: payload.run?.id
+                })
+            });
+            showStage2APlan(preparedStage2A);
+            setStatus(preparedStage2A.plan.fitsWholeCorpus
+                ? "The complete corpus fits the selected model. Review the exact plan, then start Stage 2A."
+                : "The complete corpus does not fit the selected model. Stage 2A is stopped; no batching alternative will be created.",
+            !preparedStage2A.plan.fitsWholeCorpus);
+        } catch (error) {
+            preparedStage2A = null;
+            setStatus(error.message, true);
+        } finally {
+            stage2PreviewButton.disabled = false;
+        }
+    });
+
+    stage2ExecuteButton.addEventListener("click", async () => {
+        if (!preparedStage2A) return;
+        stage2ExecuteButton.disabled = true;
+        stage2PreviewButton.disabled = true;
+        setStatus("Starting one whole-corpus Stage 2A harmonization…");
+        try {
+            await request(API_PATH, {
+                method: "POST",
+                body: JSON.stringify({
+                    action: "stage2a-start",
+                    stage1RunId: preparedStage2A.plan.stage1RunId
+                })
+            });
+            preparedStage2A = null;
+            stage2ExecutionPlan.replaceChildren();
+            await load({ quiet: true });
+        } catch (error) {
+            setStatus(error.message, true);
+            stage2ExecuteButton.disabled = false;
+            stage2PreviewButton.disabled = false;
+        }
+    });
+
+    stage2DownloadButton.addEventListener("click", async () => {
+        if (!payload.stage2a?.run?.id) return;
+        stage2DownloadButton.disabled = true;
+        setStatus("Preparing the Stage 2A Harmonized Code provenance…");
+        try {
+            const response = await fetch(
+                `${API_PATH}&download=stage2a-csv&runId=${encodeURIComponent(payload.run.id)}&_=${Date.now()}`,
+                { headers: { Authorization: `Bearer ${token()}` }, cache: "no-store" }
+            );
+            if (!response.ok) {
+                const body = await response.json().catch(() => ({}));
+                throw new Error(body.error || "The Stage 2A export could not be prepared.");
+            }
+            const blob = await response.blob();
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = `sleeping-habits-stage2a-harmonized-code-provenance-${payload.stage2a.run.id}.csv`;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            URL.revokeObjectURL(url);
+            render();
+        } catch (error) {
+            setStatus(error.message, true);
+            stage2DownloadButton.disabled = false;
+        }
+    });
 
     function codeColor(codeNumber) {
         return `keywordColor${((Number(codeNumber) - 1) % 12) + 1}`;
@@ -524,7 +714,11 @@
             payload = await request(`${API_PATH}&page=${page}&_=${Date.now()}`);
             render();
             clearTimeout(refreshTimer);
-            if (["queued", "processing"].includes(payload.run?.status)) {
+            if (["queued", "processing"].includes(payload.run?.status)
+                || [
+                    "queued", "counting_context", "context_counted", "submitting",
+                    "submitted", "processing"
+                ].includes(payload.stage2a?.run?.status)) {
                 refreshTimer = setTimeout(() => load({ quiet: true }), 30000);
             }
         } catch (error) {

@@ -1,6 +1,8 @@
 import { waitUntil } from "@vercel/functions";
 import { createClient } from "@supabase/supabase-js";
 import {
+    continueStage2AHarmonization,
+    stagedAnalysisBaseUrl,
     stagedAnalysisWorkerRequestIsAuthorized
 } from "../server/stagedAnalysisWorker.js";
 import {
@@ -21,6 +23,10 @@ import {
     handleStage1ValidationRulesDashboard
 } from "../server/stage1ValidationRulesDashboard.js";
 import { createTranslationClient } from "../server/translationProvider.js";
+import { createAnalysisProviderClient } from "../server/analysisProvider.js";
+import {
+    processStage2ACodeHarmonization
+} from "../server/stage2aCodeHarmonization.js";
 
 export const config = { maxDuration: 300 };
 
@@ -108,6 +114,35 @@ async function processTranslationAndContinue(req) {
     }
 }
 
+async function processStage2AAndContinue(req) {
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const secretKey = process.env.SUPABASE_SECRET_KEY;
+    const runId = typeof req.body?.runId === "string"
+        ? req.body.runId.trim() : "";
+    if (!supabaseUrl || !secretKey || !runId) {
+        throw new Error("Stage 2A harmonization configuration is incomplete.");
+    }
+    const supabaseClient = createClient(supabaseUrl, secretKey, {
+        auth: { persistSession: false, autoRefreshToken: false }
+    });
+    const { data: run, error } = await supabaseClient
+        .from("stage2a_code_harmonization_runs")
+        .select("id, provider")
+        .eq("id", runId)
+        .maybeSingle();
+    if (error || !run) throw new Error("The Stage 2A run could not be loaded.");
+    const { client: analysisClient } = createAnalysisProviderClient(run.provider);
+    const result = await processStage2ACodeHarmonization(
+        supabaseClient,
+        analysisClient,
+        run.id
+    );
+    if (result.active) {
+        await continueStage2AHarmonization(stagedAnalysisBaseUrl(req), run.id);
+    }
+    return result;
+}
+
 export default async function handler(req, res) {
     if (req.query?.view === "stage1-validation-rules") {
         return handleStage1ValidationRulesDashboard(req, res);
@@ -115,7 +150,10 @@ export default async function handler(req, res) {
     if (req.query?.view === "advanced-preliminary"
         && (req.method === "GET"
             || (req.method === "POST"
-                && ["preflight", "start", "cancel"]
+                && [
+                    "preflight", "start", "cancel",
+                    "stage2a-preflight", "stage2a-start"
+                ]
                     .includes(req.body?.action)))) {
         return handleAdvancedPreliminaryDashboard(req, res);
     }
@@ -221,6 +259,23 @@ export default async function handler(req, res) {
         return res.status(202).json({
             accepted: true,
             processing: "translation_independent_from_case_analysis"
+        });
+    }
+
+    if ([
+        "stage2a-code-harmonization",
+        "stage2a-code-harmonization-continuation"
+    ].includes(req.body?.worker)) {
+        if (!stagedAnalysisWorkerRequestIsAuthorized(req)) {
+            return res.status(401).json({ error: "Unauthorized." });
+        }
+        waitUntil(processStage2AAndContinue(req).catch(error => {
+            console.error("Stage 2A harmonization worker stopped:", error);
+        }));
+        return res.status(202).json({
+            accepted: true,
+            runId: req.body?.runId,
+            processing: "one_whole_corpus_code_harmonization_response"
         });
     }
 
