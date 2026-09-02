@@ -84,7 +84,7 @@ test("cross-case refinement requires semantic evidence for an existing shared Co
     assert.equal(unknown.complete, false);
 });
 
-test("Stage 2 schema remains case-grounded and traceable but cannot start automatically", async () => {
+test("historical Stage 2 schema remains auditable but its execution is unavailable", async () => {
     const migration = await source(
         "supabase/migrations/20260901070000_add_automatic_stage2_code_refinement.sql"
     );
@@ -92,6 +92,9 @@ test("Stage 2 schema remains case-grounded and traceable but cannot start automa
     const api = await source("api/automatic-analysis.js");
     const html = await source("staged-analysis.html");
     const dashboard = await source("server/advancedPreliminaryDashboard.js");
+    const withdrawal = await source(
+        "supabase/migrations/20260902150000_remove_stage1_gatekeepers.sql"
+    );
     const vercel = JSON.parse(await source("vercel.json"));
 
     assert.match(migration, /stage2_preliminary_codes/);
@@ -118,11 +121,10 @@ test("Stage 2 schema remains case-grounded and traceable but cannot start automa
     assert.match(html, /without a per-case approval[\s\S]*bottleneck/);
     assert.match(html, /Phase 2B · Cross-Case Category Refinement — locked/);
     assert.match(html, /Phase 2C · Cross-Case Theme Development — locked/);
-    assert.match(dashboard, /Case ID/);
-    assert.match(dashboard, /Preliminary Code/);
-    assert.match(dashboard, /Refined Code/);
-    assert.match(dashboard, /Exact transcript evidence/);
-    assert.match(dashboard, /downloadStage2Csv/);
+    assert.match(dashboard, /Stage 2 is unavailable/);
+    assert.doesNotMatch(dashboard, /downloadStage2Csv/);
+    assert.match(withdrawal, /revoke all on function public\.ensure_stage2_code_refinement_run\(\)[\s\S]*service_role/);
+    assert.match(withdrawal, /revoke all on function public\.claim_next_stage2_code_refinement\(\)[\s\S]*service_role/);
     assert.deepEqual(vercel.crons, [{
         path: "/api/automatic-analysis?cron=staged",
         schedule: "0 0 * * *"

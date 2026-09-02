@@ -8,38 +8,36 @@
 
     const workspace = document.getElementById("automaticAnalysisWorkspace");
     const gate = document.getElementById("automaticAnalysisTokenGate");
-    // Keep the current staged task above every historical form.
     workspace?.prepend(section);
     section.classList.add("stagedAnalysisPrimary");
-    const status = document.getElementById("advancedPreliminaryStatus");
-    const provenance = document.getElementById("advancedPreliminaryProvenance");
-    const tableHost = document.getElementById("advancedPreliminaryTable");
-    const attentionHost = document.getElementById("advancedPreliminaryAttentionTable");
-    const stage2Status = document.getElementById("crossCaseCodeStatus");
-    const stage2Provenance = document.getElementById("crossCaseCodeProvenance");
-    const stage2Host = document.getElementById("crossCaseCodeTable");
-    const stage2DownloadButton = document.getElementById("crossCaseCodeDownloadButton");
-    const providerSelect = document.getElementById("advancedPreliminaryProvider");
-    const modelSelect = document.getElementById("advancedPreliminaryModel");
-    const modelSuggestions = document.getElementById("advancedPreliminaryModelSuggestions");
-    const startButton = document.getElementById("advancedPreliminaryStartButton");
-    const executionPlanHost = document.getElementById("advancedPreliminaryExecutionPlan");
-    const executeButton = document.getElementById("advancedPreliminaryExecuteButton");
-    const cancelButton = document.getElementById("advancedPreliminaryCancelButton");
-    const refreshButton = document.getElementById("advancedPreliminaryRefreshButton");
-    const downloadButton = document.getElementById("advancedPreliminaryDownloadButton");
-    const lockButton = document.getElementById("advancedPreliminaryLockButton");
-    const previousButton = document.getElementById("advancedPreliminaryPreviousPage");
-    const nextButton = document.getElementById("advancedPreliminaryNextPage");
-    const pageLabel = document.getElementById("advancedPreliminaryPageLabel");
-    const dialog = document.getElementById("advancedPreliminaryDialog");
-    const dialogHeading = document.getElementById("advancedPreliminaryDialogHeading");
-    const dialogProvenance = document.getElementById("advancedPreliminaryDialogProvenance");
-    const dialogContent = document.getElementById("advancedPreliminaryDialogContent");
+    const element = id => document.getElementById(id);
+    const status = element("advancedPreliminaryStatus");
+    const provenance = element("advancedPreliminaryProvenance");
+    const tableHost = element("advancedPreliminaryTable");
+    const attentionHost = element("advancedPreliminaryAttentionTable");
+    const stage2Status = element("crossCaseCodeStatus");
+    const stage2Provenance = element("crossCaseCodeProvenance");
+    const stage2Host = element("crossCaseCodeTable");
+    const providerSelect = element("advancedPreliminaryProvider");
+    const modelSelect = element("advancedPreliminaryModel");
+    const modelSuggestions = element("advancedPreliminaryModelSuggestions");
+    const startButton = element("advancedPreliminaryStartButton");
+    const executionPlanHost = element("advancedPreliminaryExecutionPlan");
+    const executeButton = element("advancedPreliminaryExecuteButton");
+    const cancelButton = element("advancedPreliminaryCancelButton");
+    const refreshButton = element("advancedPreliminaryRefreshButton");
+    const downloadButton = element("advancedPreliminaryDownloadButton");
+    const lockButton = element("advancedPreliminaryLockButton");
+    const previousButton = element("advancedPreliminaryPreviousPage");
+    const nextButton = element("advancedPreliminaryNextPage");
+    const pageLabel = element("advancedPreliminaryPageLabel");
+    const dialog = element("advancedPreliminaryDialog");
+    const dialogHeading = element("advancedPreliminaryDialogHeading");
+    const dialogProvenance = element("advancedPreliminaryDialogProvenance");
+    const dialogContent = element("advancedPreliminaryDialogContent");
     let payload = {
         run: null, cases: [], attentionCases: [], attentionCount: 0,
-        stage2: { run: null, mappings: [] },
-        page: 1, pageSize: 50
+        stage2: { disabled: true }, page: 1, pageSize: 50
     };
     let page = 1;
     let loading = false;
@@ -71,30 +69,30 @@
     }
 
     function paragraph(text, className = "") {
-        const element = document.createElement("p");
-        element.textContent = text;
-        element.className = className;
-        return element;
+        const node = document.createElement("p");
+        node.textContent = text;
+        node.className = className;
+        return node;
     }
 
     function heading(text) {
-        const element = document.createElement("h3");
-        element.textContent = text;
-        return element;
+        const node = document.createElement("h3");
+        node.textContent = text;
+        return node;
     }
 
     function cell(row, value) {
-        const element = document.createElement("td");
-        element.textContent = value === null || value === undefined || value === ""
+        const node = document.createElement("td");
+        node.textContent = value === null || value === undefined || value === ""
             ? "—" : String(value);
-        row.appendChild(element);
+        row.appendChild(node);
     }
 
     function table(headers) {
         const scroll = document.createElement("div");
         scroll.className = "tableScroll";
-        const element = document.createElement("table");
-        element.className = "analysisTable automaticAnalysisTable";
+        const node = document.createElement("table");
+        node.className = "analysisTable automaticAnalysisTable";
         const head = document.createElement("thead");
         const row = document.createElement("tr");
         headers.forEach(label => {
@@ -104,25 +102,22 @@
             row.appendChild(header);
         });
         head.appendChild(row);
-        element.appendChild(head);
-        scroll.appendChild(element);
-        return { scroll, element };
+        node.appendChild(head);
+        scroll.appendChild(node);
+        return { scroll, element: node };
     }
 
-    function renderModels() {
-        const models = payload.availableModels || [];
-        const currentValue = modelSelect.value;
+    function renderSelections() {
+        const modelValue = modelSelect.value;
         modelSuggestions?.replaceChildren();
-        models.forEach(model => {
+        (payload.availableModels || []).forEach(model => {
             const option = document.createElement("option");
             option.value = model;
             modelSuggestions?.appendChild(option);
         });
-        if (currentValue) modelSelect.value = currentValue;
-    }
+        if (modelValue) modelSelect.value = modelValue;
 
-    function renderProviders() {
-        const currentValue = providerSelect.value;
+        const providerValue = providerSelect.value;
         providerSelect.replaceChildren();
         const placeholder = document.createElement("option");
         placeholder.value = "";
@@ -135,7 +130,7 @@
             option.disabled = !provider.configured;
             providerSelect.appendChild(option);
         });
-        if (currentValue) providerSelect.value = currentValue;
+        if (providerValue) providerSelect.value = providerValue;
     }
 
     function invalidateExecutionPlan() {
@@ -157,27 +152,22 @@
         const panel = document.createElement("section");
         panel.className = "automaticReanalysisPanel";
         panel.appendChild(heading("Exact execution plan — review before spending"));
-        const items = [
+        const list = document.createElement("dl");
+        [
             ["Operation", plan.operation],
             ["Provider and exact model", `${plan.provider} / ${plan.model}`],
             ["Authoritative source", plan.authoritativeSource],
-            ["Completed transcripts ready for this Stage 1 run", plan.sourceCaseCount],
+            ["Completed transcripts ready", plan.sourceCaseCount],
             ["Participant source messages", plan.participantMessageCount],
-            ["Stored translations available", plan.storedTranslationCount],
-            ["Stored translations missing", plan.missingStoredTranslationCount],
             ["Earlier analytical outputs used", plan.legacyAnalyticalOutputsUsed ? "yes" : "no"],
-            ["Existing outputs changed", plan.existingOutputsAffected],
-            ["New output location", plan.newOutputs],
+            ["Analytical gatekeepers", plan.analyticalGatekeepers],
+            ["Model probe calls", plan.modelProbeCalls],
             ["Paid analysis calls per case", plan.analysisCallsPerCase],
             ["Maximum paid analysis calls", plan.maximumAnalysisCalls],
-            ["Automatic continuation of this run", plan.automaticContinuation ? "yes" : "no"],
             ["Automatic cross-case analysis", plan.automaticCrossCaseAnalysis ? "yes" : "no"],
-            ["Stop layer", plan.stopLayer],
-            ["Rules snapshot", JSON.stringify(plan.analysisRules)],
+            ["Output contract", plan.stopLayer],
             ["Execution plan hash", result.executionPlanHash]
-        ];
-        const list = document.createElement("dl");
-        items.forEach(([label, value]) => {
+        ].forEach(([label, value]) => {
             const term = document.createElement("dt");
             term.textContent = label;
             const description = document.createElement("dd");
@@ -190,33 +180,79 @@
         executeButton.disabled = false;
     }
 
+    function renderCaseTable(items, host, mode = "active") {
+        const built = table([
+            "Case ID", "Project lineage", "Status", "Exact first response",
+            "Generation", "Inspect"
+        ]);
+        const body = document.createElement("tbody");
+        items.forEach(item => {
+            const row = document.createElement("tr");
+            cell(row, item.case_number);
+            cell(row, item.project_binding_status === "project_bound"
+                ? "Sleeping habits" : "Historical project binding pending");
+            cell(row, mode === "attention" || item.status === "failed"
+                ? `System needs attention · participant remains included${item.last_error ? `: ${item.last_error}` : ""}`
+                : item.status.replaceAll("_", " "));
+            cell(row, item.report?.exactOutputAvailable
+                ? "available"
+                : item.report
+                ? "not preserved by earlier implementation"
+                : item.status === "processing"
+                ? "provider call still running"
+                : "not yet available");
+            cell(row, item.report
+                ? item.report.analytical_audit?.aiAnalysisPassCount === 1
+                    ? "One first response"
+                    : "Historical output"
+                : "—");
+            const action = document.createElement("td");
+            const button = document.createElement("button");
+            button.type = "button";
+            button.textContent = item.report
+                ? "Inspect exact response"
+                : item.status === "processing"
+                ? "Inspect transcript and status" : "Inspect transcript";
+            button.addEventListener("click", () => openCase(item.case_number));
+            action.appendChild(button);
+            row.appendChild(action);
+            body.appendChild(row);
+        });
+        built.element.appendChild(body);
+        host?.appendChild(built.scroll);
+    }
+
+    function renderStage2() {
+        stage2Status.textContent = payload.stage2?.reason
+            || "Stage 2 is unavailable until the researcher separately authorizes its source contract.";
+        stage2Provenance.textContent =
+            "No Stage 2 run is active. Exact Stage 1 outputs will not be parsed, normalized, projected, or reconstructed automatically.";
+        stage2Host?.replaceChildren();
+    }
+
     function render() {
         tableHost.replaceChildren();
         attentionHost?.replaceChildren();
-        stage2Host?.replaceChildren();
-        renderModels();
-        renderProviders();
+        renderSelections();
         const run = payload.run;
         [
             ["advancedPreliminaryPending", run?.pending_count || 0],
             ["advancedPreliminaryProcessing", run?.processing_count || 0],
             ["advancedPreliminaryCompleted", run?.completed_count || 0],
             ["advancedPreliminaryFailed", payload.attentionCount || 0]
-        ].forEach(([id, value]) => {
-            document.getElementById(id).textContent = value;
-        });
+        ].forEach(([id, value]) => { element(id).textContent = value; });
 
         if (!run) {
-            provenance.textContent = "No independent preliminary case-analysis run has been created yet.";
-            setStatus("Choose an operation provider and exact model ID, then preview the complete execution plan. No model call is made during preview.");
+            provenance.textContent = "No independent Stage 1 run has been created yet.";
+            setStatus("Choose a provider and exact model ID, then preview the one-call-per-case plan. Preview makes no model call.");
             startButton.disabled = !providerSelect.value || !modelSelect.value.trim();
             providerSelect.disabled = false;
             modelSelect.disabled = false;
             cancelButton.hidden = true;
-            cancelButton.disabled = true;
             downloadButton.disabled = true;
             previousButton.disabled = true;
             nextButton.disabled = true;
+            renderStage2();
             return;
         }
 
@@ -224,24 +260,14 @@
         provenance.textContent = [
             `Run ${run.run_number}`,
             `project ${run.project_snapshot?.[0]?.project_name || "Sleeping habits"}`,
-            `topic ${run.project_snapshot?.[0]?.research_topic || "Sleeping habits"}`,
             `${run.provider} / requested ${run.model}`,
-            `resolved ${run.resolved_model || "not recorded"}`,
+            `recorded model ${run.resolved_model || run.model}`,
             `reasoning ${run.reasoning_effort}`,
             `analysis ${run.analysis_version}`,
             `prompt ${run.prompt_version}`,
-            `stop layer ${run.stop_layer}`,
-            `operation ${run.operation_type || "historical contract"}`,
-            `authoritative source ${run.authoritative_source || "historical contract"}`,
-            `legacy analysis input ${run.legacy_analysis_input || "historical contract"}`,
-            `contract ${run.execution_contract_version || "historical contract"}`,
-            `plan ${run.execution_plan_hash || "historical unverified plan"}`,
-            `maximum calls ${run.maximum_analysis_calls ?? run.source_case_count}`,
-            `authorized incremental spend $${run.spending_limit_usd ?? "not configured"}`,
-            `recorded since authorization $${run.estimated_incremental_spend_usd ?? 0}`,
-            `spending guard ${run.spend_guard_status || "not configured"}`,
-            `resumed ${run.resumed_at || "no"}`,
-            `model verified ${run.model_verified_at || "not verified"}`
+            `output contract ${run.stop_layer}`,
+            `source ${run.authoritative_source || "original completed transcripts"}`,
+            `plan ${run.execution_plan_hash || "historical plan"}`
         ].join(" · ");
         startButton.disabled = active || !providerSelect.value || !modelSelect.value.trim();
         providerSelect.disabled = active;
@@ -251,61 +277,10 @@
         downloadButton.disabled = run.completed_count < 1;
         setStatus(
             `Stage 1 run ${run.run_number}: ${run.status.replaceAll("_", " ")}. `
-            + `${run.completed_count} of ${run.source_case_count} cases completed using `
-            + `${run.resolved_model || run.model}. Each completed case includes Meaning Units, preliminary Codes, preliminary Categories, and preliminary Tentative Themes. `
-            + (run.status === "cancelled"
-                ? "This run is stopped and cannot make further model calls."
-                : run.status === "spending_limit_reached"
-                ? "The spending guard stopped new model calls before the authorized limit."
-                : "This run analyzes original transcripts without using earlier analysis as input.")
+            + `${run.completed_count} of ${run.source_case_count} exact first responses are stored; `
+            + `${run.processing_count} existing provider calls are still being polled. `
+            + "The platform does not validate, score, repair, retry, parse, normalize, project, or reconstruct them."
         );
-
-        const renderCaseTable = (items, host, mode = "active") => {
-        const built = table([
-            "Case ID", "Project lineage", "Status", "Meaning Units",
-            "Codes", "Categories", "Tentative Themes",
-            "Generation", "Inspect"
-        ]);
-        const body = document.createElement("tbody");
-        items.forEach(item => {
-            const row = document.createElement("tr");
-            cell(row, item.case_number);
-            cell(row, item.project_binding_status === "project_bound"
-                ? "Sleeping habits" : "Historical project binding pending");
-            cell(row, mode === "attention"
-                ? item.report
-                    ? "Historical stopped-run output"
-                    : `System needs attention · participant remains included${item.last_error ? `: ${item.last_error}` : ""}`
-                : item.status === "failed"
-                ? `System needs attention · participant remains included${item.last_error ? `: ${item.last_error}` : ""}`
-                : item.status === "completed" && item.report?.system_processing_notes?.length
-                ? `completed · ${item.report.system_processing_notes.length} system processing note${item.report.system_processing_notes.length === 1 ? "" : "s"} · participant unaffected`
-                : item.status.replaceAll("_", " "));
-            cell(row, item.report?.meaningUnitCount ?? "—");
-            cell(row, item.report?.codeCount ?? "—");
-            cell(row, item.report?.categoryCount ?? "—");
-            cell(row, item.report?.themeCount ?? "—");
-            cell(row, item.report
-                ? item.report.analytical_audit?.aiAnalysisPassCount === 1
-                    && item.report.analytical_audit?.priorAnalysisUsed === false
-                    ? "One pass · original transcript"
-                    : "Historical stopped workflow"
-                : "—");
-            const action = document.createElement("td");
-            const button = document.createElement("button");
-            button.type = "button";
-            button.textContent = item.report
-                ? "Inspect complete case report"
-                : item.status === "processing" ? "Processing" : "Inspect transcript";
-            button.disabled = item.status === "processing" && !item.report;
-            button.addEventListener("click", () => openCase(item.case_number));
-            action.appendChild(button);
-            row.appendChild(action);
-            body.appendChild(row);
-        });
-        built.element.appendChild(body);
-        host?.appendChild(built.scroll);
-        };
         renderCaseTable(payload.cases, tableHost);
         renderCaseTable(payload.attentionCases || [], attentionHost, "attention");
         renderStage2();
@@ -314,80 +289,75 @@
         nextButton.disabled = payload.page * payload.pageSize >= run.source_case_count;
     }
 
-    function renderStage2() {
-        const stage2 = payload.stage2 || { run: null, mappings: [] };
-        if (!stage2.run) {
-            stage2Status.textContent =
-                "No cross-case operation is active. It requires a separate researcher-selected operation and will never start automatically from Stage 1.";
-            stage2Provenance.textContent =
-                "Categories and Themes remain locked.";
-            stage2DownloadButton.disabled = true;
-            return;
-        }
-        stage2Status.textContent =
-            `Stage 2 is ${stage2.run.status.replaceAll("_", " ")}. `
-            + `${stage2.run.preliminary_completed_count}/${stage2.run.source_case_count} cases have preliminary Codes; `
-            + `${stage2.run.refinement_completed_count} preliminary Codes have cross-case assignments; `
-            + `${stage2.run.preliminary_failed_count + stage2.run.refinement_failed_count} terminal failures are retained for review.`;
-        stage2Provenance.textContent = [
-            `Stage 1 run ${stage2.run.stage1_run_id}`,
-            `${stage2.run.provider} / ${stage2.run.resolved_model || stage2.run.model}`,
-            `reasoning ${stage2.run.reasoning_effort}`,
-            stage2.run.analysis_version,
-            stage2.run.prompt_version,
-            "stop layer: refined Codes"
-        ].join(" · ");
-        stage2DownloadButton.disabled = !["completed", "completed_with_failures"]
-            .includes(stage2.run.status);
-        if (!stage2.mappings?.length) return;
-        const built = table([
-            "Case ID", "Supporting MU / transcript", "Preliminary Code",
-            "Refined Code", "Semantic decision"
-        ]);
-        const body = document.createElement("tbody");
-        stage2.mappings.forEach(mapping => {
-            const row = document.createElement("tr");
-            cell(row, mapping.preliminaryCode?.case_number);
-            cell(row, (mapping.meaningUnits || []).map(unit =>
-                `MU${unit.unit_number} · message ${unit.message_id}: ${unit.exact_source_text}`
-            ).join(" | "));
-            cell(row, `CO${mapping.preliminaryCode?.code_number} · ${mapping.preliminaryCode?.code_label}`);
-            cell(row, `RCO${mapping.refinedCode?.refined_code_number} · ${mapping.refinedCode?.refined_code_label}`);
-            cell(row, `${mapping.decision}: ${mapping.semanticRationale}`);
-            body.appendChild(row);
+    function sourceTranscript(detail) {
+        const panel = document.createElement("section");
+        panel.className = "automaticReanalysisPanel";
+        panel.appendChild(heading("Original completed transcript"));
+        panel.appendChild(paragraph(
+            `Participant ID: ${detail.job.participant_id || "—"} · Session ID: ${detail.job.session_id || "—"}`,
+            "transcriptIdentity"
+        ));
+        detail.transcript.forEach(message => {
+            const article = document.createElement("article");
+            article.className = "message";
+            article.appendChild(paragraph(`${message.Speaker || "Speaker"}: ${message.Message || ""}`));
+            if (message.EnglishTranslation && message.EnglishTranslation !== message.Message) {
+                article.appendChild(paragraph(
+                    `English translation: ${message.EnglishTranslation}`,
+                    "englishTranslation"
+                ));
+            }
+            panel.appendChild(article);
         });
-        built.element.appendChild(body);
-        stage2Host.appendChild(built.scroll);
+        return panel;
     }
 
-    stage2DownloadButton.addEventListener("click", async () => {
-        if (!payload.stage2?.run?.id) return;
-        stage2DownloadButton.disabled = true;
-        setStatus("Preparing the final Stage 2 refined-code mapping…");
+    async function openCase(caseNumber) {
+        dialogHeading.textContent = `${caseNumber} · Stage 1 exact first response`;
+        dialogProvenance.textContent = "Loading preserved output and transcript…";
+        dialogContent.replaceChildren();
+        dialog.showModal();
         try {
-            const response = await fetch(
-                `${API_PATH}&download=stage2-csv&runId=${encodeURIComponent(payload.run.id)}&_=${Date.now()}`,
-                { headers: { Authorization: `Bearer ${token()}` }, cache: "no-store" }
+            const detail = await request(
+                `${API_PATH}&case=${encodeURIComponent(caseNumber)}&_=${Date.now()}`
             );
-            if (!response.ok) {
-                const body = await response.json().catch(() => ({}));
-                throw new Error(body.error || "The Stage 2 export could not be prepared.");
+            const report = detail.report;
+            if (!report) {
+                dialogProvenance.textContent =
+                    `System state: ${detail.job.status}. The participant and transcript remain included and processible.`;
+                dialogContent.appendChild(paragraph(
+                    detail.job.status === "processing"
+                        ? "The original provider request is still running under its existing response ID. It has not been cancelled, replaced, or resubmitted."
+                        : detail.job.last_error || "No first response has been stored yet."
+                ));
+                dialogContent.appendChild(sourceTranscript(detail));
+                return;
             }
-            const blob = await response.blob();
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement("a");
-            link.href = url;
-            link.download = `sleeping-habits-stage2-refined-codes-${payload.stage2.run.id}.csv`;
-            document.body.appendChild(link);
-            link.click();
-            link.remove();
-            URL.revokeObjectURL(url);
-            render();
+            dialogProvenance.textContent = [
+                `Run ${detail.run.run_number}`,
+                `${report.provider} / requested ${report.model}`,
+                `recorded model ${report.resolved_model || report.model}`,
+                `reasoning ${report.reasoning_effort}`,
+                report.analysis_version,
+                report.prompt_version,
+                `report ${report.id}`,
+                "source: original completed transcript"
+            ].join(" · ");
+            dialogContent.appendChild(heading("Exact first model response"));
+            const preservedText = document.createElement("pre");
+            preservedText.textContent = report.raw_model_output_text
+                || "This historical report predates exact-response preservation. Its earlier relational projection remains retained only to avoid deleting the participant's sole stored analysis, and it is not eligible for Stage 2.";
+            dialogContent.appendChild(preservedText);
+            dialogContent.appendChild(heading("Execution provenance"));
+            dialogContent.appendChild(paragraph(
+                report.analytical_audit?.overallSummary
+                    || "Historical implementation; exact first response availability is shown above."
+            ));
+            dialogContent.appendChild(sourceTranscript(detail));
         } catch (error) {
-            setStatus(error.message, true);
-            stage2DownloadButton.disabled = false;
+            dialogContent.appendChild(paragraph(error.message, "errorMessage"));
         }
-    });
+    }
 
     async function load({ quiet = false } = {}) {
         if (loading || !token() || workspace?.hidden) return;
@@ -401,262 +371,9 @@
                 refreshTimer = setTimeout(() => load({ quiet: true }), 30000);
             }
         } catch (error) {
-            setStatus(
-                `${error.message} If access has expired, choose Lock workspace and unlock again.`,
-                true
-            );
+            setStatus(`${error.message} If access has expired, choose Lock workspace and unlock again.`, true);
         } finally {
             loading = false;
-        }
-    }
-
-    function codeColor(codeNumber) {
-        return `keywordColor${((Number(codeNumber) - 1) % 12) + 1}`;
-    }
-
-    function codesForUnit(report, meaningUnitId) {
-        const codeIds = new Set((report.codeMeaningUnits || [])
-            .filter(link => link.meaning_unit_id === meaningUnitId)
-            .map(link => link.code_id));
-        return (report.codes || []).filter(code => codeIds.has(code.id));
-    }
-
-    function highlightedMessage(message, report) {
-        const text = message.Message || "";
-        const highlights = report.meaningUnits
-            .filter(unit => unit.message_id === message.id)
-            .sort((left, right) => left.start_offset - right.start_offset);
-        const fragment = document.createDocumentFragment();
-        let cursor = 0;
-        highlights.forEach(unit => {
-            if (unit.start_offset < cursor || unit.end_offset > text.length) return;
-            fragment.append(document.createTextNode(text.slice(cursor, unit.start_offset)));
-            const annotation = document.createElement("span");
-            annotation.className = "meaningUnitAnnotation";
-            const linkedCodes = codesForUnit(report, unit.id);
-            const colorClass = codeColor(linkedCodes[0]?.code_number || unit.unit_number);
-            const label = document.createElement("span");
-            label.className = `meaningUnitCodeLabel ${colorClass}`;
-            label.textContent = linkedCodes.length
-                ? linkedCodes.map(code => `CO${code.code_number} ${code.code_label}`).join(" · ")
-                : `MU${unit.unit_number} · unsynthesized`;
-            const mark = document.createElement("mark");
-            mark.className = colorClass;
-            mark.textContent = text.slice(unit.start_offset, unit.end_offset);
-            mark.title = `MU${unit.unit_number} · ${label.textContent} · stable ID ${unit.id}`;
-            annotation.append(label, mark);
-            fragment.append(annotation);
-            cursor = unit.end_offset;
-        });
-        fragment.append(document.createTextNode(text.slice(cursor)));
-        return fragment;
-    }
-
-    function annotatedTranscript(detail, report) {
-        const panel = document.createElement("section");
-        panel.className = "automaticReanalysisPanel";
-        panel.appendChild(heading("Stage 1 annotated transcript"));
-        panel.appendChild(paragraph(
-            `Participant code: ${report.participant_code || "—"} · `
-            + `Participant ID: ${report.participant_id || "—"} · `
-            + `Session ID: ${report.session_id || detail.job.session_id || "—"} · linked match`,
-            "transcriptIdentity"
-        ));
-        panel.appendChild(paragraph(
-            "This complete preliminary case report was generated independently from this transcript. Every colored span is an exact original-transcript Meaning Unit; the CO label above it shows its linked preliminary Code. Multiple CO labels are shown when a Meaning Unit supports more than one Code.",
-            "muted"
-        ));
-        const legend = document.createElement("div");
-        legend.setAttribute("aria-label", "Preliminary Code colour legend");
-        (report.codes || []).forEach(code => {
-            const item = document.createElement("span");
-            item.className = `keywordLegend ${codeColor(code.code_number)}`;
-            item.textContent = `CO${code.code_number} · ${code.code_label}`;
-            item.title = code.definition;
-            legend.appendChild(item);
-        });
-        panel.appendChild(legend);
-
-        detail.transcript.forEach(message => {
-            const article = document.createElement("article");
-            article.className = "message";
-            const source = document.createElement("p");
-            const speaker = document.createElement("strong");
-            const language = String(message.Language || "").toLowerCase();
-            speaker.textContent = language === "en"
-                ? `${message.Speaker || "Speaker"} · English original: `
-                : `${message.Speaker || "Speaker"} · Original (${language || "language not recorded"}): `;
-            source.appendChild(speaker);
-            source.appendChild(highlightedMessage(message, report));
-            article.appendChild(source);
-            if (message.EnglishTranslation && message.EnglishTranslation !== message.Message) {
-                article.appendChild(paragraph(
-                    `English translation: ${message.EnglishTranslation}`,
-                    "englishTranslation"
-                ));
-            }
-            panel.appendChild(article);
-        });
-        return panel;
-    }
-
-    function preliminaryHierarchy(report) {
-        const panel = document.createElement("section");
-        panel.className = "automaticReanalysisPanel";
-        panel.appendChild(heading("Preliminary case hierarchy"));
-        const codeById = new Map((report.codes || []).map(code => [code.id, code]));
-        const categoryById = new Map(
-            (report.categories || []).map(category => [category.id, category])
-        );
-        const built = table([
-            "Tentative Theme", "Preliminary Category", "Preliminary Code",
-            "Supporting Meaning Units"
-        ]);
-        const body = document.createElement("tbody");
-        const themeLinks = report.themeCategories || [];
-        const categoryLinks = report.categoryCodes || [];
-        const codeLinks = report.codeMeaningUnits || [];
-        const unitById = new Map(report.meaningUnits.map(unit => [unit.id, unit]));
-        const rows = [];
-        (report.tentativeThemes || []).forEach(theme => {
-            const categoryIds = themeLinks
-                .filter(link => link.theme_id === theme.id)
-                .map(link => link.category_id);
-            categoryIds.forEach(categoryId => {
-                const category = categoryById.get(categoryId);
-                const codeIds = categoryLinks
-                    .filter(link => link.category_id === categoryId)
-                    .map(link => link.code_id);
-                codeIds.forEach(codeId => {
-                    const code = codeById.get(codeId);
-                    const units = codeLinks
-                        .filter(link => link.code_id === codeId)
-                        .map(link => unitById.get(link.meaning_unit_id))
-                        .filter(Boolean);
-                    rows.push({ theme, category, code, units });
-                });
-            });
-        });
-        const representedCodes = new Set(rows.map(row => row.code?.id));
-        (report.codes || []).filter(code => !representedCodes.has(code.id))
-            .forEach(code => {
-                const units = codeLinks
-                    .filter(link => link.code_id === code.id)
-                    .map(link => unitById.get(link.meaning_unit_id)).filter(Boolean);
-                rows.push({ theme: null, category: null, code, units });
-            });
-        rows.forEach(item => {
-            const row = document.createElement("tr");
-            cell(row, item.theme
-                ? `TH${item.theme.theme_number} · ${item.theme.theme_label}`
-                : "Unsynthesized at theme level");
-            cell(row, item.category
-                ? `CA${item.category.category_number} · ${item.category.category_label}`
-                : "Unsynthesized at category level");
-            cell(row, item.code
-                ? `CO${item.code.code_number} · ${item.code.code_label}` : "—");
-            cell(row, item.units.map(unit =>
-                `MU${unit.unit_number}: ${unit.exact_source_text}`
-            ).join(" | "));
-            body.appendChild(row);
-        });
-        built.element.appendChild(body);
-        panel.appendChild(built.scroll);
-        return panel;
-    }
-
-    async function openCase(caseNumber) {
-        dialogHeading.textContent = `${caseNumber} · Complete preliminary case report`;
-        dialogProvenance.textContent = "Loading exact evidence and provenance…";
-        dialogContent.replaceChildren();
-        dialog.showModal();
-        try {
-            const detail = await request(
-                `${API_PATH}&case=${encodeURIComponent(caseNumber)}&_=${Date.now()}`
-            );
-            const report = detail.report;
-            if (!report) {
-                dialogContent.appendChild(paragraph(
-                    `The analysis system has not produced a Stage 1 report. The participant and transcript remain included and processible. Current system state: ${detail.job.status}.`
-                ));
-                const rawReport = {
-                    participant_code: null,
-                    participant_id: detail.job.participant_id,
-                    session_id: detail.job.session_id,
-                    meaningUnits: []
-                };
-                dialogContent.appendChild(annotatedTranscript(detail, rawReport));
-                return;
-            }
-            dialogProvenance.textContent = [
-                `Run ${detail.run.run_number}`,
-                `project ${detail.run.project_snapshot?.[0]?.project_name || "Sleeping habits"}`,
-                `topic ${detail.run.project_snapshot?.[0]?.research_topic || "Sleeping habits"}`,
-                `${report.provider} / requested ${report.model}`,
-                `resolved ${report.resolved_model || report.model}`,
-                `reasoning ${report.reasoning_effort}`,
-                report.analysis_version,
-                report.prompt_version,
-                `stop layer ${detail.run.stop_layer}`,
-                `proposal report ${report.id}`,
-                "source: transcripts and stored translations only"
-            ].join(" · ");
-            dialogContent.appendChild(paragraph(report.case_summary));
-            if (report.system_processing_notes?.length) {
-                dialogContent.appendChild(heading(
-                    "System processing notes — participant and transcript unaffected"
-                ));
-                const notes = document.createElement("ul");
-                report.system_processing_notes.forEach(note => {
-                    const item = document.createElement("li");
-                    item.textContent = `${note.code || "SYSTEM_NOTE"}${note.item ? ` · ${note.item}` : ""}: ${note.detail || "System processing follow-up is required."}`;
-                    notes.appendChild(item);
-                });
-                dialogContent.appendChild(notes);
-            }
-            const preservedOutput = document.createElement("details");
-            const preservedSummary = document.createElement("summary");
-            preservedSummary.textContent = "Exact preserved model output";
-            const preservedText = document.createElement("pre");
-            preservedText.textContent = report.raw_model_output_text
-                || "The provider returned no readable output text.";
-            preservedOutput.append(preservedSummary, preservedText);
-            dialogContent.appendChild(preservedOutput);
-            dialogContent.appendChild(annotatedTranscript(detail, report));
-            dialogContent.appendChild(preliminaryHierarchy(report));
-            const singlePass = report.analytical_audit?.aiAnalysisPassCount === 1
-                && report.analytical_audit?.priorAnalysisUsed === false;
-            dialogContent.appendChild(heading(singlePass
-                ? "Independent analysis provenance"
-                : "Historical stopped-run provenance"));
-            dialogContent.appendChild(paragraph(
-                report.analytical_audit?.overallSummary
-                    || "This report belongs to the stopped historical workflow."
-            ));
-            if (singlePass) {
-                dialogContent.appendChild(paragraph(
-                    `AI analysis passes: 1; prior analysis used: no; `
-                    + `analytical validator: none; raw model output preserved; `
-                    + `Meaning Units: ${report.meaningUnits.length}; Codes: ${report.codes.length}; `
-                    + `Categories: ${report.categories.length}; Tentative Themes: ${report.tentativeThemes.length}.`,
-                    "muted"
-                ));
-            }
-            report.meaningUnits.forEach(unit => {
-                const block = document.createElement("blockquote");
-                block.appendChild(paragraph(
-                    `MU${unit.unit_number} · stable ID ${unit.id} · message ${unit.message_id}`,
-                    "muted"
-                ));
-                block.appendChild(paragraph(`Original: ${unit.exact_source_text}`));
-                block.appendChild(paragraph(
-                    `Offsets ${unit.start_offset}–${unit.end_offset}; occurrence ${unit.occurrence_index}. ${unit.context_note || ""}`,
-                    "muted"
-                ));
-                dialogContent.appendChild(block);
-            });
-        } catch (error) {
-            dialogContent.appendChild(paragraph(error.message, "errorMessage"));
         }
     }
 
@@ -666,19 +383,17 @@
         if (!selectedProvider || !selectedModel) return;
         invalidateExecutionPlan();
         startButton.disabled = true;
-        setStatus("Preparing an exact source, rules, provider, model, and maximum-call plan. This preview makes no model call.");
+        setStatus("Preparing the exact source, provider, model, and one-call-per-case plan. This preview makes no model call.");
         try {
             const result = await request(API_PATH, {
                 method: "POST",
                 body: JSON.stringify({
-                    action: "preflight",
-                    operation: "fresh_independent_analysis",
-                    provider: selectedProvider,
-                    model: selectedModel
+                    action: "preflight", operation: "fresh_independent_analysis",
+                    provider: selectedProvider, model: selectedModel
                 })
             });
             renderExecutionPlan(result);
-            setStatus("Execution plan prepared. Review every field, then choose Start exactly this plan if it is correct.");
+            setStatus("Execution plan prepared. Review every field, then choose Start exactly this plan.");
         } catch (error) {
             setStatus(error.message, true);
             invalidateExecutionPlan();
@@ -691,21 +406,15 @@
         startButton.disabled = true;
         providerSelect.disabled = true;
         modelSelect.disabled = true;
-        setStatus(`Capability-testing ${preparedExecution.provider} / ${preparedExecution.model}, then starting only the reviewed plan…`);
+        setStatus(`Starting ${preparedExecution.provider} / ${preparedExecution.model} directly, with no capability probe…`);
         try {
             const result = await request(API_PATH, {
-                method: "POST",
-                body: JSON.stringify({
-                    action: "start",
-                    ...preparedExecution
-                })
+                method: "POST", body: JSON.stringify({ action: "start", ...preparedExecution })
             });
             preparedExecution = null;
             executionPlanHost.replaceChildren();
             executeButton.hidden = true;
-            setStatus(
-                `Started the reviewed plan. Provider ${result.provider}; requested ${result.model}; resolved ${result.resolvedModel}; plan ${result.executionPlanHash}.`
-            );
+            setStatus(`Started the reviewed plan. Provider ${result.provider}; model ${result.model}; plan ${result.executionPlanHash}.`);
             page = 1;
             await load({ quiet: true });
         } catch (error) {
@@ -725,7 +434,7 @@
         )?.trim();
         if (!reason) return;
         cancelButton.disabled = true;
-        setStatus("Stopping the active run and cancelling every uncompleted case…");
+        setStatus("Stopping new Stage 1 work. Stored transcripts and exact responses remain preserved.");
         try {
             await request(API_PATH, {
                 method: "POST",
@@ -738,12 +447,9 @@
         }
     });
 
-    providerSelect.addEventListener("change", invalidateExecutionPlan);
-    modelSelect.addEventListener("input", invalidateExecutionPlan);
-
     downloadButton.addEventListener("click", async () => {
         downloadButton.disabled = true;
-        setStatus("Preparing the Stage 1 provenance export…");
+        setStatus("Preparing the exact Stage 1 response export…");
         try {
             const response = await fetch(
                 `${API_PATH}&download=stage1-csv&_=${Date.now()}`,
@@ -757,7 +463,7 @@
             const url = URL.createObjectURL(blob);
             const link = document.createElement("a");
             link.href = url;
-            link.download = `sleeping-habits-stage1-run-${payload.run?.run_number || "latest"}.csv`;
+            link.download = `sleeping-habits-stage1-exact-responses-run-${payload.run?.run_number || "latest"}.csv`;
             document.body.appendChild(link);
             link.click();
             link.remove();
@@ -769,13 +475,15 @@
         }
     });
 
+    providerSelect.addEventListener("change", invalidateExecutionPlan);
+    modelSelect.addEventListener("input", invalidateExecutionPlan);
     refreshButton.addEventListener("click", () => load());
     lockButton.addEventListener("click", () => {
         sessionStorage.removeItem(TOKEN_STORAGE_KEY);
         clearTimeout(refreshTimer);
         workspace.hidden = true;
         gate.hidden = false;
-        document.getElementById("automaticAnalysisToken").value = "";
+        element("automaticAnalysisToken").value = "";
         setStatus("Researcher access is locked. Unlock to load or start Stage 1.");
     });
     previousButton.addEventListener("click", () => {
@@ -787,8 +495,7 @@
         page += 1;
         load();
     });
-    document.getElementById("advancedPreliminaryDialogClose")
-        .addEventListener("click", () => dialog.close());
+    element("advancedPreliminaryDialogClose").addEventListener("click", () => dialog.close());
 
     const observer = new MutationObserver(() => {
         if (!workspace.hidden && token()) load({ quiet: true });

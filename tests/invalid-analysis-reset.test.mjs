@@ -90,7 +90,7 @@ test("new advanced runs cannot retain discarded report links", async () => {
     assert.doesNotMatch(dashboard, /\.from\("qualitative_case_reports"\)/);
     assert.doesNotMatch(researcherUi, /preserves every existing report/);
     assert.doesNotMatch(researcherUi, /preserved comparison/);
-    assert.match(researcherUi, /transcripts and stored translations only/);
+    assert.match(researcherUi, /source: original completed transcript/);
 });
 
 test("clean queue binds only recorded projects and quarantines unbound legacy cases", async () => {

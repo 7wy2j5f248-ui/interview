@@ -157,10 +157,10 @@
     <section class="panel" aria-labelledby="workflowHeading">
         <h2 id="workflowHeading">Staged Qualitative Analysis</h2>
         <p class="automaticPipelineNote">
-            <strong>Active sequence:</strong> Meaning Units → Codes → Categories → Themes.
-            The preliminary case report is generated independently for each transcript in
-            one model call. Cross-Case Code Refinement begins only from those completed
-            preliminary Codes. Later cross-case Category and Theme stages remain locked.
+            <strong>Active Stage 1 contract:</strong> one completed transcript → one independent
+            model call → the exact first response shown to the researcher. Validation,
+            scoring, repair, retry, parsing, normalization, hierarchy projection, and
+            reconstruction are not part of this path.
         </p>
         <p>
             Original completed transcripts are the authoritative source. Earlier analytical
@@ -185,9 +185,9 @@
                 <h3 id="advancedPreliminaryHeading">Phase 1 · Complete Preliminary Case-Based Analysis</h3>
                 <p>
                     Each completed Sleeping habits transcript is read independently.
-                    One call to the researcher-selected provider and exact model produces the complete case-grounded chain:
-                    Meaning Units, preliminary Codes, preliminary Categories, and
-                    preliminary Tentative Themes. No earlier analysis is an input.
+                    One call goes directly to the researcher-selected provider and exact model.
+                    The platform preserves and displays that first response exactly as returned.
+                    No earlier analysis or platform-created analytical rule is an input.
                 </p>
                 <ol class="automaticReanalysisPanel" aria-label="Staged qualitative analysis workflow">
                     <li><strong>Phase 1 · Independent complete preliminary case reports</strong> — available now</li>
@@ -219,16 +219,16 @@
                 </label>
                 <p id="advancedPreliminaryModelHelp" class="muted">
                     Enter any exact model identifier. Suggestions are optional. The server
-                    capability-tests the exact identifier before launch; unavailable models
-                    stop with an error and are never silently replaced. The requested and
-                    resolved model identifiers are recorded permanently in provenance.
+                    sends the Stage 1 request directly without a capability-test call and
+                    never silently replaces the requested model. The provider and requested
+                    model identifiers are recorded permanently in provenance.
                 </p>
                 <div class="actionRow">
                     <button id="advancedPreliminaryStartButton" type="button">Preview exact execution plan</button>
                     <button id="advancedPreliminaryExecuteButton" type="button" hidden disabled>Start exactly this plan</button>
                     <button id="advancedPreliminaryCancelButton" type="button" hidden disabled>Stop active run</button>
                     <button id="advancedPreliminaryRefreshButton" type="button">Refresh preliminary run</button>
-                    <button id="advancedPreliminaryDownloadButton" type="button" disabled>Download preliminary-analysis provenance CSV</button>
+                    <button id="advancedPreliminaryDownloadButton" type="button" disabled>Download exact Stage 1 responses CSV</button>
                     <button id="advancedPreliminaryLockButton" type="button">Lock analysis access</button>
                 </div>
                 <div id="advancedPreliminaryExecutionPlan" aria-live="polite"></div>
@@ -249,7 +249,7 @@
                     <button id="advancedPreliminaryNextPage" type="button" disabled>Next 50 cases</button>
                 </div>
                 <details id="advancedPreliminaryAttentionPanel">
-                    <summary><strong>Needs attention</strong> — single-pass output could not be stored safely</summary>
+                    <summary><strong>Needs attention</strong> — system or provider execution did not complete</summary>
                     <p class="muted">
                         These cases are kept separate without an additional paid AI audit or
                         repair call. Their transcripts and failure reasons remain available,
@@ -261,14 +261,9 @@
                 <section id="crossCaseCodeRefinement" class="automaticReanalysisPanel" aria-labelledby="crossCaseCodeHeading">
                     <h3 id="crossCaseCodeHeading">Phase 2A · Cross-Case Code Refinement</h3>
                     <p id="crossCaseCodeStatus" class="automaticReviewScopeSummary">
-                        No cross-case operation is active. It requires a separate researcher-selected operation.
+                        Stage 2 is unavailable until the researcher separately authorizes its source contract.
                     </p>
                     <p id="crossCaseCodeProvenance" class="muted"></p>
-                    <div class="actionRow">
-                        <button id="crossCaseCodeDownloadButton" type="button" disabled>
-                            Download final refined-code mapping CSV
-                        </button>
-                    </div>
                     <div id="crossCaseCodeTable"></div>
                 </section>
             </section>
@@ -277,13 +272,13 @@
 </main>
 
 <dialog id="advancedPreliminaryDialog">
-    <button id="advancedPreliminaryDialogClose" type="button">Close preliminary case report</button>
-    <h2 id="advancedPreliminaryDialogHeading">Complete preliminary case report</h2>
+    <button id="advancedPreliminaryDialogClose" type="button">Close Stage 1 output</button>
+    <h2 id="advancedPreliminaryDialogHeading">Stage 1 exact first response</h2>
     <p id="advancedPreliminaryDialogProvenance"></p>
     <div id="advancedPreliminaryDialogContent"></div>
 </dialog>
 
 <script src="researcher-staged-access.js?version=20260901-stage2-code-v1"></script>
-<script src="researcher-advanced-preliminary.js?version=20260901-non-exclusion-v1"></script>
+<script src="researcher-advanced-preliminary.js?version=20260902-exact-first-response-v1"></script>
 </body>
 </html>

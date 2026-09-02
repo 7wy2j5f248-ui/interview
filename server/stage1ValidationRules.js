@@ -1,5 +1,5 @@
 export const STAGE1_VALIDATION_REGISTRY_VERSION =
-    "stage1-processing-transparency-v3-executable-gates-removed";
+    "stage1-processing-transparency-v4-exact-first-response";
 
 export const STAGE1_PARTICIPANT_INCLUSION_POLICY = {
     id: "GOV-PART-001",
@@ -78,6 +78,8 @@ const VALIDATOR_WITHDRAWAL_MIGRATION =
     "supabase/migrations/20260902020000_withdraw_stage1_validator.sql";
 const NON_BLOCKING_PROJECTION_MIGRATION =
     "supabase/migrations/20260902140632_make_stage1_projection_non_blocking.sql";
+const EXACT_OUTPUT_MIGRATION =
+    "supabase/migrations/20260902150000_remove_stage1_gatekeepers.sql";
 
 const STAGE1_RULE_HISTORY = [
     rule({
@@ -92,11 +94,12 @@ const STAGE1_RULE_HISTORY = [
     }),
     rule({
         id: "GOV-NOVAL-001", title: "Stage 1 has no analytical validator",
-        text: "Every completed provider response is preserved before relational projection. No Meaning Unit, Code, Category, Theme, relationship, count, or case summary is accepted or rejected by an application validator.",
+        text: "The exact first provider response is the authoritative Stage 1 output. No Meaning Unit, Code, Category, Theme, relationship, count, case summary, parser, normalizer, projection, scorer, reviewer, repairer, or retry mechanism accepts, rejects, cleans, or replaces it.",
         layer: "researcher governance", object: "model output and participant case",
-        origin: `${ADVANCED_SOURCE}, ${VALIDATOR_WITHDRAWAL_MIGRATION}, and ${NON_BLOCKING_PROJECTION_MIGRATION}`,
+        origin: `${ADVANCED_SOURCE}, ${VALIDATOR_WITHDRAWAL_MIGRATION}, ${NON_BLOCKING_PROJECTION_MIGRATION}, and ${EXACT_OUTPUT_MIGRATION}`,
         introduced: "2026-09-01 · researcher directive",
-        effect: "The raw model output and report are retained. Technical projection issues become system-owned notes and never reject the report or participant.",
+        changed: `2026-09-02 · relational projection, model probe, stale-response cancellation, and automatic retry removed by ${EXACT_OUTPUT_MIGRATION}`,
+        effect: "The exact first response is retained and displayed without an analytical gate. Provider or system failure remains visible and belongs to the system, never the participant.",
         rationale: "Analytical judgment belongs to the researcher; software problems belong to the system.",
         authority: "researcher_directive",
         modelAssociation: "Model-independent researcher directive; no current or future Stage-1 model is governed by an analytical validator."
@@ -586,7 +589,8 @@ const WITHDRAWN_VALIDATOR_RULE_IDS = new Set([
     "REF-001", "REF-002", "REF-003", "CO-001", "CA-001", "TH-001",
     "COMP-001", "COMP-002", "COMP-003", "COMP-004",
     "NUM-002", "DB-004", "DB-005", "DB-006", "DB-007", "DB-009",
-    "DB-010"
+    "DB-010", "OP-003", "OP-005", "OP-006",
+    "GUIDE-001", "GUIDE-002", "GUIDE-003", "GUIDE-004", "GUIDE-005"
 ]);
 
 export const STAGE1_VALIDATION_RULES = STAGE1_RULE_HISTORY.map(item => {
@@ -596,7 +600,7 @@ export const STAGE1_VALIDATION_RULES = STAGE1_RULE_HISTORY.map(item => {
         status: "withdrawn_no_validator",
         authority: "withdrawn_system_derived",
         decisionRecord: "Introduced through repository implementation with no recorded researcher authorization. Withdrawn by the researcher's 2026-09-01 no-validator directive.",
-        changed: `2026-09-01 · withdrawn by ${VALIDATOR_WITHDRAWAL_MIGRATION}`,
+        changed: `2026-09-02 · withdrawn by ${EXACT_OUTPUT_MIGRATION}`,
         failureEffect: `No current rejection effect. Historical effect disclosed for audit: ${item.failureEffect}`,
         participantConsequence: "None. The former rule cannot reject a report, participant, or transcript."
     };
