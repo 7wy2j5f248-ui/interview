@@ -3,8 +3,8 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
     ADVANCED_PRELIMINARY_ANALYSIS_VERSION,
+    availableAdvancedPreliminaryWorkerConcurrency,
     DEFAULT_ADVANCED_PRELIMINARY_MAX_OUTPUT_TOKENS,
-    DEFAULT_ADVANCED_PRELIMINARY_WORKER_CONCURRENCY,
     ADVANCED_PRELIMINARY_PROMPT_VERSION,
     ADVANCED_PRELIMINARY_REASONING_EFFORT,
     DEFAULT_ADVANCED_PRELIMINARY_STALE_RESPONSE_MINUTES,
@@ -201,7 +201,6 @@ test("Phase 1 is versioned, stronger-model capable, and completes tentative them
     assert.equal(ADVANCED_PRELIMINARY_REASONING_EFFORT, "high");
     assert.equal(ADVANCED_PRELIMINARY_STOP_LAYER, "preliminary_tentative_themes");
     assert.equal(DEFAULT_ADVANCED_PRELIMINARY_MAX_OUTPUT_TOKENS, 40000);
-    assert.equal(DEFAULT_ADVANCED_PRELIMINARY_WORKER_CONCURRENCY, 8);
     assert.match(ADVANCED_PRELIMINARY_ANALYSIS_VERSION, /v4-researcher-controlled-independent/);
     assert.match(ADVANCED_PRELIMINARY_PROMPT_VERSION, /v4-explicit-run-contract/);
     const worker = await source("server/advancedPreliminaryAnalysis.js");
@@ -304,21 +303,28 @@ test("the server resumes durable analysis without recursive function calls", asy
     assert.match(migration, /spend_guard_status = 'active'/);
 });
 
-test("Stage 1 analytical independence is separate from configurable worker concurrency", async () => {
+test("Stage 1 analytical independence is separate from workload-derived execution concurrency", async () => {
     const endpoint = await source("api/automatic-analysis.js");
     const worker = await source("server/advancedPreliminaryAnalysis.js");
     const migration = await source(
         "supabase/migrations/20260902040232_configure_stage1_worker_concurrency.sql"
     );
-    assert.equal(configuredAdvancedPreliminaryWorkerConcurrency({}), 8);
+    assert.equal(configuredAdvancedPreliminaryWorkerConcurrency({}), null);
     assert.equal(configuredAdvancedPreliminaryWorkerConcurrency({
         ADVANCED_PRELIMINARY_WORKER_CONCURRENCY: "13"
     }), 13);
+    assert.equal(availableAdvancedPreliminaryWorkerConcurrency({
+        source_case_count: 275,
+        completed_count: 193
+    }), 82);
     assert.throws(() => configuredAdvancedPreliminaryWorkerConcurrency({
         ADVANCED_PRELIMINARY_WORKER_CONCURRENCY: "0"
     }), /positive integer/);
-    assert.match(endpoint, /workerConcurrency \* 2/);
-    assert.match(endpoint, /p_maximum_parallel_cases: workerConcurrency/);
+    assert.doesNotMatch(worker, /DEFAULT_ADVANCED_PRELIMINARY_WORKER_CONCURRENCY/);
+    assert.doesNotMatch(endpoint, /workerConcurrency \* 2/);
+    assert.match(endpoint, /p_maximum_parallel_cases: maximumParallelCases/);
+    assert.match(endpoint, /active_run_remaining_workload/);
+    assert.match(endpoint, /workerDeadline/);
     assert.match(endpoint, /claim_available_advanced_preliminary_analysis/);
     assert.match(worker, /claimParameters/);
     assert.match(migration, /p_maximum_parallel_cases integer/);

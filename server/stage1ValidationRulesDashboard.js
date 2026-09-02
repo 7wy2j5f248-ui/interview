@@ -11,6 +11,7 @@ import {
     RECENT_PLATFORM_CONTROLS
 } from "./recentPlatformControlInventory.js";
 import {
+    availableAdvancedPreliminaryWorkerConcurrency,
     configuredAdvancedPreliminaryMaxOutputTokens,
     configuredAdvancedPreliminaryStaleResponseMinutes,
     configuredAdvancedPreliminaryWorkerConcurrency
@@ -27,7 +28,7 @@ function client() {
 async function latestRun(supabase) {
     const { data, error } = await supabase
         .from("advanced_preliminary_analysis_runs")
-        .select("id, run_number, status, provider, model, resolved_model, reasoning_effort, analysis_version, prompt_version, requested_at, model_verified_at, operation_type, authoritative_source, legacy_analysis_input, execution_contract_version, execution_plan_hash, rules_snapshot")
+        .select("id, run_number, status, provider, model, resolved_model, reasoning_effort, analysis_version, prompt_version, requested_at, model_verified_at, operation_type, authoritative_source, legacy_analysis_input, execution_contract_version, execution_plan_hash, rules_snapshot, source_case_count, completed_count")
         .order("requested_at", { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -65,6 +66,8 @@ export async function handleStage1ValidationRulesDashboard(req, res) {
         } else {
             modelContextError = "Database context is unavailable; the repository rule registry remains fully disclosed.";
         }
+        const configuredConcurrency =
+            configuredAdvancedPreliminaryWorkerConcurrency();
         return res.status(200).json({
             registryVersion: STAGE1_VALIDATION_REGISTRY_VERSION,
             effectiveAsOf: "2026-09-01",
@@ -95,9 +98,12 @@ export async function handleStage1ValidationRulesDashboard(req, res) {
                 analyticalIndependence: "mandatory_case_by_case",
                 executionConcurrency: "technical_configurable",
                 currentWorkerConcurrency:
-                    configuredAdvancedPreliminaryWorkerConcurrency(),
+                    configuredConcurrency
+                    || availableAdvancedPreliminaryWorkerConcurrency(run),
                 configurationSource:
-                    "ADVANCED_PRELIMINARY_WORKER_CONCURRENCY server setting; documented default applies only when it is unset",
+                    configuredConcurrency
+                        ? "ADVANCED_PRELIMINARY_WORKER_CONCURRENCY technical server override"
+                        : "No fixed concurrency ceiling: current capacity follows the active run's remaining workload, while the database spending guard controls paid submissions",
                 maximumOutputTokensPerAttempt:
                     configuredAdvancedPreliminaryMaxOutputTokens(),
                 maximumOutputTokensSource:

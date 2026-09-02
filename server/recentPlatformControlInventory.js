@@ -169,10 +169,10 @@ export const RECENT_PLATFORM_CONTROLS = [
         id: "RECENT-016",
         title: "Stage-1 execution concurrency",
         introduced: "2026-09-01 · commit d332975; conceptual boundary corrected 2026-09-02",
-        effect: "Originally replaced an unauthorized serial worker with a hard-coded concurrency of eight. The corrected design keeps case-by-case analytical independence mandatory while treating concurrency solely as configurable worker scheduling.",
+        effect: "Originally replaced an unauthorized serial worker with a hard-coded concurrency of eight. The corrected design removes that fallback ceiling: case-by-case analytical independence remains mandatory, while technical capacity follows the active workload unless an explicit server override is configured.",
         source: "server/advancedPreliminaryAnalysis.js; api/automatic-analysis.js; server/stage1ValidationRulesDashboard.js; supabase/migrations/20260902040232_configure_stage1_worker_concurrency.sql",
         modelAssociation: "Model-independent execution configuration; it does not change the selected Stage-1 model, prompt, evidence, or report.",
-        currentStatus: "Active technical configuration. The current value and configuration source are shown on the researcher validation page. No concurrency value has analytical or participant-eligibility meaning.",
-        authorization: "The researcher required the analysis to finish and rejected serial execution, but did not authorize the system-derived fixed value of eight. That attribution has been corrected."
+        currentStatus: "Active technical configuration with no system-derived fixed default. The current capacity and its source are shown on the researcher validation page. No concurrency value has analytical or participant-eligibility meaning.",
+        authorization: "The researcher required the analysis to finish, rejected serial execution, and on 2026-09-02 explicitly required removal of the system-derived fixed value of eight."
     })
 ];

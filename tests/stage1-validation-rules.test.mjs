@@ -64,7 +64,7 @@ test("the dedicated researcher page exposes authority, provenance, models, and f
     assert.match(script, /Model association/);
     assert.match(script, /Analytical independence/);
     assert.match(script, /Execution concurrency/);
-    assert.match(script, /Current worker concurrency/);
+    assert.match(script, /Current technical capacity/);
     assert.match(endpoint, /authorizeResearcher/);
     assert.match(endpoint, /rules_snapshot/);
     assert.match(endpoint, /resolved_model/);
@@ -73,6 +73,7 @@ test("the dedicated researcher page exposes authority, provenance, models, and f
     assert.match(endpoint, /recentPlatformControls/);
     assert.match(endpoint, /technical_configurable/);
     assert.match(endpoint, /configuredAdvancedPreliminaryWorkerConcurrency/);
+    assert.match(endpoint, /No fixed concurrency ceiling/);
 });
 
 test("recent system-derived controls and their authorization boundary are disclosed", async () => {
@@ -85,7 +86,7 @@ test("recent system-derived controls and their authorization boundary are disclo
     assert.match(sourceText, /Legacy unusable case disposition/);
     assert.match(sourceText, /RECENT-016/);
     assert.match(sourceText, /Stage-1 execution concurrency/);
-    assert.match(sourceText, /did not authorize the system-derived fixed value of eight/);
+    assert.match(sourceText, /explicitly required removal of the system-derived fixed value of eight/);
     assert.match(sourceText, /Git author identity or commit title is not evidence of informed approval/);
     assert.match(sourceText, /No explicit researcher authorization record was found/);
     assert.equal(

@@ -16,7 +16,6 @@ export const LEGACY_ANALYSIS_INPUT = "excluded";
 export const EXECUTION_CONTRACT_VERSION = "researcher-operation-contract-v1";
 export const DEFAULT_ADVANCED_PRELIMINARY_MAX_OUTPUT_TOKENS = 40000;
 export const DEFAULT_ADVANCED_PRELIMINARY_STALE_RESPONSE_MINUTES = 120;
-export const DEFAULT_ADVANCED_PRELIMINARY_WORKER_CONCURRENCY = 8;
 
 function configuredPositiveInteger(environment, name, fallback) {
     const configured = environment[name];
@@ -54,10 +53,26 @@ export function configuredAdvancedPreliminaryStaleResponseMinutes(
 export function configuredAdvancedPreliminaryWorkerConcurrency(
     environment = process.env
 ) {
+    const configured = environment.ADVANCED_PRELIMINARY_WORKER_CONCURRENCY;
+    if (configured === undefined || configured === null
+        || String(configured).trim() === "") {
+        return null;
+    }
     return configuredPositiveInteger(
-        environment,
-        "ADVANCED_PRELIMINARY_WORKER_CONCURRENCY",
-        DEFAULT_ADVANCED_PRELIMINARY_WORKER_CONCURRENCY
+        environment, "ADVANCED_PRELIMINARY_WORKER_CONCURRENCY", null
+    );
+}
+
+export function availableAdvancedPreliminaryWorkerConcurrency(run) {
+    const sourceCaseCount = Number(run?.source_case_count);
+    const completedCount = Number(run?.completed_count);
+    if (!Number.isFinite(sourceCaseCount) || sourceCaseCount < 1) return 1;
+    if (!Number.isFinite(completedCount) || completedCount < 0) {
+        return Math.max(1, Math.floor(sourceCaseCount));
+    }
+    return Math.max(
+        1,
+        Math.floor(sourceCaseCount) - Math.floor(completedCount)
     );
 }
 

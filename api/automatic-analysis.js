@@ -4,6 +4,7 @@ import {
     stagedAnalysisWorkerRequestIsAuthorized
 } from "../server/stagedAnalysisWorker.js";
 import {
+    availableAdvancedPreliminaryWorkerConcurrency,
     configuredAdvancedPreliminaryWorkerConcurrency,
     processNextAdvancedPreliminaryAnalysis
 } from "../server/advancedPreliminaryAnalysis.js";
@@ -34,17 +35,33 @@ async function processStagedAndContinue(req) {
     const supabaseClient = createClient(supabaseUrl, secretKey, {
         auth: { persistSession: false, autoRefreshToken: false }
     });
-    const workerConcurrency = configuredAdvancedPreliminaryWorkerConcurrency();
+    const { data: activeRun, error: activeRunError } = await supabaseClient
+        .from("advanced_preliminary_analysis_runs")
+        .select("source_case_count, completed_count")
+        .in("status", ["queued", "processing"])
+        .eq("operation_type", "fresh_independent_analysis")
+        .eq("authoritative_source", "original_completed_transcripts")
+        .eq("legacy_analysis_input", "excluded")
+        .order("requested_at", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+    if (activeRunError) {
+        throw new Error("Stage 1 execution capacity could not be loaded.", {
+            cause: activeRunError
+        });
+    }
+    const maximumParallelCases =
+        configuredAdvancedPreliminaryWorkerConcurrency()
+        || availableAdvancedPreliminaryWorkerConcurrency(activeRun);
     const results = [];
-    for (let index = 0;
-        index < workerConcurrency * 2;
-        index += 1) {
+    const workerDeadline = Date.now() + 4 * 60 * 1000;
+    while (Date.now() < workerDeadline) {
         const result = await processNextAdvancedPreliminaryAnalysis(
             supabaseClient,
             {
                 claimFunction: "claim_available_advanced_preliminary_analysis",
                 claimParameters: {
-                    p_maximum_parallel_cases: workerConcurrency
+                    p_maximum_parallel_cases: maximumParallelCases
                 }
             }
         );
@@ -55,7 +72,11 @@ async function processStagedAndContinue(req) {
     return {
         claimed: results.some(result => result.claimed),
         completed: results.filter(result => result.completed).length,
-        activeTickOperations: results.filter(result => result.claimed).length
+        activeTickOperations: results.filter(result => result.claimed).length,
+        maximumParallelCases,
+        concurrencySource: configuredAdvancedPreliminaryWorkerConcurrency()
+            ? "technical_environment_override"
+            : "active_run_remaining_workload"
     };
 }
 

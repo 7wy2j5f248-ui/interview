@@ -126,7 +126,7 @@
                 payload.operationalExecutionContext?.analyticalIndependence);
             addDefinition(definitions, "Execution concurrency",
                 payload.operationalExecutionContext?.executionConcurrency);
-            addDefinition(definitions, "Current worker concurrency",
+            addDefinition(definitions, "Current technical capacity",
                 payload.operationalExecutionContext?.currentWorkerConcurrency);
             addDefinition(definitions, "Concurrency source",
                 payload.operationalExecutionContext?.configurationSource);
