@@ -18,6 +18,7 @@ export const AUTHORITATIVE_SOURCE = "original_completed_transcripts";
 export const LEGACY_ANALYSIS_INPUT = "excluded";
 export const EXECUTION_CONTRACT_VERSION = "researcher-operation-contract-v1";
 export const ADVANCED_PRELIMINARY_MAX_OUTPUT_TOKENS = 20000;
+export const ADVANCED_PRELIMINARY_STALE_RESPONSE_MINUTES = 45;
 
 const analysisSchema = {
     type: "object",
@@ -463,6 +464,63 @@ async function saveProviderResponse(supabase, claim, response) {
     }
 }
 
+async function providerResponseIsStale(supabase, claim, now = new Date()) {
+    const { data, error } = await supabase
+        .from("advanced_preliminary_analysis_jobs")
+        .select("provider_response_submitted_at")
+        .eq("id", claim.job_id)
+        .maybeSingle();
+    if (error) {
+        throw new Error("The provider-response submission time could not be loaded.", {
+            cause: error
+        });
+    }
+    const submittedAt = Date.parse(data?.provider_response_submitted_at || "");
+    return Number.isFinite(submittedAt)
+        && now.getTime() - submittedAt
+            >= ADVANCED_PRELIMINARY_STALE_RESPONSE_MINUTES * 60 * 1000;
+}
+
+async function resolveStalledProviderResponse(
+    analysisClient,
+    supabase,
+    claim,
+    response
+) {
+    if (!["queued", "in_progress"].includes(response.status)
+        || !(await providerResponseIsStale(supabase, claim))) {
+        return null;
+    }
+
+    let cancelledResponse;
+    try {
+        cancelledResponse = await analysisClient.responses.cancel(response.id);
+    } catch (cancelError) {
+        const latestResponse = await analysisClient.responses.retrieve(response.id);
+        await saveProviderResponse(supabase, claim, latestResponse);
+        if (latestResponse.status === "completed") {
+            return { completedResponse: latestResponse };
+        }
+        throw cancelError;
+    }
+    await saveProviderResponse(supabase, claim, cancelledResponse);
+
+    const { data: resolution, error } = await supabase.rpc(
+        "resolve_stalled_advanced_preliminary_response",
+        {
+            p_job_id: claim.job_id,
+            p_provider_response_id: response.id,
+            p_reason: `Provider response remained ${response.status} for at least ${ADVANCED_PRELIMINARY_STALE_RESPONSE_MINUTES} minutes.`
+        }
+    );
+    if (error || !resolution) {
+        throw new Error("The stalled provider response was cancelled but its retry lineage was not saved.", {
+            cause: error || undefined
+        });
+    }
+    return { resolution };
+}
+
 async function persistCompletedAnalysis(supabase, claim, source, analysis) {
     const payload = {
         meaningUnits: analysis.meaningUnits,
@@ -599,9 +657,32 @@ export async function processNextAdvancedPreliminaryAnalysis(
                     analysisInput(source.messages, source.context),
                     true
                 ),
-                { idempotencyKey: `advanced-preliminary-${claim.job_id}` }
+                {
+                    idempotencyKey:
+                        `advanced-preliminary-${claim.job_id}-attempt-${claim.attempt_count}`
+                }
             );
             await saveProviderResponse(supabase, claim, response);
+        }
+
+        if (["queued", "in_progress"].includes(response.status)) {
+            const staleResolution = await resolveStalledProviderResponse(
+                analysisClient, supabase, claim, response
+            );
+            if (staleResolution?.completedResponse) {
+                response = staleResolution.completedResponse;
+            } else if (staleResolution?.resolution) {
+                return {
+                    claimed: true,
+                    completed: false,
+                    staleResolved: true,
+                    runId: claim.run_id,
+                    caseNumber: claim.case_number,
+                    providerResponseId: response.id,
+                    providerResponseStatus: "cancelled",
+                    resolution: staleResolution.resolution
+                };
+            }
         }
 
         if (["queued", "in_progress"].includes(response.status)) {

@@ -6,6 +6,7 @@ import {
     ADVANCED_PRELIMINARY_MAX_OUTPUT_TOKENS,
     ADVANCED_PRELIMINARY_PROMPT_VERSION,
     ADVANCED_PRELIMINARY_REASONING_EFFORT,
+    ADVANCED_PRELIMINARY_STALE_RESPONSE_MINUTES,
     ADVANCED_PRELIMINARY_STOP_LAYER,
     generateAdvancedPreliminaryAnalysis,
     validateAdvancedPreliminaryAnalysis
@@ -276,6 +277,24 @@ test("run-level spend includes completed, orphaned, and uncertain usage", async 
     assert.match(migration, /reserve_total/);
     assert.match(migration, /orphan_job_total \+ reserve_total/);
     assert.match(migration, /unverified_spend_reserve_usd/);
+});
+
+test("a stale background response is cancelled, preserved, and retried at most once", async () => {
+    assert.equal(ADVANCED_PRELIMINARY_STALE_RESPONSE_MINUTES, 45);
+    const worker = await source("server/advancedPreliminaryAnalysis.js");
+    const migration = await source(
+        "supabase/migrations/20260902004107_handle_stale_stage1_responses.sql"
+    );
+    assert.match(worker, /responses\.cancel\(response\.id\)/);
+    assert.match(worker, /resolve_stalled_advanced_preliminary_response/);
+    assert.match(worker, /attempt-\$\{claim\.attempt_count\}/);
+    assert.match(migration, /provider_response_history/);
+    assert.match(migration, /stale_response_retry_count/);
+    assert.match(migration, /interval '45 minutes'/);
+    assert.match(migration, /retry_scheduled/);
+    assert.match(migration, /terminal_failure/);
+    assert.match(migration, /unverified_spend_reserve_usd = unverified_spend_reserve_usd/);
+    assert.doesNotMatch(migration, /delete from public\./i);
 });
 
 test("analysis providers are server-configured and never expose credentials", () => {
