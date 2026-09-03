@@ -192,7 +192,7 @@
                 </p>
                 <ol class="automaticReanalysisPanel" aria-label="Staged qualitative analysis workflow">
                     <li><strong>Phase 1 · Independent complete preliminary case reports</strong> — available now</li>
-                    <li><button type="button" disabled>Stage 2A · Cross-Case Code Harmonization — separate researcher-selected operation</button></li>
+                    <li><strong>Stage 2A · Cross-Case Code Harmonization</strong> — checkpoint only; paid execution requires later approval</li>
                     <li><button type="button" disabled>Phase 2B · Cross-Case Category Refinement — locked</button></li>
                     <li><button type="button" disabled>Phase 2C · Cross-Case Theme Development — locked</button></li>
                 </ol>
@@ -263,10 +263,13 @@
                 <section id="crossCaseCodeRefinement" class="automaticReanalysisPanel" aria-labelledby="crossCaseCodeHeading">
                     <h3 id="crossCaseCodeHeading">Stage 2A · Cross-Case Code Harmonization</h3>
                     <p class="muted">
-                        This operation compares every existing preliminary Code and its
-                        Meaning Unit evidence in one whole-corpus model input. It creates
-                        Harmonized Codes only. Meaning Units and preliminary Codes remain
-                        unchanged; Categories and Themes are not created or refined.
+                        The analytical model input contains only P# and preliminary CO labels
+                        for the complete corpus. It contains no transcript, Meaning Unit,
+                        demographic, Category, Theme, annotated transcript, interview message,
+                        raw Stage 1 report, or legacy Stage 2A output. Demographic recovery is
+                        temporarily frozen and remains separate. This is a separate researcher-selected operation
+                        that creates only the Harmonized Code layer. Meaning Units and preliminary Codes remain
+                        unchanged; all other Stage 1 objects remain unchanged as well.
                     </p>
                     <p id="crossCaseCodeStatus" class="automaticReviewScopeSummary">
                         Stage 2 is unavailable until the researcher separately authorizes its source contract.
@@ -274,10 +277,7 @@
                     <p id="crossCaseCodeProvenance" class="muted"></p>
                     <div class="actionRow">
                         <button id="crossCaseCodePreviewButton" type="button">
-                            Check whole-corpus context and preview Stage 2A
-                        </button>
-                        <button id="crossCaseCodeExecuteButton" type="button" hidden disabled>
-                            Start this one whole-corpus harmonization
+                            Prepare and persist the Stage 2A pre-call checkpoint
                         </button>
                         <button id="crossCaseCodeDownloadButton" type="button" disabled>
                             Download HCO provenance CSV
@@ -298,7 +298,7 @@
     <div id="advancedPreliminaryDialogContent"></div>
 </dialog>
 
-<script src="researcher-staged-access.js?version=20260902-stage2a-hco-v1"></script>
-<script src="researcher-advanced-preliminary.js?version=20260902-stage2a-hco-v1"></script>
+<script src="researcher-staged-access.js?version=20260903-stage2a-checkpoint-v2"></script>
+<script src="researcher-advanced-preliminary.js?version=20260903-stage2a-checkpoint-v2"></script>
 </body>
 </html>

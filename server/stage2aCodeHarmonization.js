@@ -18,23 +18,32 @@ export const HARMONIZATION_SCHEMA = {
             items: {
                 type: "object",
                 properties: {
+                    id: { type: "string" },
                     label: { type: "string" },
                     definition: { type: "string" },
-                    semantic_basis: { type: "string" },
-                    preliminary_code_ids: {
+                    semantic_basis: { type: "string" }
+                },
+                required: ["id", "label", "definition", "semantic_basis"],
+                additionalProperties: false
+            }
+        },
+        cases: {
+            type: "array",
+            items: {
+                type: "object",
+                properties: {
+                    p: { type: "string" },
+                    hco_ids: {
                         type: "array",
                         items: { type: "string" }
                     }
                 },
-                required: [
-                    "label", "definition", "semantic_basis",
-                    "preliminary_code_ids"
-                ],
+                required: ["p", "hco_ids"],
                 additionalProperties: false
             }
         }
     },
-    required: ["harmonized_codes"],
+    required: ["harmonized_codes", "cases"],
     additionalProperties: false
 };
 
@@ -49,17 +58,18 @@ export function stage2AModelLimits(model) {
     return MODEL_LIMITS[String(model || "").trim()] || null;
 }
 
-function harmonizationInstructions(run) {
+function harmonizationInstructions() {
     return [
         "Perform only Stage 2A: Cross-Case Code Harmonization.",
-        "Treat the complete supplied preliminary-Code corpus as one cross-case comparative analytical unit. Read and compare the entire corpus together. Do not divide it into batches, sequential subsets, or case-by-case vocabulary accumulation.",
-        "Compare preliminary Codes semantically with their supporting Meaning Units and Case IDs. Harmonize terminology only when the substantive analytical concepts are the same or sufficiently equivalent in the evidence. Similar wording alone is not enough. Do not force genuinely different meanings into one Harmonized Code. Do not merely shorten labels.",
+        "The complete analytical input is one JSON array. Every item has exactly two fields: p (the local participant/case identifier) and co (that case's ordered array of preliminary Code labels). No transcript, Meaning Unit, demographic, Category, Theme, annotated transcript, interview message, raw Stage 1 report, prior Stage 2A result, or other contextual material is supplied.",
+        "Treat the complete supplied preliminary-Code corpus as one cross-case comparative analytical unit. Read and compare the entire corpus together. Do not divide it into batches, sequential subsets, samples, pages, or case-by-case vocabulary accumulation.",
+        "Compare preliminary Codes semantically. Harmonize terminology only when the expressed analytical concepts are the same or sufficiently equivalent. Similar wording alone is not enough. Do not force genuinely different meanings into one Harmonized Code merely to reduce quantity. Do not merely shorten labels.",
         "Create a shared cross-case Harmonized Code vocabulary. Several preliminary Codes may map to one Harmonized Code. Let the number of Harmonized Codes emerge from the comparison; there is no target count.",
-        "Map every supplied preliminary_code_id to exactly one Harmonized Code. Preserve every preliminary Code and its existing Meaning Unit links; do not rewrite, merge, standardize, remove, or regenerate Meaning Units.",
+        "Give every Harmonized Code a stable response-local id such as HCO0001. Return every supplied p exactly once. For each p, return an hco_ids array with exactly the same length and order as its supplied co array; each position maps that preliminary Code to one stable Harmonized Code id. A case with an empty co array must have an empty hco_ids array.",
+        "Preserve every original preliminary Code. Do not rewrite, overwrite, regenerate, delete, or replace it.",
         "Do not regenerate preliminary analysis. Do not create or refine Categories. Do not create Themes. Do not validate, audit, repair, approve, reject, exclude, replace, score, or review any case or earlier model output.",
-        "Stop after Harmonized Codes and their mappings. Output only the requested structured Harmonized Code vocabulary.",
-        "The researcher rules below are the current configuration for this run. Apply only the portions relevant to Code meaning, shared terminology, evidence, scope, and provenance. Category and Theme instructions are out of scope for Stage 2A and must not be acted upon.",
-        `Researcher configuration (JSON): ${JSON.stringify(run.rules_snapshot)}`
+        "HCO1, HCO2, and later columns are display positions within each case only. Cross-case identity is the stable Harmonized Code id and label, never the position in a case.",
+        "Stop after Harmonized Codes and their mappings. Output only the requested structured Harmonized Code vocabulary and positional case mappings."
     ].join("\n\n");
 }
 
@@ -84,12 +94,12 @@ export function buildStage2AResponseOptions(run, corpus) {
                 schema: HARMONIZATION_SCHEMA
             }
         },
-        instructions: harmonizationInstructions(run),
+        instructions: harmonizationInstructions(),
         input: [{
             role: "user",
             content: [{
                 type: "input_text",
-                text: `Complete preliminary-Code corpus (JSON):\n${JSON.stringify(corpus)}`
+                text: JSON.stringify(corpus)
             }]
         }]
     };

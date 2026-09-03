@@ -20,7 +20,6 @@
     const stage2Host = element("crossCaseCodeTable");
     const stage2DownloadButton = element("crossCaseCodeDownloadButton");
     const stage2PreviewButton = element("crossCaseCodePreviewButton");
-    const stage2ExecuteButton = element("crossCaseCodeExecuteButton");
     const stage2ExecutionPlan = element("crossCaseCodeExecutionPlan");
     const providerSelect = element("advancedPreliminaryProvider");
     const modelSelect = element("advancedPreliminaryModel");
@@ -323,8 +322,8 @@
         const stage2 = payload.stage2a
             || { run: null, formRows: [], maxHcoPositions: 0 };
         const activeStatuses = new Set([
-            "queued", "counting_context", "context_counted", "submitting",
-            "submitted", "processing"
+            "awaiting_researcher_approval", "queued", "counting_context",
+            "context_counted", "submitting", "submitted", "processing"
         ]);
         if (!stage2.run) {
             stage2Status.textContent =
@@ -333,18 +332,15 @@
                 "The context check uses the complete preliminary-Code corpus in one input. Categories and Themes remain out of scope.";
             stage2DownloadButton.disabled = true;
             stage2PreviewButton.disabled = payload.run?.status !== "completed";
-            if (!preparedStage2A) {
-                stage2ExecuteButton.hidden = true;
-                stage2ExecuteButton.disabled = true;
-            }
             return;
         }
         const run = stage2.run;
-        stage2Status.textContent =
-            `Stage 2A is ${run.status.replaceAll("_", " ")}. `
-            + `${run.source_case_count} completed cases and ${run.preliminary_code_count} preliminary Codes were supplied as one corpus; `
-            + `${run.mappedPreliminaryCodeCount} preliminary Codes are mapped to ${run.harmonizedCodeCount} Harmonized Codes.`
-            + (run.last_error ? ` ${run.last_error}` : "");
+        stage2Status.textContent = run.status === "awaiting_researcher_approval"
+            ? "The Stage 2A pre-call checkpoint is persisted. No paid harmonization call has been made. Execution is stopped pending explicit researcher approval."
+            : `Stage 2A is ${run.status.replaceAll("_", " ")}. `
+                + `${run.source_case_count} cases and ${run.preliminary_code_count} preliminary Codes are recorded; `
+                + `${run.mappedPreliminaryCodeCount} preliminary Codes are mapped to ${run.harmonizedCodeCount} Harmonized Codes.`
+                + (run.last_error ? ` ${run.last_error}` : "");
         stage2Provenance.textContent = [
             `Stage 1 run ${run.stage1_run_id}`,
             `${run.provider} / ${run.resolved_model || run.model}`,
@@ -357,8 +353,6 @@
         ].join(" · ");
         stage2DownloadButton.disabled = run.status !== "completed";
         stage2PreviewButton.disabled = activeStatuses.has(run.status);
-        stage2ExecuteButton.hidden = true;
-        stage2ExecuteButton.disabled = true;
         if (run.pre_call_snapshot?.selectedModel) {
             showStage2APreCallState(run.pre_call_snapshot);
         }
@@ -388,18 +382,36 @@
         panel.className = "automaticReanalysisPanel";
         panel.appendChild(heading("Final Stage 2A pre-call state"));
         const items = [
-            ["Cases", snapshot.cases],
-            ["Preliminary code records / assignments",
-                `${snapshot.preliminaryCodeRecords} / ${snapshot.preliminaryCodeAssignments}`],
-            ["Distinct preliminary code labels",
+            ["Total Stage 1 cases", snapshot.totalStage1Cases],
+            ["Cases represented in the CO input",
+                snapshot.casesRepresentedInCoInput],
+            ["Total preliminary CO records/assignments",
+                snapshot.preliminaryCodeRecords],
+            ["Distinct preliminary CO labels",
                 snapshot.distinctPreliminaryCodeLabels],
-            ["All cases included", snapshot.allCasesIncluded ? "YES" : "NO"],
+            ["All 275 cases represented",
+                snapshot.all275CasesRepresented ? "YES" : "NO"],
+            ["Cases with zero preliminary COs",
+                snapshot.casesWithZeroPreliminaryCodes],
+            ["Input fields sent to model", snapshot.inputFieldsSentToModel],
             ["Legacy Stage 2A output used",
                 snapshot.legacyStage2AOutputUsed ? "YES" : "NO"],
-            ["Input batching", snapshot.inputBatching ? "YES" : "NO"],
-            ["Selected model", snapshot.selectedModel],
-            ["Exact provider input token count", snapshot.inputTokenCount],
-            ["Paid harmonization calls", snapshot.paidHarmonizationCalls]
+            ["Demographic information sent",
+                snapshot.demographicInformationSent ? "YES" : "NO"],
+            ["MU information sent",
+                snapshot.meaningUnitInformationSent ? "YES" : "NO"],
+            ["Category information sent",
+                snapshot.categoryInformationSent ? "YES" : "NO"],
+            ["Theme information sent",
+                snapshot.themeInformationSent ? "YES" : "NO"],
+            ["Selected provider/model",
+                `${snapshot.selectedProvider} / ${snapshot.selectedModel}`],
+            ["Selected reasoning configuration",
+                snapshot.selectedReasoningConfiguration],
+            ["Exact provider input-token count",
+                snapshot.exactProviderInputTokenCount],
+            ["Planned paid harmonization calls",
+                snapshot.plannedPaidHarmonizationCalls]
         ];
         const list = document.createElement("dl");
         items.forEach(([label, value]) => {
@@ -416,67 +428,52 @@
     function showStage2APlan(prepared) {
         const plan = prepared.plan;
         showStage2APreCallState({
-            cases: plan.sourceCaseCount,
+            totalStage1Cases: plan.totalStage1Cases,
+            casesRepresentedInCoInput: plan.casesRepresentedInCoInput,
             preliminaryCodeRecords: plan.preliminaryCodeCount,
-            preliminaryCodeAssignments: plan.codeMeaningUnitLinkCount,
             distinctPreliminaryCodeLabels:
                 plan.distinctPreliminaryCodeLabelCount,
-            allCasesIncluded: plan.allCasesIncluded,
+            all275CasesRepresented: plan.all275CasesRepresented,
+            casesWithZeroPreliminaryCodes: plan.casesWithZeroPreliminaryCodes,
+            inputFieldsSentToModel: plan.inputFieldsSentToModel,
             legacyStage2AOutputUsed: plan.legacyStage2AOutputUsed,
-            inputBatching: plan.inputBatching,
+            demographicInformationSent: plan.demographicInformationSent,
+            meaningUnitInformationSent: plan.meaningUnitInformationSent,
+            categoryInformationSent: plan.categoryInformationSent,
+            themeInformationSent: plan.themeInformationSent,
+            selectedProvider: plan.provider,
             selectedModel: plan.resolvedModel,
-            inputTokenCount: plan.inputTokenCount,
-            paidHarmonizationCalls: plan.paidHarmonizationCalls
+            selectedReasoningConfiguration: plan.reasoningEffort,
+            exactProviderInputTokenCount: plan.inputTokenCount,
+            plannedPaidHarmonizationCalls: plan.paidHarmonizationCalls
         });
-        stage2ExecuteButton.hidden = false;
-        stage2ExecuteButton.disabled = !plan.fitsWholeCorpus;
     }
 
     stage2PreviewButton.addEventListener("click", async () => {
         stage2PreviewButton.disabled = true;
-        stage2ExecuteButton.hidden = true;
         stage2ExecutionPlan.replaceChildren();
-        setStatus("Counting the exact whole-corpus Stage 2A input…");
+        setStatus("Counting and persisting the exact Stage 2A pre-call checkpoint…");
         try {
             preparedStage2A = await request(API_PATH, {
                 method: "POST",
                 body: JSON.stringify({
                     action: "stage2a-preflight",
-                    stage1RunId: payload.run?.id
+                    stage1RunId: payload.run?.id,
+                    provider: payload.run?.provider,
+                    model: payload.run?.resolved_model || payload.run?.model,
+                    reasoningEffort: payload.run?.reasoning_effort
                 })
             });
             showStage2APlan(preparedStage2A);
-            setStatus(preparedStage2A.plan.fitsWholeCorpus
-                ? "The complete corpus fits the selected model. Review the exact plan, then start Stage 2A."
-                : "The complete corpus does not fit the selected model. Stage 2A is stopped; no batching alternative will be created.",
-            !preparedStage2A.plan.fitsWholeCorpus);
+            setStatus(
+                "The pre-call checkpoint is persisted. STOPPED before the paid harmonization call; explicit researcher approval is required.",
+                !preparedStage2A.plan.fitsWholeCorpus
+                    || !preparedStage2A.plan.all275CasesRepresented
+            );
         } catch (error) {
             preparedStage2A = null;
             setStatus(error.message, true);
         } finally {
-            stage2PreviewButton.disabled = false;
-        }
-    });
-
-    stage2ExecuteButton.addEventListener("click", async () => {
-        if (!preparedStage2A) return;
-        stage2ExecuteButton.disabled = true;
-        stage2PreviewButton.disabled = true;
-        setStatus("Starting one whole-corpus Stage 2A harmonization…");
-        try {
-            await request(API_PATH, {
-                method: "POST",
-                body: JSON.stringify({
-                    action: "stage2a-start",
-                    stage1RunId: preparedStage2A.plan.stage1RunId
-                })
-            });
-            preparedStage2A = null;
-            stage2ExecutionPlan.replaceChildren();
-            await load({ quiet: true });
-        } catch (error) {
-            setStatus(error.message, true);
-            stage2ExecuteButton.disabled = false;
             stage2PreviewButton.disabled = false;
         }
     });

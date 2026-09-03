@@ -11,10 +11,7 @@ import {
     LEGACY_ANALYSIS_INPUT,
     SLEEPING_HABITS_PROJECT_CODE
 } from "./advancedPreliminaryAnalysis.js";
-import {
-    scheduleStage2AHarmonization,
-    scheduleStagedAnalysis
-} from "./stagedAnalysisWorker.js";
+import { scheduleStagedAnalysis } from "./stagedAnalysisWorker.js";
 import { configuredStage1Models } from "./analysisModelCatalog.js";
 import { normalizeAnalysisModel } from "./modelConfiguration.js";
 import {
@@ -23,7 +20,6 @@ import {
     publicAnalysisProviderCatalog
 } from "./analysisProvider.js";
 import { authorizeResearcher } from "./researcherAuth.js";
-import { loadAnalysisFrameworkById } from "./analysisFramework.js";
 import {
     countStage2AInputTokens,
     STAGE2A_ANALYSIS_VERSION,
@@ -82,7 +78,7 @@ function disabledStage2() {
 async function loadStage2ASummary(supabase, stage1RunId) {
     const { data: run, error: runError } = await supabase
         .from("stage2a_code_harmonization_runs")
-        .select("id, run_number, stage1_run_id, project_id, status, provider, model, resolved_model, reasoning_effort, analysis_version, prompt_version, stop_layer, rules_snapshot, pre_call_snapshot, source_case_count, preliminary_code_count, code_meaning_unit_link_count, context_window_tokens, reserved_output_tokens, input_token_count, output_token_count, provider_response_id, requested_at, started_at, completed_at, updated_at, last_error")
+        .select("id, run_number, stage1_run_id, project_id, status, provider, model, resolved_model, reasoning_effort, analysis_version, prompt_version, stop_layer, rules_snapshot, pre_call_snapshot, source_case_count, preliminary_code_count, code_meaning_unit_link_count, context_window_tokens, reserved_output_tokens, input_token_count, output_token_count, provider_response_id, requested_at, started_at, completed_at, updated_at, last_error, materialization_run_id, checkpoint_hash")
         .eq("stage1_run_id", stage1RunId)
         .order("requested_at", { ascending: false })
         .limit(1)
@@ -607,73 +603,32 @@ async function downloadStage2ACsv(supabase, req, res) {
     return res.status(200).send(`\uFEFF${csv}`);
 }
 
-async function stage2AProjectId(supabase, stage1RunId) {
-    const { data, error } = await supabase
-        .from("advanced_preliminary_case_reports")
-        .select("project_id")
-        .eq("run_id", stage1RunId)
-        .limit(1)
-        .maybeSingle();
-    if (error || !data?.project_id) {
-        throw new Error("The Stage 2A research project could not be resolved.");
+const STAGE2A_REASONING_EFFORTS = new Set([
+    "none", "minimal", "low", "medium", "high", "xhigh"
+]);
+
+function stage2AReasoningEffort(value, fallback) {
+    const selected = typeof value === "string" ? value.trim() : "";
+    const result = selected || fallback;
+    if (!STAGE2A_REASONING_EFFORTS.has(result)) {
+        throw Object.assign(new Error("Choose a supported Stage 2A reasoning configuration."), {
+            status: 400
+        });
     }
-    return data.project_id;
+    return result;
 }
 
-async function currentStage2ARules(supabase, projectId) {
-    const [{ data: activeGlobal, error: globalError }, {
-        data: activeFramework,
-        error: frameworkError
-    }] = await Promise.all([
-        supabase.from("active_global_analysis_rules")
-            .select("rule_id, activated_at, activated_by")
-            .eq("singleton", true)
-            .maybeSingle(),
-        supabase.from("active_analysis_frameworks")
-            .select("framework_id, activated_at, activated_by")
-            .eq("project_id", projectId)
-            .maybeSingle()
-    ]);
-    if (globalError || frameworkError || !activeGlobal?.rule_id
-        || !activeFramework?.framework_id) {
-        throw new Error("The current researcher-defined analytical configuration could not be loaded.");
+async function stage2AMaterialization(supabase, stage1RunId) {
+    const { data, error } = await supabase
+        .from("stage1_preliminary_materialization_runs")
+        .select("id, source_run_id, project_id, status, source_case_count, code_form_case_count")
+        .eq("source_run_id", stage1RunId)
+        .eq("status", "completed")
+        .maybeSingle();
+    if (error || !data?.id || !data?.project_id) {
+        throw new Error("The completed structured Stage 1 materialization could not be resolved.");
     }
-    const framework = await loadAnalysisFrameworkById(
-        supabase,
-        activeFramework.framework_id,
-        activeGlobal.rule_id
-    );
-    if (!framework || framework.projectId !== projectId) {
-        throw new Error("The active project analysis framework could not be loaded.");
-    }
-    return {
-        globalAnalysisRules: framework.globalAnalysisRules,
-        projectAnalysisFramework: {
-            id: framework.id,
-            projectId: framework.projectId,
-            versionNumber: framework.versionNumber,
-            projectCode: framework.projectCode,
-            projectName: framework.projectName,
-            researchTopic: framework.researchTopic,
-            studyScope: framework.studyScope,
-            codeDerivationRules: framework.codeDerivationRules,
-            inclusionRules: framework.inclusionRules,
-            exclusionRules: framework.exclusionRules,
-            provenanceExpectations: framework.provenanceExpectations,
-            applicationScope: framework.applicationScope,
-            activatedAt: activeFramework.activated_at,
-            activatedBy: activeFramework.activated_by
-        },
-        stage2aScope: {
-            operation: "cross_case_code_harmonization_only",
-            analyticalUnit: "entire_preliminary_code_corpus",
-            stopLayer: STAGE2A_STOP_LAYER,
-            categories: "not_created_or_refined",
-            themes: "not_created",
-            meaningUnits: "unchanged",
-            priorOutputs: "preserved"
-        }
-    };
+    return data;
 }
 
 async function buildStage2APlan(supabase, req) {
@@ -688,62 +643,108 @@ async function buildStage2APlan(supabase, req) {
             { status: 409 }
         );
     }
-    const limits = stage2AModelLimits(stage1.resolved_model || stage1.model);
+    const provider = normalizeAnalysisProviderId(
+        req.body?.provider || stage1.provider
+    );
+    const model = normalizeAnalysisModel(
+        req.body?.model || stage1.resolved_model || stage1.model
+    );
+    const reasoningEffort = stage2AReasoningEffort(
+        req.body?.reasoningEffort,
+        stage1.reasoning_effort
+    );
+    const providerRecord = publicAnalysisProviderCatalog()
+        .find(candidate => candidate.id === provider);
+    if (!providerRecord?.configured) {
+        throw Object.assign(
+            new Error(`Provider ${provider} is not configured for production analysis.`),
+            { status: 422 }
+        );
+    }
+    const limits = stage2AModelLimits(model);
     if (!limits) {
         throw Object.assign(new Error(
-            `Exact context limits are unavailable for ${stage1.resolved_model || stage1.model}. Stage 2A stopped before implementation of any alternative.`
+            `Exact context limits are unavailable for ${model}. Stage 2A stopped before implementation of any alternative.`
         ), { status: 422 });
     }
-    const projectId = await stage2AProjectId(supabase, stage1.id);
-    const [rulesSnapshot, corpus] = await Promise.all([
-        currentStage2ARules(supabase, projectId),
-        requireData(
-            supabase.rpc("get_stage2a_harmonization_corpus", {
-                p_stage1_run_id: stage1.id
-            }),
-            "The complete preliminary-Code corpus could not be loaded."
-        )
-    ]);
+    const materialization = await stage2AMaterialization(supabase, stage1.id);
+    const projectId = materialization.project_id;
+    const corpus = await requireData(
+        supabase.rpc("get_stage2a_harmonization_corpus", {
+            p_stage1_run_id: stage1.id
+        }),
+        "The complete preliminary-Code corpus could not be loaded."
+    );
     if (!Array.isArray(corpus) || !corpus.length) {
         throw new Error("The complete preliminary-Code corpus is empty.");
     }
+    const representedCases = new Set(corpus.map(item => item.p));
+    const preliminaryCodes = corpus.flatMap(item =>
+        Array.isArray(item.co) ? item.co : []
+    );
+    const caseCount = representedCases.size;
+    const distinctPreliminaryCodeLabelCount = new Set(
+        preliminaryCodes.map(item => String(item || "").trim())
+    ).size;
+    const casesWithZeroPreliminaryCodes = corpus.filter(item =>
+        !Array.isArray(item.co) || item.co.length === 0
+    ).length;
+    const inputFieldsOnly = corpus.every(item => {
+        const keys = Object.keys(item).sort();
+        return keys.length === 2 && keys[0] === "co" && keys[1] === "p"
+            && typeof item.p === "string" && Array.isArray(item.co)
+            && item.co.every(code => typeof code === "string");
+    });
+    const allCasesIncluded = stage1.source_case_count === 275
+        && materialization.source_case_count === 275
+        && corpus.length === 275
+        && caseCount === 275;
+    if (!inputFieldsOnly) {
+        throw Object.assign(new Error(
+            "Stage 2A stopped because the provider input was not exclusively P# plus preliminary CO."
+        ), { status: 409 });
+    }
     const selectedRun = {
-        model: stage1.resolved_model || stage1.model,
-        reasoning_effort: stage1.reasoning_effort,
-        rules_snapshot: rulesSnapshot
+        model,
+        resolved_model: model,
+        reasoning_effort: reasoningEffort
     };
-    const { client: analysisClient } = createAnalysisProviderClient(stage1.provider);
+    const { client: analysisClient } = createAnalysisProviderClient(provider);
     const inputTokenCount = await countStage2AInputTokens(
         analysisClient,
         selectedRun,
         corpus
     );
-    const caseCount = new Set(corpus.map(item => item.case_id)).size;
-    const distinctPreliminaryCodeLabelCount = new Set(corpus.map(item =>
-        String(item.preliminary_code || "").trim()
-    )).size;
-    const codeMeaningUnitLinkCount = corpus.reduce((total, item) =>
-        total + (Array.isArray(item.meaning_units)
-            ? item.meaning_units.length : 0), 0);
+    const inputSha256 = executionPlanHash(corpus);
     const plan = {
         operation: "cross_case_code_harmonization_only",
         stage1RunId: stage1.id,
+        materializationRunId: materialization.id,
         projectId,
-        provider: stage1.provider,
-        model: stage1.model,
-        resolvedModel: stage1.resolved_model || stage1.model,
-        reasoningEffort: stage1.reasoning_effort,
+        provider,
+        model,
+        resolvedModel: model,
+        reasoningEffort,
         analysisVersion: STAGE2A_ANALYSIS_VERSION,
         promptVersion: STAGE2A_PROMPT_VERSION,
         stopLayer: STAGE2A_STOP_LAYER,
         analyticalUnit: "one_complete_cross_case_preliminary_code_corpus",
+        totalStage1Cases: stage1.source_case_count,
         sourceCaseCount: caseCount,
-        allCasesIncluded: caseCount === stage1.source_case_count
-            && stage1.completed_count === stage1.source_case_count,
-        preliminaryCodeCount: corpus.length,
+        casesRepresentedInCoInput: caseCount,
+        allCasesIncluded,
+        all275CasesRepresented: allCasesIncluded,
+        casesWithZeroPreliminaryCodes,
+        preliminaryCodeCount: preliminaryCodes.length,
+        preliminaryCodeAssignmentCount: preliminaryCodes.length,
         distinctPreliminaryCodeLabelCount,
-        codeMeaningUnitLinkCount,
+        inputFieldsSentToModel: "P# + CO only",
+        inputFieldsOnly,
         legacyStage2AOutputUsed: false,
+        demographicInformationSent: false,
+        meaningUnitInformationSent: false,
+        categoryInformationSent: false,
+        themeInformationSent: false,
         inputBatching: false,
         paidHarmonizationCalls: 1,
         wholeCorpusCalls: 1,
@@ -753,25 +754,31 @@ async function buildStage2APlan(supabase, req) {
         reservedOutputTokens: limits.maximumOutput,
         fitsWholeCorpus: inputTokenCount + limits.maximumOutput
             <= limits.contextWindow,
-        rulesSnapshot
+        inputSha256
     };
-    return { plan };
+    const checkpointHash = executionPlanHash(plan);
+    return { plan, checkpointHash, corpus };
 }
 
-async function startStage2A(supabase, req) {
+async function persistStage2APreflight(supabase, req) {
     const prepared = await buildStage2APlan(supabase, req);
-    const { plan } = prepared;
-    if (!plan.fitsWholeCorpus) {
-        throw Object.assign(new Error(
-            `Whole-corpus input ${plan.inputTokenCount} tokens plus ${plan.reservedOutputTokens} reserved output tokens exceeds the ${plan.contextWindowTokens}-token context window for ${plan.resolvedModel}. Stage 2A stopped before harmonization; no batching or alternative was attempted.`
-        ), { status: 422 });
-    }
+    const { plan, checkpointHash, corpus } = prepared;
+    await supabase.from("stage2a_code_harmonization_runs")
+        .update({
+            status: "superseded_before_approval",
+            updated_at: new Date().toISOString()
+        })
+        .eq("stage1_run_id", plan.stage1RunId)
+        .eq("status", "awaiting_researcher_approval");
     const { data: run, error } = await supabase
         .from("stage2a_code_harmonization_runs")
         .insert({
             stage1_run_id: plan.stage1RunId,
+            materialization_run_id: plan.materializationRunId,
             project_id: plan.projectId,
-            status: "context_counted",
+            status: plan.all275CasesRepresented
+                && plan.inputFieldsOnly && plan.fitsWholeCorpus
+                ? "awaiting_researcher_approval" : "blocked_pre_call",
             provider: plan.provider,
             model: plan.model,
             resolved_model: plan.resolvedModel,
@@ -779,42 +786,69 @@ async function startStage2A(supabase, req) {
             analysis_version: plan.analysisVersion,
             prompt_version: plan.promptVersion,
             stop_layer: plan.stopLayer,
-            rules_snapshot: plan.rulesSnapshot,
+            rules_snapshot: {
+                operation: "cross_case_code_harmonization_only",
+                demographicRecovery: "temporarily_frozen",
+                inputContract: "P# + CO only",
+                legacyStage2AOutputUsed: false
+            },
             pre_call_snapshot: {
-                cases: plan.sourceCaseCount,
+                totalStage1Cases: plan.totalStage1Cases,
+                casesRepresentedInCoInput: plan.casesRepresentedInCoInput,
                 preliminaryCodeRecords: plan.preliminaryCodeCount,
-                preliminaryCodeAssignments: plan.codeMeaningUnitLinkCount,
+                preliminaryCodeAssignments: plan.preliminaryCodeAssignmentCount,
                 distinctPreliminaryCodeLabels:
                     plan.distinctPreliminaryCodeLabelCount,
-                allCasesIncluded: plan.allCasesIncluded,
+                all275CasesRepresented: plan.all275CasesRepresented,
+                casesWithZeroPreliminaryCodes:
+                    plan.casesWithZeroPreliminaryCodes,
+                inputFieldsSentToModel: plan.inputFieldsSentToModel,
                 legacyStage2AOutputUsed: plan.legacyStage2AOutputUsed,
-                inputBatching: plan.inputBatching,
+                demographicInformationSent: plan.demographicInformationSent,
+                meaningUnitInformationSent: plan.meaningUnitInformationSent,
+                categoryInformationSent: plan.categoryInformationSent,
+                themeInformationSent: plan.themeInformationSent,
+                selectedProvider: plan.provider,
                 selectedModel: plan.resolvedModel,
-                inputTokenCount: plan.inputTokenCount,
-                paidHarmonizationCalls: plan.paidHarmonizationCalls
+                selectedReasoningConfiguration: plan.reasoningEffort,
+                exactProviderInputTokenCount: plan.inputTokenCount,
+                plannedPaidHarmonizationCalls: plan.paidHarmonizationCalls,
+                inputBatching: plan.inputBatching,
+                inputSha256: plan.inputSha256,
+                checkpointHash,
+                modelInput: corpus
             },
             source_case_count: plan.sourceCaseCount,
             preliminary_code_count: plan.preliminaryCodeCount,
-            code_meaning_unit_link_count: plan.codeMeaningUnitLinkCount,
+            code_meaning_unit_link_count: 0,
             context_window_tokens: plan.contextWindowTokens,
             reserved_output_tokens: plan.reservedOutputTokens,
             input_token_count: plan.inputTokenCount,
-            started_at: new Date().toISOString(),
+            checkpoint_hash: checkpointHash,
             requested_by: "researcher-dashboard"
         })
         .select("id")
         .single();
     if (error || !run?.id) {
         throw Object.assign(
-            new Error("The Stage 2A run could not be created."),
+            new Error("The Stage 2A pre-call checkpoint could not be persisted."),
             { status: 500 }
         );
     }
     return {
         runId: run.id,
-        scheduled: scheduleStage2AHarmonization(req, run.id),
-        plan
+        checkpointHash,
+        status: plan.all275CasesRepresented
+            && plan.inputFieldsOnly && plan.fitsWholeCorpus
+            ? "awaiting_researcher_approval" : "blocked_pre_call",
+        plan: { ...plan, modelInput: undefined }
     };
+}
+
+function rejectUnapprovedStage2AStart() {
+    throw Object.assign(new Error(
+        "No paid Stage 2A harmonization call is authorized. Inspect the persisted pre-call checkpoint and provide explicit researcher approval first."
+    ), { status: 403 });
 }
 
 async function startRun(supabase, req) {
@@ -931,10 +965,10 @@ export async function handleAdvancedPreliminaryDashboard(req, res) {
             return res.status(200).json(await cancelRun(supabase, req));
         }
         if (req.method === "POST" && req.body?.action === "stage2a-preflight") {
-            return res.status(200).json(await buildStage2APlan(supabase, req));
+            return res.status(200).json(await persistStage2APreflight(supabase, req));
         }
         if (req.method === "POST" && req.body?.action === "stage2a-start") {
-            return res.status(202).json(await startStage2A(supabase, req));
+            return rejectUnapprovedStage2AStart();
         }
         res.setHeader("Allow", "GET, POST");
         return res.status(405).json({ error: "Method not allowed." });
