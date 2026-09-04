@@ -166,6 +166,27 @@ async function caseRecord(supabase, caseId) {
     };
 }
 
+async function stage2Record(supabase, runId) {
+    const [runs, requests, presentations] = await Promise.all([
+        requireRows(supabase.from("stage2_runs_v2").select("*")
+            .eq("id", runId), "The Stage 2A run could not be loaded."),
+        requireRows(supabase.from("stage2_requests_v2").select("*")
+            .eq("run_id", runId), "The frozen Stage 2A request could not be loaded."),
+        requireRows(supabase.from("stage2_presentations_v2").select("*")
+            .eq("run_id", runId), "The Stage 2A presentation could not be loaded.")
+    ]);
+    if (!runs[0]) {
+        throw Object.assign(new Error("The Stage 2A run does not exist."), {
+            status: 404
+        });
+    }
+    return {
+        run: runs[0],
+        frozenRequest: requests[0] || null,
+        explicitPresentation: presentations[0] || null
+    };
+}
+
 async function post(supabase, req) {
     const body = req.body || {};
     if (["preview_configuration", "activate_configuration"].includes(body.action)) {
@@ -248,9 +269,18 @@ export async function handleCaseBoundAnalysisDashboard(req, res) {
         if (req.method === "GET") {
             const caseId = typeof req.query?.caseId === "string"
                 ? req.query.caseId.trim() : "";
+            const runId = typeof req.query?.runId === "string"
+                ? req.query.runId.trim() : "";
+            if (caseId && runId) {
+                throw Object.assign(new Error(
+                    "Inspect either one case or one Stage 2A run."
+                ), { status: 400 });
+            }
             return res.status(200).json(caseId
                 ? await caseRecord(supabase, caseId)
-                : await summary(supabase));
+                : runId
+                    ? await stage2Record(supabase, runId)
+                    : await summary(supabase));
         }
         if (req.method === "POST") return res.status(200).json(await post(supabase, req));
         res.setHeader("Allow", "GET, POST");

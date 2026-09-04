@@ -93,6 +93,21 @@ test("researcher resolution is separate from immutable provider status", async (
     assert.doesNotMatch(dashboard, /provider_status:\s*["']completed["']/);
 });
 
+test("researcher can inspect the exact frozen Stage 2A request and provider record", async () => {
+    const [dashboard, researcherScript, html] = await Promise.all([
+        readFile(dashboardUrl, "utf8"),
+        readFile(researcherScriptUrl, "utf8"),
+        readFile(new URL("../case-bound-analysis.html", import.meta.url), "utf8")
+    ]);
+    assert.match(dashboard, /stage2_requests_v2/);
+    assert.match(dashboard, /stage2_presentations_v2/);
+    assert.match(dashboard, /frozenRequest:\s*requests\[0\]/);
+    assert.match(researcherScript, /Inspect frozen Stage 2A record/);
+    assert.match(researcherScript, /runId=/);
+    assert.match(html, /P# is not sent to the model/);
+    assert.doesNotMatch(html, /receives only P# \+ preliminary CO/);
+});
+
 test("all new analysis tables are RLS-enabled and browser roles receive no grants", async () => {
     const sql = await readFile(migrationUrl, "utf8");
     const enabled = [...sql.matchAll(/alter table public\.([a-z0-9_]+) enable row level security/g)]

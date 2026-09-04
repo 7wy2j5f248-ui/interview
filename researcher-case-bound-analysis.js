@@ -105,6 +105,7 @@
                 const record = await request({
                     url: `${API}&caseId=${encodeURIComponent(item.id)}`
                 });
+                element("v2RecordTitle").textContent = "Immutable case record";
                 element("v2RecordText").textContent = JSON.stringify(record, null, 2);
                 element("v2RecordDialog").showModal();
             });
@@ -127,6 +128,20 @@
             const text = document.createElement("p");
             text.textContent = `${item.name} — ${item.status}${run ? `; Stage 2A ${run.status}` : ""}${item.blocked_reason ? `; ${item.blocked_reason}` : ""}`;
             panel.appendChild(text);
+            if (run) {
+                const inspect = document.createElement("button");
+                inspect.type = "button";
+                inspect.textContent = "Inspect frozen Stage 2A record";
+                inspect.addEventListener("click", async () => {
+                    const record = await request({
+                        url: `${API}&runId=${encodeURIComponent(run.id)}`
+                    });
+                    element("v2RecordTitle").textContent = "Immutable Stage 2A record";
+                    element("v2RecordText").textContent = JSON.stringify(record, null, 2);
+                    element("v2RecordDialog").showModal();
+                });
+                panel.appendChild(inspect);
+            }
             if (item.status === "open") {
                 const button = document.createElement("button");
                 button.type = "button";
