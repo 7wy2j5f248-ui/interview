@@ -142,41 +142,11 @@ test("real stored corpus participants are returned even before an analysis run e
     assert.match(script, /Real interview data loaded/);
 });
 
-test("AI discussion remains grounded server-side and revisions stay explicit", () => {
-    assert.match(api, /"discuss"/);
-    assert.match(api, /async function discussAnalysis/);
-    assert.match(html, /Discuss this analysis with AI/);
-    assert.match(html, /Apply this revision/);
-    assert.match(script, /action:\s*"save_feedback"/);
-    assert.match(script, /action:\s*"confirm"/);
-    assert.match(script, /action:\s*"archive"/);
+test("platform AI analysis actions are retired and researcher theme text is unrestricted", () => {
+    assert.match(api, /REMOVED_PLATFORM_ANALYSIS_ACTIONS/);
+    assert.match(api, /status\(410\)/);
     assert.match(api, /themeSubject\(req\.body\?\.theme\)/);
-    assert.match(api, /broad one- or two-word concept/);
-});
-
-test("analysis generation is resumable one stored individual case at a time", () => {
-    assert.match(api, /async function startAnalysisGeneration/);
-    assert.match(api, /async function processGenerationBatch/);
-    assert.match(api, /action === "process_generation_batch"/);
-    assert.match(api, /input_token_count === null/);
-    assert.match(script, /while \(canResumeGeneration\(\)\)/);
-    assert.match(script, /action: "process_generation_batch"/);
-    assert.match(script, /Resume individual case reports/);
-    assert.match(script, /Start strict case-by-case analysis/);
-    assert.match(script, /function isCurrentIndividualCaseRun/);
-    assert.match(script, /historical batch run, not a case-by-case analysis/);
-    assert.match(script, /No historical batch is counted as a completed case report/);
-    assert.match(api, /strategy: "individual_case_report"/);
-    assert.match(api, /one_transcript_per_case/);
-    assert.match(api, /buildIndividualCaseBatches/);
-    assert.match(api, /complete_ai_analysis_case/);
-    assert.match(api, /This individual case report was incomplete and remains the current case/);
-    assert.match(script, /function renderIndividualCaseReports/);
-    assert.match(script, /function formOneReady/);
-    assert.match(script, /Form 1 will be generated only after every case report is complete/);
-    assert.match(script, /Open complete report/);
-    assert.match(html, /id="individualCaseReportsList"/);
-    assert.match(html, /processing remains on\s+that case and does not move forward/);
+    assert.doesNotMatch(api, /broad one- or two-word concept/);
 });
 
 test("each worksheet supports a traceable Excel round-trip", () => {

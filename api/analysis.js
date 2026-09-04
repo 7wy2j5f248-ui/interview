@@ -1,4 +1,3 @@
-import OpenAI from "openai";
 import { createClient } from "@supabase/supabase-js";
 import {
     buildIndividualCaseBatches,
@@ -6,7 +5,6 @@ import {
     commaSeparatedList,
     discussAnalysisWithResearcher,
     generateSuggestionsForBatch,
-    isShortThemeSubject,
     prepareParticipantMessages,
     QUALITATIVE_ANALYSIS_MODEL,
     QUALITATIVE_ANALYSIS_VERSION,
@@ -25,7 +23,9 @@ import { authorizeResearcher } from "../server/researcherAuth.js";
 import { normalizeOpenAIModel } from "../server/modelConfiguration.js";
 import { loadParticipantCodeMap } from "../server/participantCodes.js";
 
-const AI_ACTIONS = new Set([
+const REMOVED_PLATFORM_ANALYSIS_ACTIONS = new Set([
+    "generate",
+    "start_generation",
     "process_generation_batch",
     "collect_evidence",
     "discuss"
@@ -75,14 +75,7 @@ function safeId(value, label) {
 
 function themeSubject(value) {
     const theme = typeof value === "string" ? value.trim() : "";
-
-    if (!isShortThemeSubject(theme)) {
-        throw new AnalysisError(
-            400,
-            "Theme must be a broad one- or two-word concept, preferably one word, such as ‘Work’. Put differences such as ‘Overtime’ or ‘Long hours’ under codes."
-        );
-    }
-
+    if (!theme) throw new AnalysisError(400, "Theme is required.");
     return theme;
 }
 
@@ -2132,6 +2125,11 @@ export async function handleAnalysis(
         }
 
         const action = req.body?.action;
+        if (REMOVED_PLATFORM_ANALYSIS_ACTIONS.has(action)) {
+            return res.status(410).json({
+                error: "The platform-created AI analytical generation, evidence selection, discussion, and review actions have been removed."
+            });
+        }
         let runId;
 
         if (action === "generate" || action === "start_generation") {
@@ -2216,15 +2214,6 @@ export default async function handler(req, res) {
         });
     }
 
-    const action = req.body?.action;
-    const requiresOpenAI = req.method === "POST" && AI_ACTIONS.has(action);
-
-    if (requiresOpenAI && !process.env.OPENAI_API_KEY) {
-        return res.status(500).json({
-            error: "Server configuration is incomplete."
-        });
-    }
-
     const supabaseClient = createClient(
         process.env.SUPABASE_URL,
         secretKey,
@@ -2235,13 +2224,9 @@ export default async function handler(req, res) {
             }
         }
     );
-    const openaiClient = requiresOpenAI
-        ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
-        : null;
-
     return handleAnalysis(req, res, {
         supabaseClient,
-        openaiClient,
+        openaiClient: null,
         configuredToken
     });
 }

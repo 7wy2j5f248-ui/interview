@@ -197,8 +197,7 @@ export default async function handler(req, res) {
         && (req.method === "GET"
             || (req.method === "POST"
                 && [
-                    "preflight", "start", "cancel",
-                    "stage2a-preflight", "stage2a-start"
+                    "preflight", "start", "cancel"
                 ]
                     .includes(req.body?.action)))) {
         return handleAdvancedPreliminaryDashboard(req, res);
