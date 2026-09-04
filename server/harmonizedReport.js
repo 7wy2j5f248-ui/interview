@@ -335,7 +335,7 @@ async function loadCaseDisplay(supabase, cohortCases) {
         rowsForValues(
             supabase,
             "stage1_attempts_v2",
-            "id, case_id, attempt_number, status, raw_model_output_text",
+            "id, case_id, attempt_number, status",
             "case_id",
             caseIds,
             "The Stage 1 attempt lineage could not be loaded."
@@ -364,16 +364,40 @@ async function loadCaseDisplay(supabase, cohortCases) {
             latestCompletedAttemptByCase.set(item.case_id, item);
         }
     });
-    const presentations = await rowsForValues(
-        supabase,
-        "stage1_presentations_v2",
-        "attempt_id, presentation_json",
-        "attempt_id",
-        [...latestCompletedAttemptByCase.values()].map(item => item.id),
-        "The Stage 1 presentation lineage could not be loaded."
-    );
+    const genericAttemptIds = cohortCases
+        .filter(item => !pilotByCase.has(item.id))
+        .map(item => latestCompletedAttemptByCase.get(item.id)?.id);
+    const recoveryAttemptIds = cohortCases
+        .filter(item => {
+            const pilot = pilotByCase.get(item.id);
+            const key = pilot
+                ? `${pilot.source_materialization_run_id}:${pilot.source_job_id}`
+                : null;
+            return key && !(pilotMusByKey.get(key) || []).length;
+        })
+        .map(item => latestCompletedAttemptByCase.get(item.id)?.id);
+    const [presentations, recoveryAttempts] = await Promise.all([
+        rowsForValues(
+            supabase,
+            "stage1_presentations_v2",
+            "attempt_id, presentation_json",
+            "attempt_id",
+            genericAttemptIds,
+            "The Stage 1 presentation lineage could not be loaded."
+        ),
+        rowsForValues(
+            supabase,
+            "stage1_attempts_v2",
+            "id, raw_model_output_text",
+            "id",
+            recoveryAttemptIds,
+            "The preserved Stage 1 Meaning Units could not be loaded."
+        )
+    ]);
     const presentationByAttempt = new Map(presentations.map(item =>
         [item.attempt_id, item.presentation_json]));
+    const recoveryByAttempt = new Map(recoveryAttempts.map(item =>
+        [item.id, item.raw_model_output_text]));
     const sessionsByCase = new Map();
     sessions.forEach(item => {
         const values = sessionsByCase.get(item.case_id) || [];
@@ -414,7 +438,7 @@ async function loadCaseDisplay(supabase, cohortCases) {
         const attempt = latestCompletedAttemptByCase.get(analysisCase.id);
         const pilotUnits = pilotKey ? pilotMusByKey.get(pilotKey) || [] : [];
         const preservedUnits = preservedResponseMeaningUnits(
-            attempt?.raw_model_output_text
+            recoveryByAttempt.get(attempt?.id)
         );
         const units = pilotUnits.length
             ? pilotUnits
