@@ -19,6 +19,10 @@ const parallelStage2MigrationUrl = new URL(
     "../supabase/migrations/20260904162000_add_parallel_stage2_harmonization.sql",
     import.meta.url
 );
+const stage2ReplacementMigrationUrl = new URL(
+    "../supabase/migrations/20260904163500_allow_stage2_replacement_runs.sql",
+    import.meta.url
+);
 const dashboardUrl = new URL("../server/caseBoundAnalysisDashboard.js", import.meta.url);
 const researcherScriptUrl = new URL("../researcher-case-bound-analysis.js", import.meta.url);
 
@@ -106,7 +110,7 @@ test("researcher can inspect every exact frozen Stage 2 request and provider rec
     assert.match(dashboard, /stage2_requests_v2/);
     assert.match(dashboard, /stage2_presentations_v2/);
     assert.match(dashboard, /frozenRequest:\s*requests\[0\]/);
-    assert.match(researcherScript, /Inspect frozen Stage \$\{run\.analysis_layer\.toUpperCase\(\)\} record/);
+    assert.match(researcherScript, /Inspect frozen Stage \$\{run\.analysis_layer\.toUpperCase\(\)\} attempt \$\{run\.attempt_number\}/);
     assert.match(researcherScript, /runId=/);
     assert.match(html, /CO → HCO, CA → HCA, and TH → HTH/);
     assert.match(html, /P# is not sent to the model/);
@@ -123,6 +127,18 @@ test("parallel Stage 2 migration freezes isolated CA and TH corpora with private
     assert.match(sql, /claim_next_parallel_stage2_v2_run/);
     assert.match(sql, /unique \(cohort_id, analysis_layer\)/);
     assert.doesNotMatch(sql, /jsonb_build_object\([\s\S]{0,200}'case_id'/);
+});
+
+test("a ceiling-limited Stage 2 response receives a separate researcher-authorized replacement", async () => {
+    const sql = await readFile(stage2ReplacementMigrationUrl, "utf8");
+    assert.match(sql, /attempt_number integer not null default 1/);
+    assert.match(sql, /prior_run_id uuid references public\.stage2_runs_v2/);
+    assert.match(sql, /alter column max_output_tokens drop not null/);
+    assert.match(sql, /authorize_stage2_v2_replacement/);
+    assert.match(sql, /Only a terminal Stage 2 run can receive a replacement/);
+    assert.match(sql, /prior_run\.corpus_snapshot_json/);
+    assert.match(sql, /prior_run\.corpus_snapshot_sha256/);
+    assert.match(sql, /prior_run\.reasoning_effort, null/);
 });
 
 test("all new analysis tables are RLS-enabled and browser roles receive no grants", async () => {

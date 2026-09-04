@@ -128,19 +128,19 @@
                 .sort((left, right) => left.analysis_layer.localeCompare(right.analysis_layer));
             const text = document.createElement("p");
             const runStatus = runs.map(run =>
-                `Stage ${run.analysis_layer.toUpperCase()} ${run.status}`).join("; ");
+                `Stage ${run.analysis_layer.toUpperCase()} attempt ${run.attempt_number} ${run.status}`).join("; ");
             text.textContent = `${item.name} — ${item.status}${runStatus ? `; ${runStatus}` : ""}${item.blocked_reason ? `; ${item.blocked_reason}` : ""}`;
             panel.appendChild(text);
             runs.forEach(run => {
                 const inspect = document.createElement("button");
                 inspect.type = "button";
-                inspect.textContent = `Inspect frozen Stage ${run.analysis_layer.toUpperCase()} record`;
+                inspect.textContent = `Inspect frozen Stage ${run.analysis_layer.toUpperCase()} attempt ${run.attempt_number}`;
                 inspect.addEventListener("click", async () => {
                     const record = await request({
                         url: `${API}&runId=${encodeURIComponent(run.id)}`
                     });
                     element("v2RecordTitle").textContent =
-                        `Immutable Stage ${run.analysis_layer.toUpperCase()} record`;
+                        `Immutable Stage ${run.analysis_layer.toUpperCase()} attempt ${run.attempt_number}`;
                     element("v2RecordText").textContent = JSON.stringify(record, null, 2);
                     element("v2RecordDialog").showModal();
                 });
