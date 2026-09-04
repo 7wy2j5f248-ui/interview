@@ -14,6 +14,11 @@ import {
     scheduleCaseBoundAnalysis,
     scheduleParallelStage2
 } from "./stagedAnalysisWorker.js";
+import {
+    harmonizedReportFilename,
+    loadHarmonizedReport,
+    writeHarmonizedReportWorkbook
+} from "./harmonizedReport.js";
 
 function client() {
     return createClient(
@@ -190,6 +195,44 @@ async function stage2Record(supabase, runId) {
     };
 }
 
+async function downloadHarmonizedReport(supabase, req, res) {
+    const data = await loadHarmonizedReport(
+        supabase,
+        typeof req.query?.cohortId === "string" ? req.query.cohortId : ""
+    );
+    res.statusCode = 200;
+    res.setHeader(
+        "Content-Type",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${harmonizedReportFilename(data)}"`
+    );
+    res.setHeader("X-Harmonized-Report-Cases", data.cases.length);
+    res.setHeader("X-Harmonized-Codes", data.layers["2a"].vocabulary.length);
+    res.setHeader(
+        "X-Harmonized-Code-Mentions",
+        data.layers["2a"].totalSourceMentions
+    );
+    res.setHeader(
+        "X-Harmonized-Categories",
+        data.layers["2b"].vocabulary.length
+    );
+    res.setHeader(
+        "X-Harmonized-Category-Mentions",
+        data.layers["2b"].totalSourceMentions
+    );
+    res.setHeader("X-Harmonized-Themes", data.layers["2c"].vocabulary.length);
+    res.setHeader(
+        "X-Harmonized-Theme-Mentions",
+        data.layers["2c"].totalSourceMentions
+    );
+    res.setHeader("X-Harmonized-New-AI-API-Calls", "0");
+    await writeHarmonizedReportWorkbook(res, data);
+    return undefined;
+}
+
 async function post(supabase, req) {
     const body = req.body || {};
     if (["preview_configuration", "activate_configuration"].includes(body.action)) {
@@ -261,6 +304,7 @@ async function post(supabase, req) {
 }
 
 export async function handleCaseBoundAnalysisDashboard(req, res) {
+    res.setHeader("Cache-Control", "private, no-store, no-cache, must-revalidate");
     const authorization = authorizeResearcher(
         req,
         process.env.RESEARCHER_DASHBOARD_TOKEN
@@ -274,6 +318,9 @@ export async function handleCaseBoundAnalysisDashboard(req, res) {
     const supabase = client();
     try {
         if (req.method === "GET") {
+            if (req.query?.download === "harmonized-report-xlsx") {
+                return await downloadHarmonizedReport(supabase, req, res);
+            }
             const caseId = typeof req.query?.caseId === "string"
                 ? req.query.caseId.trim() : "";
             const runId = typeof req.query?.runId === "string"

@@ -61,6 +61,50 @@
         return node;
     }
 
+    async function downloadHarmonizedReport(cohort, button) {
+        button.disabled = true;
+        status.textContent = "Preparing the five-form Harmonized Report from the three exact provider outputs…";
+        status.className = "muted";
+        try {
+            const response = await fetch(
+                `${API}&download=harmonized-report-xlsx&cohortId=${encodeURIComponent(cohort.id)}&_=${Date.now()}`,
+                {
+                    headers: { Authorization: `Bearer ${token()}` },
+                    cache: "no-store"
+                }
+            );
+            if (!response.ok) {
+                const body = await response.json().catch(() => ({}));
+                throw new Error(body.error || "The Harmonized Report could not be prepared.");
+            }
+            const disposition = response.headers.get("Content-Disposition") || "";
+            const filename = disposition.match(/filename="([^"]+)"/u)?.[1]
+                || "harmonized-report.xlsx";
+            const blob = await response.blob();
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            URL.revokeObjectURL(url);
+            const cases = response.headers.get("X-Harmonized-Report-Cases") || "all";
+            const hco = response.headers.get("X-Harmonized-Codes") || "—";
+            const coMentions = response.headers.get("X-Harmonized-Code-Mentions") || "—";
+            const hca = response.headers.get("X-Harmonized-Categories") || "—";
+            const caMentions = response.headers.get("X-Harmonized-Category-Mentions") || "—";
+            const hth = response.headers.get("X-Harmonized-Themes") || "—";
+            const thMentions = response.headers.get("X-Harmonized-Theme-Mentions") || "—";
+            status.textContent = `Harmonized Report downloaded for ${cases} cases: ${hco} HCO from ${coMentions} preliminary CO mentions; ${hca} HCA from ${caMentions} preliminary CA mentions; ${hth} HTH from ${thMentions} preliminary TH mentions. No AI call or analytical review was made.`;
+        } catch (error) {
+            status.textContent = error.message;
+            status.className = "error";
+        } finally {
+            button.disabled = false;
+        }
+    }
+
     function renderCases() {
         const host = element("v2Cases");
         if (!state.cases.length) {
@@ -150,6 +194,23 @@
                 panel.appendChild(rerun);
                 panel.appendChild(document.createTextNode(" "));
             });
+            const latestByLayer = new Map();
+            runs.forEach(run => {
+                const current = latestByLayer.get(run.analysis_layer);
+                if (!current || Number(run.attempt_number) > Number(current.attempt_number)) {
+                    latestByLayer.set(run.analysis_layer, run);
+                }
+            });
+            const reportReady = ["2a", "2b", "2c"].every(layer =>
+                latestByLayer.get(layer)?.status === "completed");
+            if (reportReady) {
+                const download = document.createElement("button");
+                download.type = "button";
+                download.textContent = "Download Harmonized Report";
+                download.addEventListener("click", () =>
+                    downloadHarmonizedReport(item, download));
+                panel.appendChild(download);
+            }
             if (item.status === "open") {
                 const button = document.createElement("button");
                 button.type = "button";
