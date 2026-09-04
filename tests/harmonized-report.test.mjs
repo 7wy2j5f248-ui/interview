@@ -6,6 +6,7 @@ import test from "node:test";
 import ExcelJS from "exceljs";
 import {
     assembleHarmonizedReport,
+    extractCompleteJsonArray,
     harmonizedReportFilename,
     HARMONIZED_SHEET_NAMES,
     writeHarmonizedReportWorkbook
@@ -106,6 +107,15 @@ test("Harmonized Report combines provider mappings by case and counts source men
     assert.equal(data.layers["2b"].caseItems.get("case-1")[0].sourceMentions, 1);
     assert.equal(data.layers["2c"].caseItems.get("case-2").length, 0);
     assert.equal(data.newAiApiCallCount, 0);
+});
+
+test("complete Meaning Unit arrays remain usable when later provider text is incomplete", () => {
+    const raw = "{\"case_report\":{\"meaning_units\":[{\"meaning_unit_number\":1,\"exact_source_text\":\"Preserved MU\"}],\"preliminary_codes\":[{\"code_number\":1";
+    assert.deepEqual(extractCompleteJsonArray(raw, "meaning_units"), [{
+        meaning_unit_number: 1,
+        exact_source_text: "Preserved MU"
+    }]);
+    assert.equal(extractCompleteJsonArray(raw, "preliminary_codes"), null);
 });
 
 test("Harmonized workbook has five lean forms and preserves exact model text", async () => {

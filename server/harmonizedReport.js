@@ -246,6 +246,54 @@ function presentationMeaningUnits(presentation) {
     })).filter(item => item.englishText);
 }
 
+export function extractCompleteJsonArray(source, key) {
+    if (typeof source !== "string" || !source || typeof key !== "string" || !key) {
+        return null;
+    }
+    const keyPosition = source.indexOf(`"${key}"`);
+    if (keyPosition < 0) return null;
+    const arrayPosition = source.indexOf("[", keyPosition + key.length + 2);
+    if (arrayPosition < 0) return null;
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+    for (let index = arrayPosition; index < source.length; index += 1) {
+        const character = source[index];
+        if (inString) {
+            if (escaped) escaped = false;
+            else if (character === "\\") escaped = true;
+            else if (character === "\"") inString = false;
+        } else if (character === "\"") inString = true;
+        else if (character === "[") depth += 1;
+        else if (character === "]") {
+            depth -= 1;
+            if (depth === 0) {
+                try {
+                    const result = JSON.parse(source.slice(arrayPosition, index + 1));
+                    return Array.isArray(result) ? result : null;
+                } catch {
+                    return null;
+                }
+            }
+        }
+    }
+    return null;
+}
+
+function preservedResponseMeaningUnits(rawModelOutputText) {
+    const units = extractCompleteJsonArray(rawModelOutputText, "meaning_units") || [];
+    return units.map((item, index) => ({
+        position: Number(
+            item?.meaning_unit_number ?? item?.unit_number ?? index + 1
+        ),
+        englishText: item?.exact_source_text
+            ?? item?.english_text
+            ?? item?.text
+            ?? ""
+    })).filter(item => typeof item.englishText === "string"
+        && item.englishText.trim());
+}
+
 async function loadCaseDisplay(supabase, cohortCases) {
     const caseIds = cohortCases.map(item => item.id);
     const pilotAssumptions = await rowsForValues(
@@ -287,7 +335,7 @@ async function loadCaseDisplay(supabase, cohortCases) {
         rowsForValues(
             supabase,
             "stage1_attempts_v2",
-            "id, case_id, attempt_number, status",
+            "id, case_id, attempt_number, status, raw_model_output_text",
             "case_id",
             caseIds,
             "The Stage 1 attempt lineage could not be loaded."
@@ -364,9 +412,15 @@ async function loadCaseDisplay(supabase, cohortCases) {
         const descriptor = descriptorBySession.get(firstSession?.session_id) || {};
         const { session_id: ignoredSessionId, ...demographics } = descriptor;
         const attempt = latestCompletedAttemptByCase.get(analysisCase.id);
-        const units = pilotKey && pilotMusByKey.has(pilotKey)
-            ? pilotMusByKey.get(pilotKey)
-            : presentationMeaningUnits(presentationByAttempt.get(attempt?.id));
+        const pilotUnits = pilotKey ? pilotMusByKey.get(pilotKey) || [] : [];
+        const preservedUnits = preservedResponseMeaningUnits(
+            attempt?.raw_model_output_text
+        );
+        const units = pilotUnits.length
+            ? pilotUnits
+            : preservedUnits.length
+                ? preservedUnits
+                : presentationMeaningUnits(presentationByAttempt.get(attempt?.id));
         units.forEach(unit => meaningUnits.push({
             caseId: analysisCase.id,
             position: unit.position,
