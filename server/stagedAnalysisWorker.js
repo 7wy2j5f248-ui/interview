@@ -77,6 +77,23 @@ export async function continueCaseBoundAnalysis(baseUrl) {
     }
 }
 
+export async function continueParallelStage2(baseUrl) {
+    const secret = configuredWorkerSecret();
+    if (!secret || !baseUrl) return;
+    await new Promise(resolve => setTimeout(resolve, CASE_BOUND_POLL_DELAY_MS));
+    const response = await fetch(`${baseUrl}${WORKER_PATH}`, {
+        method: "POST",
+        headers: {
+            Authorization: `Bearer ${secret}`,
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ worker: "case-bound-parallel-stage2-v2-continuation" })
+    });
+    if (!response.ok) {
+        throw new Error(`Parallel Stage 2 continuation returned ${response.status}.`);
+    }
+}
+
 export function scheduleStage2AHarmonization(req, runId) {
     const secret = configuredWorkerSecret();
     const baseUrl = requestBaseUrl(req);

@@ -15,6 +15,10 @@ const sourceLineageIndexMigrationUrl = new URL(
     "../supabase/migrations/20260904141251_index_stage2_source_lineage_case.sql",
     import.meta.url
 );
+const parallelStage2MigrationUrl = new URL(
+    "../supabase/migrations/20260904162000_add_parallel_stage2_harmonization.sql",
+    import.meta.url
+);
 const dashboardUrl = new URL("../server/caseBoundAnalysisDashboard.js", import.meta.url);
 const researcherScriptUrl = new URL("../researcher-case-bound-analysis.js", import.meta.url);
 
@@ -93,7 +97,7 @@ test("researcher resolution is separate from immutable provider status", async (
     assert.doesNotMatch(dashboard, /provider_status:\s*["']completed["']/);
 });
 
-test("researcher can inspect the exact frozen Stage 2A request and provider record", async () => {
+test("researcher can inspect every exact frozen Stage 2 request and provider record", async () => {
     const [dashboard, researcherScript, html] = await Promise.all([
         readFile(dashboardUrl, "utf8"),
         readFile(researcherScriptUrl, "utf8"),
@@ -102,11 +106,23 @@ test("researcher can inspect the exact frozen Stage 2A request and provider reco
     assert.match(dashboard, /stage2_requests_v2/);
     assert.match(dashboard, /stage2_presentations_v2/);
     assert.match(dashboard, /frozenRequest:\s*requests\[0\]/);
-    assert.match(researcherScript, /Inspect frozen Stage 2A record/);
+    assert.match(researcherScript, /Inspect frozen Stage \$\{run\.analysis_layer\.toUpperCase\(\)\} record/);
     assert.match(researcherScript, /runId=/);
-    assert.match(html, /receives only preliminary CO from the entire cohort/);
+    assert.match(html, /CO → HCO, CA → HCA, and TH → HTH/);
     assert.match(html, /P# is not sent to the model/);
     assert.doesNotMatch(html, /receives only P# \+ preliminary CO/);
+});
+
+test("parallel Stage 2 migration freezes isolated CA and TH corpora with private lineage", async () => {
+    const sql = await readFile(parallelStage2MigrationUrl, "utf8");
+    assert.match(sql, /analysis_layer in \('2a', '2b', '2c'\)/);
+    assert.match(sql, /PCA.*PTH/);
+    assert.match(sql, /expected exactly 1,927 preliminary CA fixtures/);
+    assert.match(sql, /expected exactly 970 preliminary TH fixtures/);
+    assert.match(sql, /stage2_source_item_lineage_v2_immutable/);
+    assert.match(sql, /claim_next_parallel_stage2_v2_run/);
+    assert.match(sql, /unique \(cohort_id, analysis_layer\)/);
+    assert.doesNotMatch(sql, /jsonb_build_object\([\s\S]{0,200}'case_id'/);
 });
 
 test("all new analysis tables are RLS-enabled and browser roles receive no grants", async () => {

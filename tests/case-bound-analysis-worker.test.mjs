@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { processCaseBoundAnalysisTick } from "../server/caseBoundAnalysis.js";
+import {
+    processCaseBoundAnalysisTick,
+    processParallelStage2Tick
+} from "../server/caseBoundAnalysis.js";
 
 function completedOutput() {
     return JSON.stringify({
@@ -96,4 +99,49 @@ test("a persistence fault never relabels an obtained provider response as failed
         providerClientFactory: () => client
     }), /record_stage1_v2_provider_response failed/);
     assert.equal(calls.includes("fail_stage1_v2_attempt"), false);
+});
+
+test("parallel worker freezes and submits one isolated Stage 2B request", async () => {
+    const calls = [];
+    const claim = {
+        action: "submit", analysisLayer: "2b", runId: "run-2b",
+        provider: "openai", model: "gpt-5.6-sol", reasoningEffort: "high",
+        maxOutputTokens: 30000, corpusSnapshotSha256: "e".repeat(64),
+        corpusSnapshotJson: {
+            cohortId: "cohort-1",
+            preliminary_categories: [{ source_ref: "PCA000001", label: "Sleep routines" }]
+        }
+    };
+    const supabase = { async rpc(name) {
+        calls.push(name);
+        if (name === "claim_next_parallel_stage2_v2_run") {
+            return { data: claim, error: null };
+        }
+        return { data: true, error: null };
+    } };
+    let submissions = 0;
+    const client = { responses: { async create(request, options) {
+        submissions += 1;
+        assert.ok(calls.includes("freeze_stage2_v2_request"));
+        assert.match(request.input[0].content, /PCA000001/);
+        assert.equal(options.idempotencyKey, "pli-whole-cohort-stage2b-run-2b");
+        return {
+            id: "resp-2b", status: "completed",
+            output_text: JSON.stringify({
+                harmonized_categories: [{
+                    id: "HCA001", label: "Sleep routines",
+                    source_categories: ["PCA000001"]
+                }]
+            })
+        };
+    } } };
+    const result = await processParallelStage2Tick(supabase, {
+        providerClientFactory: () => client
+    });
+    assert.equal(submissions, 1);
+    assert.equal(result.status, "completed");
+    assert.deepEqual(calls, [
+        "claim_next_parallel_stage2_v2_run", "freeze_stage2_v2_request",
+        "record_stage2_v2_provider_response", "save_stage2_v2_presentation"
+    ]);
 });

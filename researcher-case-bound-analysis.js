@@ -124,24 +124,29 @@
         (state.cohorts || []).forEach(item => {
             const panel = document.createElement("div");
             panel.className = "contract";
-            const run = state.stage2Runs.find(candidate => candidate.cohort_id === item.id);
+            const runs = state.stage2Runs.filter(candidate => candidate.cohort_id === item.id)
+                .sort((left, right) => left.analysis_layer.localeCompare(right.analysis_layer));
             const text = document.createElement("p");
-            text.textContent = `${item.name} — ${item.status}${run ? `; Stage 2A ${run.status}` : ""}${item.blocked_reason ? `; ${item.blocked_reason}` : ""}`;
+            const runStatus = runs.map(run =>
+                `Stage ${run.analysis_layer.toUpperCase()} ${run.status}`).join("; ");
+            text.textContent = `${item.name} — ${item.status}${runStatus ? `; ${runStatus}` : ""}${item.blocked_reason ? `; ${item.blocked_reason}` : ""}`;
             panel.appendChild(text);
-            if (run) {
+            runs.forEach(run => {
                 const inspect = document.createElement("button");
                 inspect.type = "button";
-                inspect.textContent = "Inspect frozen Stage 2A record";
+                inspect.textContent = `Inspect frozen Stage ${run.analysis_layer.toUpperCase()} record`;
                 inspect.addEventListener("click", async () => {
                     const record = await request({
                         url: `${API}&runId=${encodeURIComponent(run.id)}`
                     });
-                    element("v2RecordTitle").textContent = "Immutable Stage 2A record";
+                    element("v2RecordTitle").textContent =
+                        `Immutable Stage ${run.analysis_layer.toUpperCase()} record`;
                     element("v2RecordText").textContent = JSON.stringify(record, null, 2);
                     element("v2RecordDialog").showModal();
                 });
                 panel.appendChild(inspect);
-            }
+                panel.appendChild(document.createTextNode(" "));
+            });
             if (item.status === "open") {
                 const button = document.createElement("button");
                 button.type = "button";

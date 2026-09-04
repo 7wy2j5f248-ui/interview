@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
     buildCaseBoundStage1Request,
     buildCaseBoundStage2ARequest,
+    buildCaseBoundParallelStage2Request,
     classifyProviderOutcome,
     explicitStage1Presentation,
     stage1ContractSnapshot
@@ -43,6 +44,25 @@ test("Stage 1 freezes one complete case and one connected MU to TH contract", ()
         "meaning_units", "preliminary_codes", "preliminary_categories",
         "preliminary_tentative_themes"
     ]);
+});
+
+test("Stage 2B and 2C independently harmonize only their matching preliminary layer", () => {
+    const stage2b = buildCaseBoundParallelStage2Request("2b", {
+        cohortId: "cohort-1",
+        corpusSha256: "c".repeat(64),
+        preliminary_categories: [{ source_ref: "PCA000001", label: "Sleep routines" }]
+    }, configuration, { requestId: "stage2b-fixed" });
+    const stage2c = buildCaseBoundParallelStage2Request("2c", {
+        cohortId: "cohort-1",
+        corpusSha256: "d".repeat(64),
+        preliminary_themes: [{ source_ref: "PTH000001", statement: "Sleep adapts to constraints" }]
+    }, configuration, { requestId: "stage2c-fixed" });
+    assert.match(stage2b.request.input[0].content, /PCA000001/);
+    assert.doesNotMatch(stage2b.request.input[0].content, /PTH|P00001|preliminary_codes/);
+    assert.match(stage2c.request.input[0].content, /PTH000001/);
+    assert.doesNotMatch(stage2c.request.input[0].content, /PCA|P00001|preliminary_codes/);
+    assert.ok(stage2b.request.text.format.schema.properties.harmonized_categories);
+    assert.ok(stage2c.request.text.format.schema.properties.harmonized_themes);
 });
 
 test("provider outcome is classified only from objective provider status", () => {

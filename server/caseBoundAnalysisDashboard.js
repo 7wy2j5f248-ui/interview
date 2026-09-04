@@ -93,7 +93,7 @@ async function summary(supabase) {
                 .select("id, case_id, attempt_number, status, researcher_reason, queued_at, provider_status, terminal_at, technical_error, completion_authority, completion_record")
                 .order("attempt_number"), "Stage 1 attempts could not be loaded."),
             requireRows(supabase.from("stage2_runs_v2")
-                .select("id, cohort_id, status, provider, model, reasoning_effort, queued_at, provider_status, terminal_at, technical_error")
+                .select("id, cohort_id, analysis_layer, status, provider, model, reasoning_effort, queued_at, provider_status, terminal_at, technical_error")
                 .order("queued_at", { ascending: false }), "Stage 2A runs could not be loaded.")
         ]);
     return {

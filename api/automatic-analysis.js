@@ -2,12 +2,16 @@ import { waitUntil } from "@vercel/functions";
 import { createClient } from "@supabase/supabase-js";
 import {
     continueCaseBoundAnalysis,
+    continueParallelStage2,
     continueStage2AHarmonization,
     scheduleCaseBoundAnalysis,
     stagedAnalysisBaseUrl,
     stagedAnalysisWorkerRequestIsAuthorized
 } from "../server/stagedAnalysisWorker.js";
-import { processCaseBoundAnalysisTick } from "../server/caseBoundAnalysis.js";
+import {
+    processCaseBoundAnalysisTick,
+    processParallelStage2Tick
+} from "../server/caseBoundAnalysis.js";
 import { handleCaseBoundAnalysisDashboard } from "../server/caseBoundAnalysisDashboard.js";
 import {
     availableAdvancedPreliminaryWorkerConcurrency,
@@ -166,6 +170,22 @@ async function processCaseBoundAndContinue(req) {
     return result;
 }
 
+async function processParallelStage2AndContinue(req) {
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const secretKey = process.env.SUPABASE_SECRET_KEY;
+    if (!supabaseUrl || !secretKey) {
+        throw new Error("Parallel Stage 2 configuration is incomplete.");
+    }
+    const supabaseClient = createClient(supabaseUrl, secretKey, {
+        auth: { persistSession: false, autoRefreshToken: false }
+    });
+    const result = await processParallelStage2Tick(supabaseClient);
+    if (result.claimed) {
+        await continueParallelStage2(stagedAnalysisBaseUrl(req));
+    }
+    return result;
+}
+
 export default async function handler(req, res) {
     if (req.query?.view === "case-bound-v2") {
         return handleCaseBoundAnalysisDashboard(req, res);
@@ -273,6 +293,20 @@ export default async function handler(req, res) {
         });
     }
 
+    if (req.body?.worker === "authorized-case-bound-parallel-initial-wake") {
+        waitUntil(Promise.all([
+            processCaseBoundAndContinue(req),
+            processParallelStage2AndContinue(req),
+            processParallelStage2AndContinue(req)
+        ]).catch(error => {
+            console.error("Authorized parallel Stage 2 wake stopped:", error);
+        }));
+        return res.status(202).json({
+            accepted: true,
+            processing: "database_authorized_stage2a_2b_2c_parallel_wake"
+        });
+    }
+
     if (req.body?.worker === "translation") {
         if (!transcriptTranslationRequestIsAuthorized(req)) {
             return res.status(401).json({ error: "Unauthorized." });
@@ -301,6 +335,19 @@ export default async function handler(req, res) {
         return res.status(202).json({
             accepted: true,
             processing: "case_bound_stage1_then_objective_stage2a_barrier"
+        });
+    }
+
+    if (req.body?.worker === "case-bound-parallel-stage2-v2-continuation") {
+        if (!stagedAnalysisWorkerRequestIsAuthorized(req)) {
+            return res.status(401).json({ error: "Unauthorized." });
+        }
+        waitUntil(processParallelStage2AndContinue(req).catch(error => {
+            console.error("Parallel Stage 2 worker stopped:", error);
+        }));
+        return res.status(202).json({
+            accepted: true,
+            processing: "one_parallel_whole_corpus_stage2_response"
         });
     }
 

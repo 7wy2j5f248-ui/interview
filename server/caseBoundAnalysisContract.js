@@ -5,6 +5,8 @@ export const CASE_BOUND_ANALYSIS_VERSION = "case-bound-stage1-v1";
 export const CASE_BOUND_PROMPT_VERSION = "case-bound-mu-co-ca-th-v1";
 export const CASE_BOUND_CONTRACT_VERSION = "pli-case-bound-analysis-v1";
 export const STAGE2A_PROMPT_VERSION = "whole-cohort-hco-v1";
+export const STAGE2B_PROMPT_VERSION = "whole-cohort-hca-v1";
+export const STAGE2C_PROMPT_VERSION = "whole-cohort-hth-v1";
 
 export const STAGE1_REASONING_EFFORTS = Object.freeze([
     "none", "minimal", "low", "medium", "high", "xhigh"
@@ -129,6 +131,54 @@ export const CASE_BOUND_STAGE2A_SCHEMA = Object.freeze({
         }
     },
     required: ["harmonized_codes"],
+    additionalProperties: false
+});
+
+export const CASE_BOUND_STAGE2B_SCHEMA = Object.freeze({
+    type: "object",
+    properties: {
+        harmonized_categories: {
+            type: "array",
+            items: {
+                type: "object",
+                properties: {
+                    id: { type: "string", pattern: "^HCA[0-9]{3,}$" },
+                    label: { type: "string", minLength: 1 },
+                    source_categories: {
+                        type: "array", minItems: 1,
+                        items: { type: "string", pattern: "^PCA[0-9]{6,}$" }
+                    }
+                },
+                required: ["id", "label", "source_categories"],
+                additionalProperties: false
+            }
+        }
+    },
+    required: ["harmonized_categories"],
+    additionalProperties: false
+});
+
+export const CASE_BOUND_STAGE2C_SCHEMA = Object.freeze({
+    type: "object",
+    properties: {
+        harmonized_themes: {
+            type: "array",
+            items: {
+                type: "object",
+                properties: {
+                    id: { type: "string", pattern: "^HTH[0-9]{3,}$" },
+                    statement: { type: "string", minLength: 1 },
+                    source_themes: {
+                        type: "array", minItems: 1,
+                        items: { type: "string", pattern: "^PTH[0-9]{6,}$" }
+                    }
+                },
+                required: ["id", "statement", "source_themes"],
+                additionalProperties: false
+            }
+        }
+    },
+    required: ["harmonized_themes"],
     additionalProperties: false
 });
 
@@ -280,6 +330,83 @@ export function buildCaseBoundStage2ARequest(corpusSnapshot, configuration, {
     return { requestId, request, requestSha256: sha256(request) };
 }
 
+const parallelStage2Contracts = Object.freeze({
+    "2b": {
+        sourceField: "preliminary_categories",
+        sourceLabel: "preliminary CA",
+        sourceObject: "Category label",
+        outputLabel: "Harmonized Category",
+        schemaName: "pli_whole_cohort_harmonized_categories",
+        schema: CASE_BOUND_STAGE2B_SCHEMA
+    },
+    "2c": {
+        sourceField: "preliminary_themes",
+        sourceLabel: "preliminary TH",
+        sourceObject: "Theme statement",
+        outputLabel: "Harmonized Theme",
+        schemaName: "pli_whole_cohort_harmonized_themes",
+        schema: CASE_BOUND_STAGE2C_SCHEMA
+    }
+});
+
+export function buildCaseBoundParallelStage2Request(
+    analysisLayer,
+    corpusSnapshot,
+    configuration,
+    { requestId = randomUUID() } = {}
+) {
+    const contract = parallelStage2Contracts[analysisLayer];
+    if (!contract) throw new Error("Choose Stage 2B or Stage 2C.");
+    const model = normalizeAnalysisModel(configuration?.model);
+    const reasoningEffort = normalizeStage1ReasoningEffort(
+        configuration?.reasoningEffort
+    );
+    const maxOutputTokens = normalizeStage1OutputAllowance(
+        configuration?.maxOutputTokens
+    );
+    const cohortId = requiredText(corpusSnapshot?.cohortId, "Cohort ID");
+    const preliminaryItems = corpusSnapshot?.[contract.sourceField];
+    if (!Array.isArray(preliminaryItems) || !preliminaryItems.length) {
+        throw new Error(`The frozen whole-cohort ${contract.sourceLabel} source is required.`);
+    }
+    const request = {
+        model,
+        store: true,
+        background: true,
+        max_output_tokens: maxOutputTokens,
+        reasoning: { effort: reasoningEffort },
+        text: {
+            verbosity: "medium",
+            format: {
+                type: "json_schema",
+                name: contract.schemaName,
+                strict: true,
+                schema: contract.schema
+            }
+        },
+        metadata: {
+            pli_operation: `whole_cohort_stage${analysisLayer}`,
+            pli_cohort_id: cohortId,
+            pli_request_id: requestId
+        },
+        input: [{
+            role: "user",
+            content: [
+                `PLI Stage ${analysisLayer.toUpperCase()} contract ${CASE_BOUND_CONTRACT_VERSION}.`,
+                `Harmonize preliminary ${contract.sourceObject}s across the entire closed cohort in one response.`,
+                `Use only the supplied compact source reference plus ${contract.sourceObject}. P#, transcript, Meaning Unit, demographic, and every other analytical layer are unavailable and prohibited.`,
+                `Map every compact source reference to exactly one ${contract.outputLabel}. The database retains case provenance outside this model request. Do not validate, repair, or revise Stage 1.`,
+                `FROZEN WHOLE-COHORT ${contract.sourceLabel.toUpperCase()} SOURCE\n` + JSON.stringify({
+                    cohort_id: cohortId,
+                    corpus_sha256: corpusSnapshot.corpusSha256,
+                    [contract.sourceField]: preliminaryItems
+                })
+            ].join("\n\n")
+        }]
+    };
+    return { requestId, request, requestSha256: sha256(request) };
+}
+
 export function providerResponseText(response) {
     if (typeof response?.output_text === "string") return response.output_text;
     return (response?.output || []).flatMap(item =>
@@ -313,6 +440,16 @@ export function explicitStage2APresentation(rawText) {
     const parsed = JSON.parse(requiredText(rawText, "Exact provider output"));
     if (!Array.isArray(parsed?.harmonized_codes)) {
         throw new Error("The completed response does not expose Harmonized Codes.");
+    }
+    return parsed;
+}
+
+export function explicitParallelStage2Presentation(analysisLayer, rawText) {
+    const parsed = JSON.parse(requiredText(rawText, "Exact provider output"));
+    const field = analysisLayer === "2b" ? "harmonized_categories"
+        : analysisLayer === "2c" ? "harmonized_themes" : null;
+    if (!field || !Array.isArray(parsed?.[field])) {
+        throw new Error(`The completed Stage ${String(analysisLayer).toUpperCase()} response does not expose its defined harmonized output.`);
     }
     return parsed;
 }

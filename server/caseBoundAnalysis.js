@@ -2,9 +2,11 @@ import { createAnalysisProviderClient } from "./analysisProvider.js";
 import {
     buildCaseBoundStage1Request,
     buildCaseBoundStage2ARequest,
+    buildCaseBoundParallelStage2Request,
     classifyProviderOutcome,
     explicitStage1Presentation,
     explicitStage2APresentation,
+    explicitParallelStage2Presentation,
     providerResponseText
 } from "./caseBoundAnalysisContract.js";
 
@@ -137,7 +139,9 @@ async function saveStage2Outcome(supabase, claim, response) {
     let presentation = null;
     let materializationError = null;
     try {
-        presentation = explicitStage2APresentation(rawText);
+        presentation = claim.analysisLayer === "2b" || claim.analysisLayer === "2c"
+            ? explicitParallelStage2Presentation(claim.analysisLayer, rawText)
+            : explicitStage2APresentation(rawText);
     } catch (error) {
         materializationError = technicalMessage(error);
     }
@@ -163,11 +167,16 @@ async function processStage2Claim(supabase, claim, providerClientFactory) {
                 ...claim.corpusSnapshotJson,
                 corpusSha256: claim.corpusSnapshotSha256
             };
-            const frozen = buildCaseBoundStage2ARequest(corpus, {
+            const configuration = {
                 model: claim.model,
                 reasoningEffort: claim.reasoningEffort,
                 maxOutputTokens: claim.maxOutputTokens
-            });
+            };
+            const frozen = claim.analysisLayer === "2b" || claim.analysisLayer === "2c"
+                ? buildCaseBoundParallelStage2Request(
+                    claim.analysisLayer, corpus, configuration
+                )
+                : buildCaseBoundStage2ARequest(corpus, configuration);
             await callRpc(supabase, "freeze_stage2_v2_request", {
                 p_run_id: claim.runId,
                 p_provider_request_id: frozen.requestId,
@@ -175,7 +184,7 @@ async function processStage2Claim(supabase, claim, providerClientFactory) {
                 p_request_sha256: frozen.requestSha256
             });
             response = await client.responses.create(frozen.request, {
-                idempotencyKey: `pli-whole-cohort-stage2a-${claim.runId}`
+                idempotencyKey: `pli-whole-cohort-stage${claim.analysisLayer || "2a"}-${claim.runId}`
             });
         }
     } catch (error) {
@@ -186,6 +195,18 @@ async function processStage2Claim(supabase, claim, providerClientFactory) {
         return { claimed: true, layer: "stage2a", status: "failed", active: false };
     }
     return saveStage2Outcome(supabase, claim, response);
+}
+
+export async function processParallelStage2Tick(
+    supabase,
+    {
+        providerClientFactory = provider =>
+            createAnalysisProviderClient(provider).client
+    } = {}
+) {
+    const claim = await callRpc(supabase, "claim_next_parallel_stage2_v2_run");
+    if (!claim) return { claimed: false, active: false };
+    return processStage2Claim(supabase, claim, providerClientFactory);
 }
 
 export async function processCaseBoundAnalysisTick(
