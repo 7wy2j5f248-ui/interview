@@ -10,7 +10,10 @@ import {
     publicAnalysisProviderCatalog
 } from "./analysisProvider.js";
 import { configuredStage1Models } from "./analysisModelCatalog.js";
-import { scheduleCaseBoundAnalysis } from "./stagedAnalysisWorker.js";
+import {
+    scheduleCaseBoundAnalysis,
+    scheduleParallelStage2
+} from "./stagedAnalysisWorker.js";
 
 function client() {
     return createClient(
@@ -236,9 +239,11 @@ async function post(supabase, req) {
             p_actor: "researcher"
         }],
         close_cohort: ["close_analysis_cohort_v2", { p_cohort_id: body.cohortId }],
-        authorize_new_attempt: ["authorize_stage1_v2_new_attempt", {
-            p_case_id: body.caseId,
-            p_reason: body.reason
+        run_stage1_again: ["create_stage1_v2_attempt", {
+            p_case_id: body.caseId
+        }],
+        run_stage2_again: ["create_stage2_v2_attempt", {
+            p_source_run_id: body.runId
         }]
     };
     const operation = procedures[body.action];
@@ -247,9 +252,11 @@ async function post(supabase, req) {
     }
     const { data, error } = await supabase.rpc(operation[0], operation[1]);
     if (error) throw new Error("The requested case-bound action could not be saved.", { cause: error });
-    if (["close_cohort", "authorize_new_attempt"].includes(body.action)) {
+    if (["close_cohort", "run_stage1_again", "run_stage2_again"]
+        .includes(body.action)) {
         scheduleCaseBoundAnalysis(req);
     }
+    if (body.action === "run_stage2_again") scheduleParallelStage2(req);
     return { saved: true, id: data };
 }
 

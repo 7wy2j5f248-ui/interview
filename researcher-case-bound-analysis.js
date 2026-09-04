@@ -84,20 +84,14 @@
                 }).join(" · ") || "—"]
                 .forEach(value => { const cell = document.createElement("td"); cell.textContent = value; row.appendChild(cell); });
             const action = document.createElement("td");
-            if (item.stage1_status === "unresolved") {
-                const button = document.createElement("button");
-                button.type = "button";
-                button.textContent = "Authorize a separate new attempt";
-                button.addEventListener("click", async () => {
-                    const reason = window.prompt("Record why you are explicitly authorizing a separate attempt. The earlier attempt remains frozen.");
-                    if (!reason?.trim()) return;
-                    await post("authorize_new_attempt", { caseId: item.id, reason: reason.trim() });
-                    await load();
-                });
-                action.appendChild(button);
-            } else {
-                action.textContent = item.stage1_status === "completed" ? "Permanently closed" : "No action required";
-            }
+            const rerun = document.createElement("button");
+            rerun.type = "button";
+            rerun.textContent = "Run Stage 1 again from this frozen source";
+            rerun.addEventListener("click", async () => {
+                await post("run_stage1_again", { caseId: item.id });
+                await load();
+            });
+            action.appendChild(rerun);
             const inspect = document.createElement("button");
             inspect.type = "button";
             inspect.textContent = "Inspect frozen record";
@@ -145,6 +139,15 @@
                     element("v2RecordDialog").showModal();
                 });
                 panel.appendChild(inspect);
+                panel.appendChild(document.createTextNode(" "));
+                const rerun = document.createElement("button");
+                rerun.type = "button";
+                rerun.textContent = `Run Stage ${run.analysis_layer.toUpperCase()} again from this frozen source`;
+                rerun.addEventListener("click", async () => {
+                    await post("run_stage2_again", { runId: run.id });
+                    await load();
+                });
+                panel.appendChild(rerun);
                 panel.appendChild(document.createTextNode(" "));
             });
             if (item.status === "open") {

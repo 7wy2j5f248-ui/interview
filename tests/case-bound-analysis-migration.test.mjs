@@ -19,8 +19,8 @@ const parallelStage2MigrationUrl = new URL(
     "../supabase/migrations/20260904162000_add_parallel_stage2_harmonization.sql",
     import.meta.url
 );
-const stage2ReplacementMigrationUrl = new URL(
-    "../supabase/migrations/20260904163500_allow_stage2_replacement_runs.sql",
+const noCodexAttemptGatesMigrationUrl = new URL(
+    "../supabase/migrations/20260904170000_remove_codex_attempt_gates.sql",
     import.meta.url
 );
 const dashboardUrl = new URL("../server/caseBoundAnalysisDashboard.js", import.meta.url);
@@ -129,16 +129,27 @@ test("parallel Stage 2 migration freezes isolated CA and TH corpora with private
     assert.doesNotMatch(sql, /jsonb_build_object\([\s\S]{0,200}'case_id'/);
 });
 
-test("a ceiling-limited Stage 2 response receives a separate researcher-authorized replacement", async () => {
-    const sql = await readFile(stage2ReplacementMigrationUrl, "utf8");
-    assert.match(sql, /attempt_number integer not null default 1/);
-    assert.match(sql, /prior_run_id uuid references public\.stage2_runs_v2/);
-    assert.match(sql, /alter column max_output_tokens drop not null/);
-    assert.match(sql, /authorize_stage2_v2_replacement/);
-    assert.match(sql, /Only a terminal Stage 2 run can receive a replacement/);
-    assert.match(sql, /prior_run\.corpus_snapshot_json/);
-    assert.match(sql, /prior_run\.corpus_snapshot_sha256/);
-    assert.match(sql, /prior_run\.reasoning_effort, null/);
+test("Codex does not gate researcher-requested Stage 1 or Stage 2 attempts", async () => {
+    const [sql, dashboard, researcherScript] = await Promise.all([
+        readFile(noCodexAttemptGatesMigrationUrl, "utf8"),
+        readFile(dashboardUrl, "utf8"),
+        readFile(researcherScriptUrl, "utf8")
+    ]);
+    assert.match(sql, /drop function if exists public\.authorize_stage2_v2_replacement/);
+    assert.match(sql, /drop function if exists public\.authorize_stage1_v2_new_attempt/);
+    assert.match(sql, /drop constraint if exists stage2_runs_v2_replacement_lineage_consistent/);
+    assert.match(sql, /source\.cohort_id = new\.cohort_id/);
+    assert.match(sql, /source\.analysis_layer = new\.analysis_layer/);
+    assert.match(sql, /create function public\.create_stage1_v2_attempt/);
+    assert.match(sql, /create function public\.create_stage2_v2_attempt/);
+    assert.doesNotMatch(sql, /Only a terminal Stage 2 run/);
+    assert.doesNotMatch(sql, /researcher reason is required/i);
+    assert.match(dashboard, /run_stage1_again/);
+    assert.match(dashboard, /run_stage2_again/);
+    assert.match(researcherScript, /Run Stage 1 again from this frozen source/);
+    assert.match(researcherScript, /Run Stage \$\{run\.analysis_layer\.toUpperCase\(\)\} again from this frozen source/);
+    assert.doesNotMatch(researcherScript, /Permanently closed/);
+    assert.doesNotMatch(researcherScript, /Authorize a separate new attempt/);
 });
 
 test("all new analysis tables are RLS-enabled and browser roles receive no grants", async () => {

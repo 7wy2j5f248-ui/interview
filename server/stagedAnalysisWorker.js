@@ -60,6 +60,25 @@ export function scheduleCaseBoundAnalysis(req) {
     return true;
 }
 
+export function scheduleParallelStage2(req) {
+    const secret = configuredWorkerSecret();
+    const baseUrl = requestBaseUrl(req);
+    if (!secret || !baseUrl) return false;
+    waitUntil(fetch(`${baseUrl}${WORKER_PATH}`, {
+        method: "POST",
+        headers: {
+            Authorization: `Bearer ${secret}`,
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            worker: "case-bound-parallel-stage2-v2-continuation"
+        })
+    }).catch(error => {
+        console.error("Parallel Stage 2 trigger failed:", error);
+    }));
+    return true;
+}
+
 export async function continueCaseBoundAnalysis(baseUrl) {
     const secret = configuredWorkerSecret();
     if (!secret || !baseUrl) return;
