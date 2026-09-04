@@ -2,6 +2,7 @@ import { waitUntil } from "@vercel/functions";
 
 const WORKER_PATH = "/api/automatic-analysis";
 const STAGE2A_POLL_DELAY_MS = 15000;
+const CASE_BOUND_POLL_DELAY_MS = 15000;
 
 function configuredWorkerSecret() {
     return process.env.AUTOMATIC_ANALYSIS_SECRET
@@ -40,6 +41,40 @@ export function scheduleStagedAnalysis(req) {
         console.error("Staged-analysis trigger failed:", error);
     }));
     return true;
+}
+
+export function scheduleCaseBoundAnalysis(req) {
+    const secret = configuredWorkerSecret();
+    const baseUrl = requestBaseUrl(req);
+    if (!secret || !baseUrl) return false;
+    waitUntil(fetch(`${baseUrl}${WORKER_PATH}`, {
+        method: "POST",
+        headers: {
+            Authorization: `Bearer ${secret}`,
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ worker: "case-bound-analysis-v2" })
+    }).catch(error => {
+        console.error("Case-bound analysis trigger failed:", error);
+    }));
+    return true;
+}
+
+export async function continueCaseBoundAnalysis(baseUrl) {
+    const secret = configuredWorkerSecret();
+    if (!secret || !baseUrl) return;
+    await new Promise(resolve => setTimeout(resolve, CASE_BOUND_POLL_DELAY_MS));
+    const response = await fetch(`${baseUrl}${WORKER_PATH}`, {
+        method: "POST",
+        headers: {
+            Authorization: `Bearer ${secret}`,
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ worker: "case-bound-analysis-v2-continuation" })
+    });
+    if (!response.ok) {
+        throw new Error(`Case-bound analysis continuation returned ${response.status}.`);
+    }
 }
 
 export function scheduleStage2AHarmonization(req, runId) {

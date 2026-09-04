@@ -8,7 +8,7 @@
     "redirects": [
         {
             "source": "/researcher.html",
-            "destination": "/staged-analysis.html",
+            "destination": "/case-bound-analysis.html",
             "permanent": false
         },
         {
@@ -20,6 +20,24 @@
     "headers": [
         {
             "source": "/researcher.html",
+            "headers": [
+                {
+                    "key": "Cache-Control",
+                    "value": "no-store, no-cache, must-revalidate, max-age=0"
+                }
+            ]
+        },
+        {
+            "source": "/case-bound-analysis.html",
+            "headers": [
+                {
+                    "key": "Cache-Control",
+                    "value": "no-store, no-cache, must-revalidate, max-age=0"
+                }
+            ]
+        },
+        {
+            "source": "/researcher-case-bound-analysis.js",
             "headers": [
                 {
                     "key": "Cache-Control",

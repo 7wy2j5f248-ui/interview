@@ -10,6 +10,7 @@ import {
   refreshInterviewSessionMetrics,
   resolveInactivityTimeoutMinutes
 } from "../server/sessionLifecycle.js";
+import { scheduleCaseBoundAnalysis } from "../server/stagedAnalysisWorker.js";
 import { scheduleCompletedTranscriptTranslation } from "../server/messageTranslation.js";
 
 const supportedInterviewLanguages = Object.freeze({
@@ -396,6 +397,9 @@ Return final_question_answered as true when the participant's current message an
         activeSessionId,
         language
       );
+      // The database freezes an English-ready completed case atomically. This
+      // wake only processes that durable v2 work; it never creates a retry.
+      scheduleCaseBoundAnalysis(req);
     }
 
     return res.status(200).json({

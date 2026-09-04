@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PLI · Case-bound interview analysis</title>
+    <style>
+        :root { color-scheme: light; font-family: Arial, sans-serif; }
+        body { margin: 0; background: #f3f6fb; color: #172033; line-height: 1.5; }
+        main { max-width: 76rem; margin: 2rem auto; padding: 0 1rem 4rem; }
+        section { background: white; border: 1px solid #b8c9df; border-radius: .7rem; margin: 1rem 0; padding: 1rem; }
+        .contract { border-inline-start: .35rem solid #245fbd; background: #eef5ff; padding: .85rem; }
+        .warning { border-inline-start: .35rem solid #8b5a00; background: #fff8e7; padding: .85rem; }
+        .error { border-inline-start: .35rem solid #b42318; background: #fff1f1; padding: .85rem; }
+        .grid { display: grid; gap: .8rem; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); }
+        label { display: grid; gap: .3rem; }
+        input, select, textarea, button { font: inherit; padding: .55rem .7rem; }
+        textarea { min-height: 6rem; }
+        button { cursor: pointer; }
+        button:disabled { cursor: not-allowed; opacity: .6; }
+        .actions { display: flex; flex-wrap: wrap; gap: .65rem; margin-top: .8rem; }
+        pre { background: #f7f9fc; border: 1px solid #d7dfeb; max-height: 28rem; overflow: auto; padding: .8rem; white-space: pre-wrap; }
+        dialog { border: 1px solid #9db3d1; max-height: 88vh; max-width: 70rem; width: calc(100% - 2rem); }
+        .table { overflow-x: auto; }
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border-bottom: 1px solid #d7dfeb; padding: .65rem; text-align: left; vertical-align: top; }
+        th { background: #edf3fb; }
+        .muted { color: #52657f; }
+        .metric { background: #f7f9fc; border: 1px solid #d7dfeb; border-radius: .5rem; padding: .8rem; }
+        .metric strong { display: block; font-size: 1.35rem; color: #193a70; }
+    </style>
+</head>
+<body>
+<main>
+    <h1>Case-bound interview analysis</h1>
+    <p class="contract"><strong>Stage 1:</strong> one frozen completed case → one researcher-selected AI → one MU → CO → CA → TH response. The exact request and exact provider response are permanent. There is no validator, reviewer, repair AI, fallback model, or automatic retry.</p>
+    <p class="warning"><strong>Cohort rule:</strong> closing a cohort freezes its membership. Any unresolved case blocks it. Stage 2A begins automatically only after every member has technically completed Stage 1, and receives only P# + preliminary CO from the entire cohort.</p>
+
+    <section id="automaticAnalysisTokenGate">
+        <h2>Researcher access</h2>
+        <label>Researcher dashboard token
+            <input id="automaticAnalysisToken" type="password" autocomplete="current-password">
+        </label>
+        <div class="actions"><button id="automaticAnalysisUnlockButton" type="button">Unlock workspace</button></div>
+        <p id="automaticAnalysisGateStatus" class="muted" role="status">Enter the researcher token. This does not expose or change the provider API key.</p>
+    </section>
+
+    <div id="automaticAnalysisWorkspace" hidden>
+        <section>
+            <h2>1. Freeze the Stage 1 configuration</h2>
+            <p>The preview is complete and does not call the AI. Activation arms only future formally completed cases.</p>
+            <div class="grid">
+                <label>Research project<select id="v2Project"></select></label>
+                <label>AI provider<select id="v2Provider"></select></label>
+                <label>Exact model ID<input id="v2Model" list="v2Models"></label>
+                <datalist id="v2Models"></datalist>
+                <label>Reasoning<select id="v2Reasoning"><option>high</option><option>xhigh</option><option>medium</option><option>low</option><option>minimal</option><option>none</option></select></label>
+                <label>Output allowance<input id="v2Output" type="number" min="1" value="30000"></label>
+            </div>
+            <label>Optional analysis-specific guidelines<textarea id="v2Guidelines" placeholder="Leave blank when there are no additional researcher-defined guidelines."></textarea></label>
+            <div class="actions">
+                <button id="v2Preview" type="button">Preview complete frozen contract</button>
+                <button id="v2Activate" type="button" disabled>Activate this exact contract</button>
+            </div>
+            <p id="v2ConfigurationStatus" class="muted" role="status"></p>
+            <details id="v2PreviewPanel" hidden><summary>Complete request template and contract</summary><pre id="v2PreviewText"></pre></details>
+        </section>
+
+        <section>
+            <h2>2. Define the cohort</h2>
+            <p>A new open cohort includes already-frozen cases under the active contract and automatically admits later cases until you close it.</p>
+            <div class="actions">
+                <input id="v2CohortName" aria-label="Cohort name" placeholder="Researcher-defined cohort name">
+                <button id="v2CreateCohort" type="button">Create open cohort</button>
+            </div>
+            <div id="v2Cohorts"></div>
+        </section>
+
+        <section>
+            <h2>3. Case and barrier status</h2>
+            <div class="actions"><button id="v2Refresh" type="button">Refresh status</button></div>
+            <p class="muted">Status refreshes only when you request it. The execution worker may continue an already-submitted provider response, but the dashboard does not monitor or poll.</p>
+            <div id="v2Metrics" class="grid"></div>
+            <p id="v2Status" class="muted" role="status"></p>
+            <div id="v2Cases" class="table"></div>
+        </section>
+    </div>
+    <dialog id="v2RecordDialog">
+        <button id="v2CloseRecord" type="button">Close frozen record</button>
+        <h2>Immutable case record</h2>
+        <pre id="v2RecordText"></pre>
+    </dialog>
+</main>
+<script src="researcher-staged-access.js?version=20260903-case-bound-v2"></script>
+<script src="researcher-case-bound-analysis.js?version=20260903-case-bound-v2"></script>
+</body>
+</html>

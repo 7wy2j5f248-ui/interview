@@ -47,6 +47,28 @@ async function markFailed(supabaseClient, sessionId, error) {
     }
 }
 
+async function caseSessionIds(supabaseClient, terminalSessionId) {
+    const ids = [];
+    const seen = new Set();
+    let sessionId = terminalSessionId;
+    while (sessionId && !seen.has(sessionId)) {
+        seen.add(sessionId);
+        ids.push(sessionId);
+        const { data, error } = await supabaseClient
+            .from("interview_sessions")
+            .select("continuation_of_session_id")
+            .eq("session_id", sessionId)
+            .maybeSingle();
+        if (error) {
+            throw new Error("The resumed-session chain could not be loaded.", {
+                cause: error
+            });
+        }
+        sessionId = data?.continuation_of_session_id || null;
+    }
+    return ids;
+}
+
 export async function processTranscriptTranslation(
     supabaseClient,
     openaiClient,
@@ -59,10 +81,14 @@ export async function processTranscriptTranslation(
     }
 
     try {
+        const sessionIds = await caseSessionIds(
+            supabaseClient,
+            job.session_id
+        );
         const { data, error } = await supabaseClient
             .from("interview_messages")
             .select("id, Message, Language, EnglishTranslation, Timestamp")
-            .eq("Session", job.session_id)
+            .in("Session", sessionIds)
             .order("Timestamp", { ascending: true });
 
         if (error) {
@@ -91,6 +117,18 @@ export async function processTranscriptTranslation(
             throw new Error("Transcript translation progress could not be saved.", {
                 cause: completionError
             });
+        }
+
+        if (completed === true) {
+            const { error: freezeError } = await supabaseClient.rpc(
+                "try_freeze_analysis_case_v2",
+                { p_session_id: job.session_id }
+            );
+            if (freezeError) {
+                throw new Error("The translated case could not be frozen for Stage 1.", {
+                    cause: freezeError
+                });
+            }
         }
 
         console.log("Transcript translation advanced", {

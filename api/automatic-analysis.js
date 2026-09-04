@@ -1,10 +1,14 @@
 import { waitUntil } from "@vercel/functions";
 import { createClient } from "@supabase/supabase-js";
 import {
+    continueCaseBoundAnalysis,
     continueStage2AHarmonization,
+    scheduleCaseBoundAnalysis,
     stagedAnalysisBaseUrl,
     stagedAnalysisWorkerRequestIsAuthorized
 } from "../server/stagedAnalysisWorker.js";
+import { processCaseBoundAnalysisTick } from "../server/caseBoundAnalysis.js";
+import { handleCaseBoundAnalysisDashboard } from "../server/caseBoundAnalysisDashboard.js";
 import {
     availableAdvancedPreliminaryWorkerConcurrency,
     configuredAdvancedPreliminaryWorkerConcurrency,
@@ -112,6 +116,9 @@ async function processTranslationAndContinue(req) {
             transcriptTranslationBaseUrl(req)
         );
     }
+    if (result.completed) {
+        scheduleCaseBoundAnalysis(req);
+    }
 }
 
 async function processStage2AAndContinue(req) {
@@ -143,7 +150,26 @@ async function processStage2AAndContinue(req) {
     return result;
 }
 
+async function processCaseBoundAndContinue(req) {
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const secretKey = process.env.SUPABASE_SECRET_KEY;
+    if (!supabaseUrl || !secretKey) {
+        throw new Error("Case-bound analysis configuration is incomplete.");
+    }
+    const supabaseClient = createClient(supabaseUrl, secretKey, {
+        auth: { persistSession: false, autoRefreshToken: false }
+    });
+    const result = await processCaseBoundAnalysisTick(supabaseClient);
+    if (result.claimed) {
+        await continueCaseBoundAnalysis(stagedAnalysisBaseUrl(req));
+    }
+    return result;
+}
+
 export default async function handler(req, res) {
+    if (req.query?.view === "case-bound-v2") {
+        return handleCaseBoundAnalysisDashboard(req, res);
+    }
     if (req.query?.view === "stage1-validation-rules") {
         return handleStage1ValidationRulesDashboard(req, res);
     }
@@ -259,6 +285,22 @@ export default async function handler(req, res) {
         return res.status(202).json({
             accepted: true,
             processing: "translation_independent_from_case_analysis"
+        });
+    }
+
+    if ([
+        "case-bound-analysis-v2",
+        "case-bound-analysis-v2-continuation"
+    ].includes(req.body?.worker)) {
+        if (!stagedAnalysisWorkerRequestIsAuthorized(req)) {
+            return res.status(401).json({ error: "Unauthorized." });
+        }
+        waitUntil(processCaseBoundAndContinue(req).catch(error => {
+            console.error("Case-bound analysis worker stopped:", error);
+        }));
+        return res.status(202).json({
+            accepted: true,
+            processing: "case_bound_stage1_then_objective_stage2a_barrier"
         });
     }
 
