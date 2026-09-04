@@ -104,6 +104,7 @@ test("researcher can inspect the exact frozen Stage 2A request and provider reco
     assert.match(dashboard, /frozenRequest:\s*requests\[0\]/);
     assert.match(researcherScript, /Inspect frozen Stage 2A record/);
     assert.match(researcherScript, /runId=/);
+    assert.match(html, /receives only preliminary CO from the entire cohort/);
     assert.match(html, /P# is not sent to the model/);
     assert.doesNotMatch(html, /receives only P# \+ preliminary CO/);
 });
