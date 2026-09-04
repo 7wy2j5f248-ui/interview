@@ -124,6 +124,7 @@ test("parallel worker freezes and submits one isolated Stage 2B request", async 
         submissions += 1;
         assert.ok(calls.includes("freeze_stage2_v2_request"));
         assert.match(request.input[0].content, /PCA000001/);
+        assert.equal(Object.hasOwn(request, "max_output_tokens"), false);
         assert.equal(options.idempotencyKey, "pli-whole-cohort-stage2b-run-2b");
         return {
             id: "resp-2b", status: "completed",

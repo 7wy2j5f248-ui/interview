@@ -284,9 +284,6 @@ export function buildCaseBoundStage2ARequest(corpusSnapshot, configuration, {
     const reasoningEffort = normalizeStage1ReasoningEffort(
         configuration?.reasoningEffort
     );
-    const maxOutputTokens = normalizeStage1OutputAllowance(
-        configuration?.maxOutputTokens
-    );
     const cohortId = requiredText(corpusSnapshot?.cohortId, "Cohort ID");
     const preliminaryCodes = corpusSnapshot?.preliminary_codes;
     if (!Array.isArray(preliminaryCodes) || !preliminaryCodes.length) {
@@ -296,7 +293,6 @@ export function buildCaseBoundStage2ARequest(corpusSnapshot, configuration, {
         model,
         store: true,
         background: true,
-        max_output_tokens: maxOutputTokens,
         reasoning: { effort: reasoningEffort },
         text: {
             verbosity: "medium",
@@ -361,9 +357,6 @@ export function buildCaseBoundParallelStage2Request(
     const reasoningEffort = normalizeStage1ReasoningEffort(
         configuration?.reasoningEffort
     );
-    const maxOutputTokens = normalizeStage1OutputAllowance(
-        configuration?.maxOutputTokens
-    );
     const cohortId = requiredText(corpusSnapshot?.cohortId, "Cohort ID");
     const preliminaryItems = corpusSnapshot?.[contract.sourceField];
     if (!Array.isArray(preliminaryItems) || !preliminaryItems.length) {
@@ -373,7 +366,6 @@ export function buildCaseBoundParallelStage2Request(
         model,
         store: true,
         background: true,
-        max_output_tokens: maxOutputTokens,
         reasoning: { effort: reasoningEffort },
         text: {
             verbosity: "medium",

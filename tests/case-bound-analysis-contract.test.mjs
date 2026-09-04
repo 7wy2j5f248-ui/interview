@@ -63,6 +63,8 @@ test("Stage 2B and 2C independently harmonize only their matching preliminary la
     assert.doesNotMatch(stage2c.request.input[0].content, /PCA|P00001|preliminary_codes/);
     assert.ok(stage2b.request.text.format.schema.properties.harmonized_categories);
     assert.ok(stage2c.request.text.format.schema.properties.harmonized_themes);
+    assert.equal(Object.hasOwn(stage2b.request, "max_output_tokens"), false);
+    assert.equal(Object.hasOwn(stage2c.request, "max_output_tokens"), false);
 });
 
 test("provider outcome is classified only from objective provider status", () => {
@@ -101,6 +103,7 @@ test("Stage 2A frozen source excludes P# and carries only compact preliminary CO
         .split("FROZEN WHOLE-COHORT PRELIMINARY CO SOURCE\n")[1]);
     assert.deepEqual(Object.keys(supplied).sort(), ["cohort_id", "corpus_sha256", "preliminary_codes"]);
     assert.deepEqual(Object.keys(supplied.preliminary_codes[0]).sort(), ["label", "source_ref"]);
+    assert.equal(Object.hasOwn(frozen.request, "max_output_tokens"), false);
     assert.doesNotMatch(frozen.request.input[0].content, /P00001|case_id|code_id/);
     assert.equal(frozen.request.text.format.schema.properties.harmonized_codes
         .items.properties.source_codes.items.pattern, "^PC[0-9]{6,}$");
