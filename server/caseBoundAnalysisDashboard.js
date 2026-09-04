@@ -90,7 +90,7 @@ async function summary(supabase) {
                 .select("id, project_id, configuration_id, name, status, created_at, closed_at, blocked_reason")
                 .order("created_at", { ascending: false }), "Cohorts could not be loaded."),
             requireRows(supabase.from("stage1_attempts_v2")
-                .select("id, case_id, attempt_number, status, researcher_reason, queued_at, provider_status, terminal_at, technical_error")
+                .select("id, case_id, attempt_number, status, researcher_reason, queued_at, provider_status, terminal_at, technical_error, completion_authority, completion_record")
                 .order("attempt_number"), "Stage 1 attempts could not be loaded."),
             requireRows(supabase.from("stage2_runs_v2")
                 .select("id, cohort_id, status, provider, model, reasoning_effort, queued_at, provider_status, terminal_at, technical_error")
@@ -132,15 +132,37 @@ async function caseRecord(supabase, caseId) {
         requireRows(supabase.from("stage1_presentations_v2").select("*")
             .in("attempt_id", attemptIds), "Stage 1 presentations could not be loaded.")
     ]) : [[], []];
+    const presentedAttempts = attempts.map(attempt => {
+        const frozenRequest = requests.find(item =>
+            item.attempt_id === attempt.id) || null;
+        const explicitPresentation = presentations.find(item =>
+            item.attempt_id === attempt.id) || null;
+        const researcherResolution =
+            attempt.completion_authority === "researcher_pilot_assumption"
+                ? {
+                    current_stage1_status: analysisCase[0].stage1_status,
+                    stage2_readiness: attempt.status === "completed"
+                        && explicitPresentation?.presentation_json
+                        ? "ready" : "not_ready",
+                    completion_authority: attempt.completion_authority,
+                    historical_provider_status: attempt.provider_status,
+                    historical_provider_status_preserved: true,
+                    resolution_record: attempt.completion_record,
+                    explanation: "The historical provider status remains immutable. The researcher separately resolved this case for the Stage 2 pilot using the preserved preliminary Codes."
+                }
+                : null;
+        return {
+            ...attempt,
+            researcherResolution,
+            frozenRequest,
+            explicitPresentation
+        };
+    });
     return {
         case: analysisCase[0],
         sessions,
         frozenSource: source[0] || null,
-        attempts: attempts.map(attempt => ({
-            ...attempt,
-            frozenRequest: requests.find(item => item.attempt_id === attempt.id) || null,
-            explicitPresentation: presentations.find(item => item.attempt_id === attempt.id) || null
-        }))
+        attempts: presentedAttempts
     };
 }
 

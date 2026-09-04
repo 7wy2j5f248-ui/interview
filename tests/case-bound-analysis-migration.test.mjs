@@ -15,6 +15,8 @@ const sourceLineageIndexMigrationUrl = new URL(
     "../supabase/migrations/20260904141251_index_stage2_source_lineage_case.sql",
     import.meta.url
 );
+const dashboardUrl = new URL("../server/caseBoundAnalysisDashboard.js", import.meta.url);
+const researcherScriptUrl = new URL("../researcher-case-bound-analysis.js", import.meta.url);
 
 test("migration isolates immutable Stage 1 request, source, response, and presentation", async () => {
     const sql = await readFile(migrationUrl, "utf8");
@@ -77,6 +79,18 @@ test("Stage 2 private lineage has a covering case index", async () => {
     const sql = await readFile(sourceLineageIndexMigrationUrl, "utf8");
     assert.match(sql, /stage2_source_code_lineage_v2_case_idx/);
     assert.match(sql, /stage2_source_code_lineage_v2\(case_id\)/);
+});
+
+test("researcher resolution is separate from immutable provider status", async () => {
+    const [dashboard, researcherScript] = await Promise.all([
+        readFile(dashboardUrl, "utf8"),
+        readFile(researcherScriptUrl, "utf8")
+    ]);
+    assert.match(dashboard, /historical_provider_status_preserved:\s*true/);
+    assert.match(dashboard, /stage2_readiness/);
+    assert.match(dashboard, /researcherResolution/);
+    assert.match(researcherScript, /researcher-resolved for Stage 2 pilot/);
+    assert.doesNotMatch(dashboard, /provider_status:\s*["']completed["']/);
 });
 
 test("all new analysis tables are RLS-enabled and browser roles receive no grants", async () => {

@@ -75,7 +75,13 @@
             const attempts = state.attempts.filter(attempt => attempt.case_id === item.id);
             const row = document.createElement("tr");
             [item.case_number, new Date(item.frozen_at).toLocaleString(), item.stage1_status,
-                attempts.map(attempt => `${attempt.attempt_number}: ${attempt.status}`).join(" · ") || "—"]
+                attempts.map(attempt => {
+                    const resolution = attempt.completion_authority
+                        === "researcher_pilot_assumption"
+                        ? " · researcher-resolved for Stage 2 pilot"
+                        : "";
+                    return `${attempt.attempt_number}: ${attempt.status}${resolution}`;
+                }).join(" · ") || "—"]
                 .forEach(value => { const cell = document.createElement("td"); cell.textContent = value; row.appendChild(cell); });
             const action = document.createElement("td");
             if (item.stage1_status === "unresolved") {
