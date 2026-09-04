@@ -19,6 +19,7 @@ v2 is a separate path and does not rewrite or reactivate them.
 | Completed cases are terminal | Historical run machinery can create separate broad runs | A database constraint/function prevents any new v2 attempt after case completion |
 | Unresolved cases block the cohort | Stage 2A checks a completed historical run and currently waits for separate approval | Cohort membership is frozen on closure; all members must be Stage 1 completed before one whole-cohort Stage 2A run is queued |
 | Stage 2 starts at the objective barrier | Current UI says cross-case work never starts automatically | Closing the researcher-defined cohort is the corpus decision; the last completed Stage 1 member automatically opens Stage 2A without another approval gate |
+| P# stays outside Stage 2 model input | Historical Stage 2A paired participant IDs with Codes | The frozen model payload contains only compact `PC######` references and Code labels; a separate service-only table retains case provenance |
 
 ## Runtime sequence
 
@@ -34,6 +35,8 @@ researcher activates immutable project configuration
         -> explicit MU/CO/CA/TH fields become read-only presentation rows
         -> closed cohort waits for every member
         -> all complete: one whole-cohort Stage 2A run queues
+           with compact preliminary-Code references and labels only
+           while P# remains outside the model pipeline
 ```
 
 Provider-response retrieval is transport bookkeeping for the same durable

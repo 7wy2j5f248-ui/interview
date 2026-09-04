@@ -120,15 +120,7 @@ export const CASE_BOUND_STAGE2A_SCHEMA = Object.freeze({
                     source_codes: {
                         type: "array",
                         minItems: 1,
-                        items: {
-                            type: "object",
-                            properties: {
-                                case_id: { type: "string", pattern: "^P[0-9]{5,}$" },
-                                code_id: { type: "string", pattern: "^CO[0-9]{3,}$" }
-                            },
-                            required: ["case_id", "code_id"],
-                            additionalProperties: false
-                        }
+                        items: { type: "string", pattern: "^PC[0-9]{6,}$" }
                     }
                 },
                 required: ["id", "label", "source_codes"],
@@ -246,9 +238,9 @@ export function buildCaseBoundStage2ARequest(corpusSnapshot, configuration, {
         configuration?.maxOutputTokens
     );
     const cohortId = requiredText(corpusSnapshot?.cohortId, "Cohort ID");
-    const cases = corpusSnapshot?.cases;
-    if (!Array.isArray(cases) || !cases.length) {
-        throw new Error("The frozen whole-cohort P# + preliminary CO source is required.");
+    const preliminaryCodes = corpusSnapshot?.preliminary_codes;
+    if (!Array.isArray(preliminaryCodes) || !preliminaryCodes.length) {
+        throw new Error("The frozen whole-cohort preliminary CO source is required.");
     }
     const request = {
         model,
@@ -275,12 +267,12 @@ export function buildCaseBoundStage2ARequest(corpusSnapshot, configuration, {
             content: [
                 `PLI Stage 2A contract ${CASE_BOUND_CONTRACT_VERSION}.`,
                 "Harmonize preliminary Codes across the entire closed cohort in one response.",
-                "Use only the supplied case ID plus preliminary Code ID and label. No transcript, Meaning Unit, demographic, Category, Theme, earlier analysis, or external knowledge is available or permitted.",
-                "Preserve each case-local source Code by mapping it explicitly to one Harmonized Code. Do not validate, repair, or revise Stage 1.",
-                "FROZEN WHOLE-COHORT P# + PRELIMINARY CO SOURCE\n" + JSON.stringify({
+                "Use only the supplied compact source reference plus preliminary Code label. P#, transcript, Meaning Unit, demographic, Category, Theme, earlier analysis, and external knowledge are unavailable and prohibited.",
+                "Map every compact source reference to exactly one Harmonized Code. The database retains case provenance outside this model request. Do not validate, repair, or revise Stage 1.",
+                "FROZEN WHOLE-COHORT PRELIMINARY CO SOURCE\n" + JSON.stringify({
                     cohort_id: cohortId,
                     corpus_sha256: corpusSnapshot.corpusSha256,
-                    cases
+                    preliminary_codes: preliminaryCodes
                 })
             ].join("\n\n")
         }]

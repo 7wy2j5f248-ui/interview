@@ -3,6 +3,18 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const migrationUrl = new URL("../supabase/migrations/20260904132041_add_case_bound_analysis_v2.sql", import.meta.url);
+const noParticipantNumberMigrationUrl = new URL(
+    "../supabase/migrations/20260904140646_remove_participant_number_from_stage2_v2.sql",
+    import.meta.url
+);
+const pilotImportMigrationUrl = new URL(
+    "../supabase/migrations/20260904141107_import_stage1_pilot_fixtures_v2.sql",
+    import.meta.url
+);
+const sourceLineageIndexMigrationUrl = new URL(
+    "../supabase/migrations/20260904141251_index_stage2_source_lineage_case.sql",
+    import.meta.url
+);
 
 test("migration isolates immutable Stage 1 request, source, response, and presentation", async () => {
     const sql = await readFile(migrationUrl, "utf8");
@@ -36,6 +48,35 @@ test("closed cohorts block on unresolved cases and queue one whole-cohort Stage 
     assert.match(sql, /'case_id', analysis_case\.case_number/);
     assert.match(sql, /'preliminary_codes'/);
     assert.match(sql, /set status = 'stage2_queued'/);
+});
+
+test("corrective Stage 2 migration keeps P# outside the model corpus", async () => {
+    const sql = await readFile(noParticipantNumberMigrationUrl, "utf8");
+    assert.match(sql, /create table public\.stage2_source_code_lineage_v2/);
+    assert.match(sql, /'source_ref', 'PC' \|\| lpad\(source_number::text, 6, '0'\)/);
+    assert.match(sql, /'preliminary_codes', corpus_codes/);
+    assert.doesNotMatch(sql, /'case_id', analysis_case\.case_number/);
+    assert.match(sql, /stage2_source_code_lineage_v2_immutable/);
+    assert.match(sql, /revoke all on table public\.stage2_source_code_lineage_v2 from public, anon, authenticated/);
+});
+
+test("pilot import assumes outputs without inheriting the historical process", async () => {
+    const sql = await readFile(pilotImportMigrationUrl, "utf8");
+    assert.match(sql, /researcher_pilot_assumption/);
+    assert.match(sql, /prior_process_inherited boolean not null default false/);
+    assert.match(sql, /analytical_quality_accepted boolean not null default false/);
+    assert.match(sql, /Stage 1 was not rerun/);
+    assert.match(sql, /P0171 explicit preliminary Codes did not resolve to 46/);
+    assert.match(sql, /P0175 explicit preliminary Codes did not resolve to 50/);
+    assert.match(sql, /expected exactly 10,211 preliminary Code fixtures/);
+    assert.doesNotMatch(sql, /insert into public\.stage2_runs_v2/);
+    assert.doesNotMatch(sql, /responses\.create|OPENAI_API_KEY/);
+});
+
+test("Stage 2 private lineage has a covering case index", async () => {
+    const sql = await readFile(sourceLineageIndexMigrationUrl, "utf8");
+    assert.match(sql, /stage2_source_code_lineage_v2_case_idx/);
+    assert.match(sql, /stage2_source_code_lineage_v2\(case_id\)/);
 });
 
 test("all new analysis tables are RLS-enabled and browser roles receive no grants", async () => {

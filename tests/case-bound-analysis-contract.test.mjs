@@ -71,18 +71,17 @@ test("configuration snapshot freezes researcher selections and all global rules"
     assert.match(result.snapshot.configurationSha256 || result.snapshotSha256, /^[0-9a-f]{64}$/);
 });
 
-test("Stage 2A frozen source is only whole-cohort P# plus preliminary CO", () => {
+test("Stage 2A frozen source excludes P# and carries only compact preliminary CO references", () => {
     const frozen = buildCaseBoundStage2ARequest({
         cohortId: "cohort-1",
         corpusSha256: "b".repeat(64),
-        cases: [{
-            case_id: "P00001",
-            preliminary_codes: [{ code_id: "CO001", label: "Poor sleep" }]
-        }]
+        preliminary_codes: [{ source_ref: "PC000001", label: "Poor sleep" }]
     }, configuration, { requestId: "stage2-fixed" });
     const supplied = JSON.parse(frozen.request.input[0].content
-        .split("FROZEN WHOLE-COHORT P# + PRELIMINARY CO SOURCE\n")[1]);
-    assert.deepEqual(Object.keys(supplied).sort(), ["cases", "cohort_id", "corpus_sha256"]);
-    assert.deepEqual(Object.keys(supplied.cases[0]).sort(), ["case_id", "preliminary_codes"]);
-    assert.deepEqual(Object.keys(supplied.cases[0].preliminary_codes[0]).sort(), ["code_id", "label"]);
+        .split("FROZEN WHOLE-COHORT PRELIMINARY CO SOURCE\n")[1]);
+    assert.deepEqual(Object.keys(supplied).sort(), ["cohort_id", "corpus_sha256", "preliminary_codes"]);
+    assert.deepEqual(Object.keys(supplied.preliminary_codes[0]).sort(), ["label", "source_ref"]);
+    assert.doesNotMatch(frozen.request.input[0].content, /P00001|case_id|code_id/);
+    assert.equal(frozen.request.text.format.schema.properties.harmonized_codes
+        .items.properties.source_codes.items.pattern, "^PC[0-9]{6,}$");
 });

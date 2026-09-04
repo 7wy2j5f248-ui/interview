@@ -1,0 +1,2 @@
+create index stage2_source_code_lineage_v2_case_idx
+on public.stage2_source_code_lineage_v2(case_id);
