@@ -121,6 +121,31 @@
         return host;
     }
 
+    function meaningUnitReportContent(unit) {
+        const host = make("div", "report-mu-content");
+        const english = unit?.englishText
+            || "English source evidence unavailable.";
+        host.appendChild(make("div",
+            unit?.englishTextAvailable === false ? "warning" : "report-mu-english",
+            english));
+        const sources = unit?.englishTextSources || [];
+        host.appendChild(make("small", "muted",
+            sources.includes("stored_source_message_translation")
+                ? "English presentation: stored translation of this MU's source message."
+                : sources.includes("exact_gpt56_english_mu")
+                    ? "English presentation: exact English MU text returned by GPT-5.6."
+                    : "No separate stored English source was available."));
+        if (unit?.originalEvidenceText
+            && unit.originalEvidenceText !== english) {
+            const original = make("details", "report-mu-original");
+            original.appendChild(make("summary", "",
+                "Exact original-language GPT-5.6 MU evidence"));
+            original.appendChild(make("div", "", unit.originalEvidenceText));
+            host.appendChild(original);
+        }
+        return host;
+    }
+
     function connectedHierarchy(report) {
         const unitLookup = new Map(report.meaningUnits.map(item => [item.id, item]));
         const codeLookup = new Map(report.codes.map(item => [item.id, item]));
@@ -141,7 +166,10 @@
                 const list = document.createElement("ul");
                 row.code.meaningUnitIds.forEach(id => {
                     const unit = unitLookup.get(id);
-                    list.appendChild(make("li", "", `${id}: ${unit?.exactText || "—"}`));
+                    const item = document.createElement("li");
+                    item.appendChild(make("strong", "", `${id}: `));
+                    item.appendChild(meaningUnitReportContent(unit));
+                    list.appendChild(item);
                 });
                 return list;
             } }
@@ -170,9 +198,17 @@
                 .map(category => [category.id, category])).values()];
             const parts = [unit.id];
             if (codes.length) {
-                parts.push(codes.map(code =>
-                    `${code.id} · ${code.label} (${code.mentionCount} MU mention${code.mentionCount === 1 ? "" : "s"})`
-                ).join("; "));
+                parts.push(codes.map(code => {
+                    const mappedPosition = code.meaningUnitIds.indexOf(unit.id) + 1;
+                    const mappedTotal = code.meaningUnitIds.length;
+                    const reportTotal = code.mentionCount;
+                    const mention = mappedTotal === reportTotal
+                        ? `MU mention ${mappedPosition} of ${reportTotal}`
+                        : `mapped MU mention ${mappedPosition} of ${mappedTotal}; report count ${reportTotal}`;
+                    return `${code.id} · ${code.label} · ${mention}`;
+                }).join("; "));
+            } else {
+                parts.push("No linked CO → MU mention");
             }
             if (categories.length) {
                 parts.push(categories.map(category =>
@@ -299,6 +335,157 @@
         return host;
     }
 
+    function inlineMeaningUnitIds(transcriptNode) {
+        const ids = new Set();
+        transcriptNode.querySelectorAll("mark[data-meaning-units]")
+            .forEach(mark => String(mark.dataset.meaningUnits || "")
+                .split(",").filter(Boolean).forEach(id => ids.add(id)));
+        return ids;
+    }
+
+    function muMentionReconciliation(report, inlineIds) {
+        return reportTable([
+            { label: "Preliminary Code", value: code => `${code.id} · ${code.label}` },
+            { label: "Report MU mentions", value: code => code.mentionCount },
+            { label: "Mapped MU IDs", value: code => code.meaningUnitIds.length },
+            { label: "Inline MU markers", value: code =>
+                code.meaningUnitIds.filter(id => inlineIds.has(id)).length },
+            { label: "Direct check", value: code => {
+                const mapped = code.meaningUnitIds.length;
+                const inline = code.meaningUnitIds.filter(id =>
+                    inlineIds.has(id)).length;
+                if (code.mentionCount === mapped && mapped === inline) {
+                    return `${inline} inline = ${mapped} mapped = ${code.mentionCount} reported`;
+                }
+                return `${inline} inline; ${mapped} mapped; ${code.mentionCount} reported — difference shown without altering the provider report`;
+            } },
+            { label: "Meaning Units", value: code => {
+                const host = make("div", "chip-list");
+                appendChips(host, code.meaningUnitIds.map(id =>
+                    `${id}${inlineIds.has(id) ? " · inline" : " · not located"}`), "mu");
+                return host;
+            } }
+        ], report.codes);
+    }
+
+    function muMentionText(code, unitId, position) {
+        const mappedTotal = code.meaningUnitIds.length;
+        return mappedTotal === code.mentionCount
+            ? `MU mention ${position} of ${code.mentionCount}`
+            : `mapped MU mention ${position} of ${mappedTotal}; report count ${code.mentionCount}`;
+    }
+
+    function stage1AnalyticalReport(report) {
+        const host = make("div", "stage1-analytical-report");
+        const unitById = new Map(report.meaningUnits.map(unit =>
+            [unit.id, unit]));
+        const codeById = new Map(report.codes.map(code => [code.id, code]));
+        const categoryById = new Map(report.categories.map(category =>
+            [category.id, category]));
+        const representedCategories = new Set();
+        const representedCodes = new Set();
+        const representedUnits = new Set();
+
+        function codeBlock(code) {
+            const block = make("section", "stage1-code-block");
+            block.appendChild(make("h6", "",
+                `${code.id} · ${code.label} · ${code.mentionCount} reported MU mention${code.mentionCount === 1 ? "" : "s"}`));
+            const list = document.createElement("ol");
+            list.className = "stage1-mu-list";
+            code.meaningUnitIds.forEach((unitId, index) => {
+                const unit = unitById.get(unitId);
+                const item = document.createElement("li");
+                item.appendChild(make("strong", "",
+                    `${unitId} · ${muMentionText(code, unitId, index + 1)}: `));
+                item.appendChild(unit
+                    ? meaningUnitReportContent(unit)
+                    : make("span", "warning",
+                        "Referenced MU is not present in the stored report."));
+                list.appendChild(item);
+                representedUnits.add(unitId);
+            });
+            if (!code.meaningUnitIds.length) {
+                list.appendChild(make("li", "warning",
+                    "No Meaning Unit IDs are mapped to this Code in the stored report."));
+            }
+            block.appendChild(list);
+            representedCodes.add(code.id);
+            return block;
+        }
+
+        function categoryBlock(category) {
+            const block = make("section", "stage1-category-block");
+            block.appendChild(make("h5", "",
+                `${category.id} · ${category.label} · ${category.mentionCount} MU mention${category.mentionCount === 1 ? "" : "s"}`));
+            category.codeIds.forEach(codeId => {
+                const code = codeById.get(codeId);
+                block.appendChild(code
+                    ? codeBlock(code)
+                    : make("p", "warning",
+                        `${codeId} is referenced but absent from the stored Code array.`));
+            });
+            if (!category.codeIds.length) {
+                block.appendChild(make("p", "warning",
+                    "No Codes are linked to this Category in the stored report."));
+            }
+            representedCategories.add(category.id);
+            return block;
+        }
+
+        report.themes.forEach(theme => {
+            const block = make("article", "stage1-theme-block");
+            block.appendChild(make("h4", "",
+                `${theme.id} · ${theme.statement} · ${theme.mentionCount} MU mention${theme.mentionCount === 1 ? "" : "s"}`));
+            theme.categoryIds.forEach(categoryId => {
+                const category = categoryById.get(categoryId);
+                block.appendChild(category
+                    ? categoryBlock(category)
+                    : make("p", "warning",
+                        `${categoryId} is referenced but absent from the stored Category array.`));
+            });
+            if (!theme.categoryIds.length) {
+                block.appendChild(make("p", "warning",
+                    "No Categories are linked to this Theme in the stored report."));
+            }
+            host.appendChild(block);
+        });
+
+        const unthemed = report.categories.filter(category =>
+            !representedCategories.has(category.id));
+        if (unthemed.length) {
+            const block = make("article", "stage1-theme-block ungrouped");
+            block.appendChild(make("h4", "", "Categories without a Theme link"));
+            unthemed.forEach(category => block.appendChild(categoryBlock(category)));
+            host.appendChild(block);
+        }
+
+        const uncategorized = report.codes.filter(code =>
+            !representedCodes.has(code.id));
+        if (uncategorized.length) {
+            const block = make("article", "stage1-theme-block ungrouped");
+            block.appendChild(make("h4", "", "Codes without a Category link"));
+            uncategorized.forEach(code => block.appendChild(codeBlock(code)));
+            host.appendChild(block);
+        }
+
+        const unlinked = report.meaningUnits.filter(unit =>
+            !representedUnits.has(unit.id));
+        if (unlinked.length) {
+            const block = make("article", "stage1-theme-block ungrouped");
+            block.appendChild(make("h4", "", "Meaning Units without a Code link"));
+            const list = document.createElement("ul");
+            unlinked.forEach(unit => {
+                const item = document.createElement("li");
+                item.appendChild(make("strong", "", `${unit.id}: `));
+                item.appendChild(meaningUnitReportContent(unit));
+                list.appendChild(item);
+            });
+            block.appendChild(list);
+            host.appendChild(block);
+        }
+        return host;
+    }
+
     function showCaseReport(record) {
         const inspection = record.inspection;
         const report = inspection.report;
@@ -311,7 +498,7 @@
         const completion = make("div", "contract report-completion");
         completion.appendChild(make("strong", "", "Stage 1 report submitted"));
         completion.appendChild(make("p", "",
-            "The complete MU → CO → CA → TH report is required before Stage 1 can be complete. Viewing this page is optional and never affects progression."));
+            "This page contains the complete MU → CO → CA → TH report and its inline-annotated full transcript. A report is required before Stage 1 can be complete. Viewing it is optional and never affects progression."));
         content.appendChild(completion);
 
         const provenance = make("section", "report-section provenance");
@@ -332,6 +519,8 @@
             ["Transcript messages", inspection.counts.messages],
             ["Participant turns", inspection.counts.participantTurns],
             ["Meaning Units", inspection.counts.meaningUnits],
+            ["MUs presented in English", inspection.counts.englishMeaningUnits],
+            ["MUs missing stored English", inspection.counts.englishUnavailableMeaningUnits],
             ["Preliminary Codes", inspection.counts.codes],
             ["Preliminary Categories", inspection.counts.categories],
             ["Tentative Themes", inspection.counts.themes],
@@ -339,15 +528,33 @@
         ].forEach(([label, value]) => metrics.appendChild(metric(label, value)));
         content.appendChild(metrics);
 
+        const analyticalReport = make("section", "report-section");
+        analyticalReport.appendChild(make("h3", "",
+            "Stage 1 analytical report · original MU → CO → CA → TH format"));
+        analyticalReport.appendChild(make("p", "muted",
+            "This restores the previous report structure while using only this attempt's GPT-5.6 analytical content. The report-facing language is English. Themes contain Categories, Categories contain Codes, and every Code lists its Meaning Units with explicit MU-mention numbering. Original-language excerpts remain available as evidence and in the annotated transcript; they are not substituted for the English report."));
+        analyticalReport.appendChild(stage1AnalyticalReport(report));
+        content.appendChild(analyticalReport);
+
         const transcriptSection = make("section", "report-section");
         transcriptSection.appendChild(make("h3", "", "Full transcript with inline MU highlights"));
         transcriptSection.appendChild(make("p", "muted",
-            "Each GPT-5.6 Meaning Unit is highlighted directly inside its stored message. Its MU, linked Code, and linked Category labels sit immediately above that passage. The original-language message is always shown; when the analysis used an English translation, that translation appears directly below the same original message with its own inline highlights."));
-        transcriptSection.appendChild(annotatedTranscript(inspection));
+            "Each GPT-5.6 Meaning Unit is highlighted directly inside its stored message. Its MU, linked Code, MU-mention position, and linked Category labels sit immediately above that passage. The original-language message is always shown; when the analysis used an English translation, that translation appears directly below the same original message with its own inline highlights."));
+        const transcriptView = annotatedTranscript(inspection);
+        transcriptSection.appendChild(transcriptView);
         content.appendChild(transcriptSection);
 
+        const mentionSection = make("section", "report-section");
+        mentionSection.appendChild(make("h3", "", "MU mention reconciliation"));
+        mentionSection.appendChild(make("p", "muted",
+            "For every Code, this mechanically compares the report's MU-mention number with its mapped MU IDs and the unique MU markers visible in the transcript above. A difference is disclosed but never approves, rejects, repairs, or changes the analysis."));
+        mentionSection.appendChild(muMentionReconciliation(
+            report, inlineMeaningUnitIds(transcriptView)
+        ));
+        content.appendChild(mentionSection);
+
         const hierarchy = make("section", "report-section");
-        hierarchy.appendChild(make("h3", "", "MU → CO → CA → TH hierarchy"));
+        hierarchy.appendChild(make("h3", "", "Complete relationship tables"));
         hierarchy.appendChild(make("p", "muted",
             "A mention count is the mechanical number of linked Meaning Units, not a quality judgment or keyword count."));
         hierarchy.appendChild(make("h4", "", "Connected four-layer report"));

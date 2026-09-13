@@ -4,9 +4,11 @@ import {
     buildCaseBoundStage1Request,
     buildCaseBoundStage2ARequest,
     buildCaseBoundParallelStage2Request,
+    CASE_BOUND_STAGE1_SCHEMA,
     classifyProviderOutcome,
     explicitStage1Presentation,
     PLI_CASE_BOUND_SYSTEM_CONTRACT,
+    STAGE1_GLOBAL_RULES,
     stage1ContractSnapshot
 } from "../server/caseBoundAnalysisContract.js";
 
@@ -45,6 +47,17 @@ test("Stage 1 freezes one complete case and one connected MU to TH contract", ()
         "meaning_units", "preliminary_codes", "preliminary_categories",
         "preliminary_tentative_themes"
     ]);
+    assert.ok(STAGE1_GLOBAL_RULES.some(rule =>
+        /frozen English analytical transcript/.test(rule)));
+    assert.ok(STAGE1_GLOBAL_RULES.some(rule =>
+        /All analytical output is English/.test(rule)));
+    assert.ok(STAGE1_GLOBAL_RULES.some(rule =>
+        /one complete connected report with no blank/.test(rule)));
+    assert.deepEqual(
+        CASE_BOUND_STAGE1_SCHEMA.properties.meaning_units.items.properties
+            .sources.items.required,
+        ["turn_id", "message_id", "english_text"]
+    );
 });
 
 test("Stage 2B and 2C independently harmonize only their matching preliminary layer", () => {

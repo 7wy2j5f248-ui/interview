@@ -89,7 +89,7 @@ function normalizeTranscript(sourceSnapshot, storedMessages) {
         ) ? "participant" : "interviewer",
         language: text(message.Language),
         originalText: text(message.Message),
-        englishText: text(message.EnglishTranslation) || text(message.Message),
+        englishText: text(message.EnglishTranslation),
         timestamp: message.Timestamp || null
     }));
 }
@@ -378,6 +378,48 @@ function locateUnanchoredMeaningUnits(report, transcript) {
     });
 }
 
+const ENGLISH_EVIDENCE_UNAVAILABLE = "English source evidence unavailable.";
+
+function attachEnglishReportText(report, transcript) {
+    const messagesById = new Map(transcript.map(message =>
+        [String(message.id), message]));
+    report.meaningUnits.forEach(unit => {
+        const presentations = unit.segments.map(segment => {
+            const message = messagesById.get(String(segment.messageId));
+            const language = text(message?.language).toLowerCase();
+            if (segment.textField === "english") {
+                return {
+                    value: segment.exactText,
+                    source: "exact_gpt56_english_mu"
+                };
+            }
+            if (language === "en") {
+                return {
+                    value: segment.exactText,
+                    source: "exact_gpt56_english_mu"
+                };
+            }
+            if (message?.englishText
+                && message.englishText !== message.originalText) {
+                return {
+                    value: message.englishText,
+                    source: "stored_source_message_translation"
+                };
+            }
+            return {
+                value: ENGLISH_EVIDENCE_UNAVAILABLE,
+                source: "english_source_evidence_unavailable"
+            };
+        });
+        unit.englishText = unique(presentations.map(item => item.value))
+            .join(" … ") || ENGLISH_EVIDENCE_UNAVAILABLE;
+        unit.englishTextSources = unique(presentations.map(item => item.source));
+        unit.englishTextAvailable = !unit.englishTextSources
+            .includes("english_source_evidence_unavailable");
+        unit.originalEvidenceText = unit.exactText;
+    });
+}
+
 export function buildCaseInspection({
     caseNumber, sourceSnapshot, storedMessages, presentation, attempt,
     normalizedPilotReport, submittedReport
@@ -387,6 +429,7 @@ export function buildCaseInspection({
         || (presentation ? v2PresentationReport(presentation) : null)
         || oldRawReport(attempt?.raw_model_output_text);
     locateUnanchoredMeaningUnits(report, transcript);
+    attachEnglishReportText(report, transcript);
     const actualResponseSha256 = typeof attempt?.raw_model_output_text === "string"
         ? createHash("sha256").update(attempt.raw_model_output_text).digest("hex")
         : null;
@@ -418,6 +461,10 @@ export function buildCaseInspection({
             messages: transcript.length,
             participantTurns: transcript.filter(item => item.speaker === "participant").length,
             meaningUnits: report.meaningUnits.length,
+            englishMeaningUnits: report.meaningUnits.filter(item =>
+                item.englishTextAvailable).length,
+            englishUnavailableMeaningUnits: report.meaningUnits.filter(item =>
+                !item.englishTextAvailable).length,
             codes: report.codes.length,
             categories: report.categories.length,
             themes: report.themes.length,

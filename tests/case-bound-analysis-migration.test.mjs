@@ -230,10 +230,19 @@ test("the v2 researcher UI never starts an automatic status monitor", async () =
         readFile(new URL("../researcher-case-bound-analysis.js", import.meta.url), "utf8")
     ]);
     assert.match(html, /dashboard does not monitor or poll/);
-    assert.match(html, /inline-transcript-v2/);
+    assert.match(html, /english-complete-report-v5/);
     assert.doesNotMatch(javascript, /setInterval|refreshTimer/);
     assert.match(javascript, /confirmedConfigurationSha256/);
     assert.match(javascript, /Full transcript with inline MU highlights/);
     assert.match(javascript, /inline-mu-annotation/);
     assert.match(javascript, /English analytical text/);
+    assert.match(javascript, /MU mention reconciliation/);
+    assert.match(javascript, /MU mention \$\{mappedPosition\} of \$\{reportTotal\}/);
+    assert.match(javascript, /Inline MU markers/);
+    assert.match(javascript, /Stage 1 analytical report · original MU → CO → CA → TH format/);
+    assert.match(javascript, /stage1AnalyticalReport/);
+    assert.match(javascript, /Meaning Units without a Code link/);
+    assert.match(javascript, /The report-facing language is English/);
+    assert.match(javascript, /stored translation of this MU's source message/);
+    assert.match(javascript, /Exact original-language GPT-5.6 MU evidence/);
 });

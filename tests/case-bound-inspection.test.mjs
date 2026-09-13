@@ -117,6 +117,17 @@ test("GPT-5.6 source-language MUs are located in the original message before its
     assert.equal(segment.startOffset, 0);
     assert.equal(segment.endOffset, "我一般十点半左右上床".length);
     assert.equal(
+        inspection.report.meaningUnits[0].englishText,
+        "I usually go to bed around 10:30; last night was similar."
+    );
+    assert.deepEqual(
+        inspection.report.meaningUnits[0].englishTextSources,
+        ["stored_source_message_translation"]
+    );
+    assert.equal(inspection.report.meaningUnits[0].englishTextAvailable, true);
+    assert.equal(inspection.counts.englishMeaningUnits, 1);
+    assert.equal(inspection.counts.englishUnavailableMeaningUnits, 0);
+    assert.equal(
         inspection.transcript[0].originalText.slice(
             segment.startOffset, segment.endOffset
         ),
@@ -151,6 +162,40 @@ test("translated MUs remain inline with the matching translation beside the orig
     assert.equal(segment.textField, "english");
     assert.equal(segment.startOffset, 0);
     assert.equal(segment.endOffset, "I did not sleep well last night.".length);
+    assert.equal(
+        inspection.report.meaningUnits[0].englishText,
+        "I did not sleep well last night."
+    );
+    assert.deepEqual(
+        inspection.report.meaningUnits[0].englishTextSources,
+        ["exact_gpt56_english_mu"]
+    );
+});
+
+test("a non-English MU without stored translation is disclosed instead of leaking into the English report", () => {
+    const inspection = buildCaseInspection({
+        caseNumber: "P00002",
+        storedMessages: [{
+            id: "m1", Speaker: "participant", Language: "zh",
+            Message: "昨晚睡得不好。", EnglishTranslation: ""
+        }],
+        presentation: {
+            meaning_units: [{
+                id: "MU1",
+                sources: [{ message_id: "m1", english_text: "昨晚睡得不好。" }]
+            }],
+            preliminary_codes: [],
+            preliminary_categories: [],
+            preliminary_tentative_themes: []
+        }
+    });
+    assert.equal(
+        inspection.report.meaningUnits[0].englishText,
+        "English source evidence unavailable."
+    );
+    assert.equal(inspection.report.meaningUnits[0].englishTextAvailable, false);
+    assert.equal(inspection.counts.englishMeaningUnits, 0);
+    assert.equal(inspection.counts.englishUnavailableMeaningUnits, 1);
 });
 
 test("normalized pilot rows keep stored relationships without analytical invention", () => {
