@@ -160,7 +160,7 @@ test("the authoritative Stage 1 report is one cohort workbook containing every c
     assert.match(rows.flat().join("\n"), /gpt-5\.6-sol/);
     assert.doesNotMatch(rows.flat().join("\n"), /gpt-5\.1/);
     assert.equal(caseBoundStage1WorkbookFilename(data()),
-        "pilot-cohort-stage1-report.xlsx");
+        "pilot-cohort-stage1-report-v3-six-sheets.xlsx");
 });
 
 test("the case-bound page makes the workbook primary and the annotated transcript supporting evidence", async () => {

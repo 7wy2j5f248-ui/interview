@@ -234,7 +234,7 @@ test("the v2 researcher UI never starts an automatic status monitor", async () =
         readFile(new URL("../researcher-case-bound-analysis.js", import.meta.url), "utf8")
     ]);
     assert.match(html, /dashboard does not monitor or poll/);
-    assert.match(html, /stage1-workbook-v8/);
+    assert.match(html, /stage1-workbook-v9/);
     assert.match(html, /The Stage 1 report is one six-sheet Excel workbook containing every case/);
     assert.match(html, /Participant Information is never combined with Meaning Units/);
     assert.doesNotMatch(javascript, /setInterval|refreshTimer/);

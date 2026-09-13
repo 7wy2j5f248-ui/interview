@@ -696,5 +696,5 @@ export function caseBoundStage1WorkbookFilename(data) {
     const slug = String(scope || "stage1").toLowerCase()
         .replace(/[^a-z0-9]+/gu, "-")
         .replace(/^-+|-+$/gu, "") || "stage1";
-    return `${slug}-stage1-report.xlsx`;
+    return `${slug}-stage1-report-v3-six-sheets.xlsx`;
 }

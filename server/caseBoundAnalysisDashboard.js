@@ -24,6 +24,7 @@ import {
     normalizePilotReport
 } from "./caseBoundInspection.js";
 import {
+    CASE_BOUND_STAGE1_WORKBOOK_VERSION,
     caseBoundStage1WorkbookFilename,
     loadCaseBoundStage1Workbook,
     writeCaseBoundStage1Workbook
@@ -337,6 +338,10 @@ async function downloadStage1Workbook(supabase, req, res) {
         `attachment; filename="${caseBoundStage1WorkbookFilename(data)}"`
     );
     res.setHeader("X-Stage1-Report-Format", "xlsx");
+    res.setHeader(
+        "X-Stage1-Workbook-Version",
+        CASE_BOUND_STAGE1_WORKBOOK_VERSION
+    );
     res.setHeader("X-Stage1-Report-Cases", data.cases.length);
     res.setHeader("X-Stage1-Report-New-AI-API-Calls", "0");
     await writeCaseBoundStage1Workbook(res, data);
