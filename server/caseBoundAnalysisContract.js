@@ -3,7 +3,7 @@ import { normalizeAnalysisModel } from "./modelConfiguration.js";
 
 export const CASE_BOUND_ANALYSIS_VERSION = "case-bound-stage1-v2";
 export const CASE_BOUND_PROMPT_VERSION = "case-bound-mu-co-ca-th-v2";
-export const CASE_BOUND_CONTRACT_VERSION = "pli-case-bound-analysis-v2";
+export const CASE_BOUND_CONTRACT_VERSION = "pli-case-bound-analysis-v3";
 export const STAGE2A_PROMPT_VERSION = "whole-cohort-hco-v2";
 export const STAGE2B_PROMPT_VERSION = "whole-cohort-hca-v2";
 export const STAGE2C_PROMPT_VERSION = "whole-cohort-hth-v2";
@@ -40,7 +40,7 @@ export const PLI_CASE_BOUND_SYSTEM_CONTRACT = Object.freeze({
         "The complete assembled provider request is frozen before submission, and the exact provider response is frozen immediately upon receipt before presentation processing.",
         "No validator AI, reviewer AI, repair AI, monitor AI, gatekeeper AI, fallback model, substitute model, or second analytical call may judge, change, complete, correct, or replace the selected model's output.",
         "Run status is determined only from objective provider or technical completion information; qualitative adequacy never determines completion.",
-        "A provider-completed response does not complete the Stage 1 case until its complete readable MU to CO to CA to TH report has been stored. Report submission is automatic and objective; researcher viewing, inspection, or approval is never required and never controls progression.",
+        "A provider-completed response does not complete the Stage 1 case until the complete workbook source for its MU to CO to CA to TH report has been stored. The authoritative researcher-facing Stage 1 report is the deterministic Excel workbook; the annotated transcript is supporting evidence and never substitutes for the workbook. Report submission is automatic and objective; researcher viewing, inspection, or approval is never required and never controls progression.",
         "A completed Stage 1 case is final and may never be reopened, rerun, repaired, reanalyzed, or replaced.",
         "A technically incomplete or failed attempt is preserved exactly, receives no automatic retry or recovery, and leaves the case unresolved until the researcher explicitly starts a separate attempt.",
         "An unresolved cohort member may not be dropped, bypassed, or silently treated as complete."

@@ -493,12 +493,14 @@
         const categoryLookup = new Map(report.categories.map(item => [item.id, item]));
         const content = element("v2RecordContent");
         content.replaceChildren();
-        element("v2RecordTitle").textContent = `${inspection.caseNumber} · Stage 1 report`;
+        element("v2RecordTitle").textContent =
+            `${inspection.caseNumber} · supporting annotated transcript`;
 
         const completion = make("div", "contract report-completion");
-        completion.appendChild(make("strong", "", "Stage 1 report submitted"));
+        completion.appendChild(make("strong", "",
+            "Supporting evidence for the Stage 1 Excel workbook report"));
         completion.appendChild(make("p", "",
-            "This page contains the complete MU → CO → CA → TH report and its inline-annotated full transcript. A report is required before Stage 1 can be complete. Viewing it is optional and never affects progression."));
+            "The Excel workbook is the Stage 1 report. This optional page shows its hierarchy, provenance, and inline-annotated transcript for source inspection. It is not a substitute for the workbook and viewing it never affects progression."));
         content.appendChild(completion);
 
         const provenance = make("section", "report-section provenance");
@@ -530,7 +532,7 @@
 
         const analyticalReport = make("section", "report-section");
         analyticalReport.appendChild(make("h3", "",
-            "Stage 1 analytical report · original MU → CO → CA → TH format"));
+            "Workbook content preview · MU → CO → CA → TH"));
         analyticalReport.appendChild(make("p", "muted",
             "This restores the previous report structure while using only this attempt's GPT-5.6 analytical content. The report-facing language is English. Themes contain Categories, Categories contain Codes, and every Code lists its Meaning Units with explicit MU-mention numbering. Original-language excerpts remain available as evidence and in the annotated transcript; they are not substituted for the English report."));
         analyticalReport.appendChild(stage1AnalyticalReport(report));
@@ -661,6 +663,50 @@
         }
     }
 
+    async function downloadStage1Report(selection, button) {
+        button.disabled = true;
+        status.textContent = selection.caseId
+            ? "Preparing this case's Stage 1 Excel workbook report…"
+            : "Preparing the cohort's complete Stage 1 Excel workbook report…";
+        status.className = "muted";
+        try {
+            const parameter = selection.caseId
+                ? `caseId=${encodeURIComponent(selection.caseId)}`
+                : `cohortId=${encodeURIComponent(selection.cohortId)}`;
+            const response = await fetch(
+                `${API}&download=stage1-report-xlsx&${parameter}&_=${Date.now()}`,
+                {
+                    headers: { Authorization: `Bearer ${token()}` },
+                    cache: "no-store"
+                }
+            );
+            if (!response.ok) {
+                const body = await response.json().catch(() => ({}));
+                throw new Error(body.error
+                    || "The Stage 1 Excel workbook report could not be prepared.");
+            }
+            const disposition = response.headers.get("Content-Disposition") || "";
+            const filename = disposition.match(/filename="([^"]+)"/u)?.[1]
+                || "stage1-report.xlsx";
+            const blob = await response.blob();
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            URL.revokeObjectURL(url);
+            const cases = response.headers.get("X-Stage1-Report-Cases") || "—";
+            status.textContent = `Stage 1 Excel workbook report downloaded for ${cases} case${cases === "1" ? "" : "s"}. It uses only the frozen selected-model report; no AI call, validator, reviewer, repair, or retry was used.`;
+        } catch (error) {
+            status.textContent = error.message;
+            status.className = "error";
+        } finally {
+            button.disabled = false;
+        }
+    }
+
     function renderCases() {
         const host = element("v2Cases");
         if (!state.cases.length) {
@@ -669,7 +715,7 @@
         }
         const table = document.createElement("table");
         const head = document.createElement("thead");
-        head.innerHTML = "<tr><th>Case</th><th>Frozen source</th><th>Stage 1</th><th>Attempts</th><th>Optional report view</th></tr>";
+        head.innerHTML = "<tr><th>Case</th><th>Frozen source</th><th>Stage 1</th><th>Attempts</th><th>Stage 1 report and supporting evidence</th></tr>";
         const body = document.createElement("tbody");
         state.cases.forEach(item => {
             const attempts = state.attempts.filter(attempt => attempt.case_id === item.id);
@@ -695,9 +741,18 @@
                 action.appendChild(resolve);
                 action.appendChild(document.createTextNode(" "));
             }
+            if (item.stage1_status === "completed") {
+                const workbook = document.createElement("button");
+                workbook.type = "button";
+                workbook.textContent = "Download Stage 1 Excel workbook report";
+                workbook.addEventListener("click", () =>
+                    downloadStage1Report({ caseId: item.id }, workbook));
+                action.appendChild(workbook);
+                action.appendChild(document.createTextNode(" "));
+            }
             const inspect = document.createElement("button");
             inspect.type = "button";
-            inspect.textContent = "View annotated Stage 1 report";
+            inspect.textContent = "View supporting annotated transcript";
             inspect.addEventListener("click", async () => {
                 const record = await request({
                     url: `${API}&caseId=${encodeURIComponent(item.id)}`
@@ -726,6 +781,19 @@
                 `Stage ${run.analysis_layer.toUpperCase()} attempt ${run.attempt_number} ${run.status}`).join("; ");
             text.textContent = `${item.name} — ${item.status}${runStatus ? `; ${runStatus}` : ""}${item.blocked_reason ? `; ${item.blocked_reason}` : ""}`;
             panel.appendChild(text);
+            if (["stage2_queued", "stage2_processing", "completed"]
+                .includes(item.status)) {
+                const stage1Workbook = document.createElement("button");
+                stage1Workbook.type = "button";
+                stage1Workbook.textContent =
+                    "Download complete Stage 1 Excel workbook report";
+                stage1Workbook.addEventListener("click", () =>
+                    downloadStage1Report(
+                        { cohortId: item.id }, stage1Workbook
+                    ));
+                panel.appendChild(stage1Workbook);
+                panel.appendChild(document.createTextNode(" "));
+            }
             runs.forEach(run => {
                 const inspect = document.createElement("button");
                 inspect.type = "button";

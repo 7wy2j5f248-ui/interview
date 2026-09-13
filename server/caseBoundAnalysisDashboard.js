@@ -23,6 +23,11 @@ import {
     buildCaseInspection,
     normalizePilotReport
 } from "./caseBoundInspection.js";
+import {
+    caseBoundStage1WorkbookFilename,
+    loadCaseBoundStage1Workbook,
+    writeCaseBoundStage1Workbook
+} from "./caseBoundStage1Workbook.js";
 
 function client() {
     return createClient(
@@ -312,6 +317,28 @@ async function downloadHarmonizedReport(supabase, req, res) {
     return undefined;
 }
 
+async function downloadStage1Workbook(supabase, req, res) {
+    const data = await loadCaseBoundStage1Workbook(supabase, {
+        caseId: typeof req.query?.caseId === "string" ? req.query.caseId : "",
+        cohortId: typeof req.query?.cohortId === "string"
+            ? req.query.cohortId : ""
+    });
+    res.statusCode = 200;
+    res.setHeader(
+        "Content-Type",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${caseBoundStage1WorkbookFilename(data)}"`
+    );
+    res.setHeader("X-Stage1-Report-Format", "xlsx");
+    res.setHeader("X-Stage1-Report-Cases", data.cases.length);
+    res.setHeader("X-Stage1-Report-New-AI-API-Calls", "0");
+    await writeCaseBoundStage1Workbook(res, data);
+    return undefined;
+}
+
 async function post(supabase, req) {
     const body = req.body || {};
     if (["preview_configuration", "activate_configuration"].includes(body.action)) {
@@ -399,6 +426,9 @@ export async function handleCaseBoundAnalysisDashboard(req, res) {
     const supabase = client();
     try {
         if (req.method === "GET") {
+            if (req.query?.download === "stage1-report-xlsx") {
+                return await downloadStage1Workbook(supabase, req, res);
+            }
             if (req.query?.download === "harmonized-report-xlsx") {
                 return await downloadHarmonizedReport(supabase, req, res);
             }

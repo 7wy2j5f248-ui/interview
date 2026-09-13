@@ -125,6 +125,10 @@ test("no PLI output ceiling is sent unless the researcher explicitly chooses one
     assert.match(frozen.request.input[0].content, /Understand sleep/);
     assert.ok(PLI_CASE_BOUND_SYSTEM_CONTRACT.stage1.some(rule =>
         /completed Stage 1 case is final/.test(rule)));
+    assert.ok(PLI_CASE_BOUND_SYSTEM_CONTRACT.stage1.some(rule =>
+        /authoritative researcher-facing Stage 1 report is the deterministic Excel workbook/.test(rule)));
+    assert.ok(PLI_CASE_BOUND_SYSTEM_CONTRACT.stage1.some(rule =>
+        /annotated transcript is supporting evidence and never substitutes/.test(rule)));
     assert.ok(PLI_CASE_BOUND_SYSTEM_CONTRACT.stage2.some(rule =>
         /start concurrently/.test(rule)));
 });
