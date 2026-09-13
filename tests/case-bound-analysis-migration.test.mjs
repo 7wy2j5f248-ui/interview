@@ -46,7 +46,8 @@ const requiredReportMigrationUrls = [
     "../supabase/migrations/20260913121850_backfill_gpt56_reports_776_800.sql",
     "../supabase/migrations/20260913121900_backfill_gpt56_reports_801_850.sql",
     "../supabase/migrations/20260913121950_verify_gpt56_report_backfill.sql",
-    "../supabase/migrations/20260913122000_require_report_to_finalize_analysis.sql"
+    "../supabase/migrations/20260913122000_require_report_to_finalize_analysis.sql",
+    "../supabase/migrations/20260913123000_require_future_stage1_participant_information.sql"
 ].map(path => new URL(path, import.meta.url));
 const dashboardUrl = new URL("../server/caseBoundAnalysisDashboard.js", import.meta.url);
 const researcherScriptUrl = new URL("../researcher-case-bound-analysis.js", import.meta.url);
@@ -156,6 +157,8 @@ test("every completed analysis stage requires a stored readable report", async (
     assert.match(sql, /A Stage 2 operation cannot complete before its report is submitted/);
     assert.match(sql, /stage1_readable_report_complete_v2/);
     assert.match(sql, /stage2_readable_report_complete_v2/);
+    assert.match(sql, /stage1_participant_information_complete_v2/);
+    assert.match(sql, /Future provider-completed Stage 1 reports include transcript-supported participant information/);
     assert.match(sql, /frozen_gpt56_response_projection/);
     assert.match(sql, /source_report\.raw_model_output_text = attempt\.raw_model_output_text/);
     assert.match(sql, /source_report\.reasoning_effort = 'high'/);
@@ -231,8 +234,9 @@ test("the v2 researcher UI never starts an automatic status monitor", async () =
         readFile(new URL("../researcher-case-bound-analysis.js", import.meta.url), "utf8")
     ]);
     assert.match(html, /dashboard does not monitor or poll/);
-    assert.match(html, /stage1-workbook-v7/);
-    assert.match(html, /The Stage 1 report is one five-sheet Excel workbook containing every case/);
+    assert.match(html, /stage1-workbook-v8/);
+    assert.match(html, /The Stage 1 report is one six-sheet Excel workbook containing every case/);
+    assert.match(html, /Participant Information is never combined with Meaning Units/);
     assert.doesNotMatch(javascript, /setInterval|refreshTimer/);
     assert.match(javascript, /confirmedConfigurationSha256/);
     assert.match(javascript, /Full transcript with inline MU highlights/);

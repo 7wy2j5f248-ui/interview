@@ -61,7 +61,7 @@ function projectContext(project) {
     return {
         project_name: project.project_name,
         research_topic: project.research_topic,
-        frozen_case_design_context: "The actual request inherits the research title, topic, purpose, goal, questions, and design version frozen with that case. Interviewer-operating instructions and demographics are excluded."
+        frozen_case_design_context: "The actual request inherits the research title, topic, purpose, goal, questions, and design version frozen with that case. Interviewer-operating instructions and pre-existing demographic records are excluded. The same selected Stage 1 model reports participant information only from explicit evidence inside the frozen transcript, separately from the MU to CO to CA to TH analysis."
     };
 }
 

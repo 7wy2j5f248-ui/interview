@@ -109,34 +109,43 @@ test("the authoritative Stage 1 report is one cohort workbook containing every c
         CASE_BOUND_STAGE1_WORKBOOK_SHEETS
     );
     assert.match(workbook.description, /Excel workbook is the Stage 1 report/);
-    const cases = workbook.getWorksheet(CASE_BOUND_STAGE1_WORKBOOK_SHEETS[0]);
-    assert.equal(cases.getCell("A2").value, "P00171");
-    assert.equal(cases.getCell("A3").value, "P00175");
-    assert.equal(cases.rowCount, 3);
-    assert.equal(cases.getCell("B2").value, 1);
-    assert.equal(cases.getCell("C2").value, "zh");
-    assert.equal(cases.getRow(2).getCell(columnFor(cases, "Age")).value, 42);
+    const participants = workbook.getWorksheet(
+        CASE_BOUND_STAGE1_WORKBOOK_SHEETS[0]);
+    assert.equal(participants.getCell("A2").value, "P00171");
+    assert.equal(participants.getCell("A3").value, "P00175");
+    assert.equal(participants.rowCount, 3);
+    assert.equal(participants.getCell("B2").value, 1);
+    assert.equal(participants.getCell("C2").value, "zh");
+    assert.equal(participants.getRow(2).getCell(
+        columnFor(participants, "Age")).value, 42);
+    assert.ok(columnFor(participants, "Country of residence") > 0);
+    assert.ok(columnFor(participants, "Occupation") > 0);
+    assert.equal(columnFor(participants, "MU1"), 0);
+
+    const meaningUnits = workbook.getWorksheet(
+        CASE_BOUND_STAGE1_WORKBOOK_SHEETS[1]);
     assert.equal(
-        cases.getRow(2).getCell(columnFor(cases, "MU1")).value.text,
+        meaningUnits.getRow(2).getCell(
+            columnFor(meaningUnits, "MU1")).value.text,
         "I slept poorly last night and woke before dawn."
     );
 
-    const codes = workbook.getWorksheet(CASE_BOUND_STAGE1_WORKBOOK_SHEETS[1]);
+    const codes = workbook.getWorksheet(CASE_BOUND_STAGE1_WORKBOOK_SHEETS[2]);
     assert.equal(codes.getCell("C1").value, "CO1");
     assert.equal(
         codes.getCell("C2").value.text,
         "Interrupted sleep\n2 MU mentions"
     );
-    assert.match(codes.getCell("C2").value.hyperlink, /5 Notes & sources/);
+    assert.match(codes.getCell("C2").value.hyperlink, /6 Notes & Sources/);
 
-    const categories = workbook.getWorksheet(CASE_BOUND_STAGE1_WORKBOOK_SHEETS[2]);
+    const categories = workbook.getWorksheet(CASE_BOUND_STAGE1_WORKBOOK_SHEETS[3]);
     assert.equal(categories.getCell("C2").value.text,
         "Sleep disruption\n2 MU mentions");
-    const themes = workbook.getWorksheet(CASE_BOUND_STAGE1_WORKBOOK_SHEETS[3]);
+    const themes = workbook.getWorksheet(CASE_BOUND_STAGE1_WORKBOOK_SHEETS[4]);
     assert.equal(themes.getCell("C2").value.text,
         "Fragmented sleep\n2 MU mentions");
 
-    const notes = workbook.getWorksheet(CASE_BOUND_STAGE1_WORKBOOK_SHEETS[4]);
+    const notes = workbook.getWorksheet(CASE_BOUND_STAGE1_WORKBOOK_SHEETS[5]);
     const rows = [];
     notes.eachRow((row, number) => {
         if (number > 1) rows.push(row.values.slice(1));
@@ -169,6 +178,7 @@ test("the case-bound page makes the workbook primary and the annotated transcrip
     assert.match(html, /all cases are presented together in one Excel workbook report/);
     assert.match(html, /annotated transcripts are supporting evidence, not substitutes/);
     assert.match(contract, /one deterministic Excel workbook containing every case/);
+    assert.match(contract, /Participant Information and Meaning Units on separate worksheets/);
     assert.match(contract, /Separate per-case workbooks are not Stage 1 reports/);
 });
 
@@ -192,5 +202,7 @@ test("all 275 cohort cases stream into one Stage 1 workbook", async () => {
     assert.equal(workbook.getWorksheet(
         CASE_BOUND_STAGE1_WORKBOOK_SHEETS[3]).rowCount, 276);
     assert.equal(workbook.getWorksheet(
-        CASE_BOUND_STAGE1_WORKBOOK_SHEETS[4]).rowCount, 1 + (275 * 6));
+        CASE_BOUND_STAGE1_WORKBOOK_SHEETS[4]).rowCount, 276);
+    assert.equal(workbook.getWorksheet(
+        CASE_BOUND_STAGE1_WORKBOOK_SHEETS[5]).rowCount, 1 + (275 * 6));
 });

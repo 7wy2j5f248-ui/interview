@@ -3,14 +3,15 @@ import { buildCaseInspection } from "./caseBoundInspection.js";
 import { rowsForIds } from "./supabaseBatching.js";
 
 export const CASE_BOUND_STAGE1_WORKBOOK_VERSION =
-    "case-bound-stage1-cohort-workbook-v2";
+    "case-bound-stage1-cohort-workbook-v3";
 
 export const CASE_BOUND_STAGE1_WORKBOOK_SHEETS = Object.freeze([
-    "1 Cases & meaning units",
-    "2 Codes",
-    "3 Categories",
-    "4 Themes",
-    "5 Notes & sources"
+    "1 Participant Information",
+    "2 Meaning Units",
+    "3 Codes",
+    "4 Categories",
+    "5 Themes",
+    "6 Notes & Sources"
 ]);
 
 const DESCRIPTOR_COLUMNS = Object.freeze([
@@ -18,6 +19,21 @@ const DESCRIPTOR_COLUMNS = Object.freeze([
     "diaspora_status", "gender", "age", "birth_year", "birth_cohort",
     "youth_status", "education_level", "social_identity",
     "additional_descriptors"
+]);
+
+const PARTICIPANT_INFORMATION_COLUMNS = Object.freeze([
+    ["current_country", "Country of residence"],
+    ["current_region", "Region of residence"],
+    ["country_of_origin", "Country of origin"],
+    ["diaspora_status", "Diaspora status"],
+    ["gender", "Gender"],
+    ["age", "Age"],
+    ["birth_year", "Year of birth"],
+    ["birth_cohort", "Birth cohort"],
+    ["youth_status", "Youth status"],
+    ["occupation", "Occupation"],
+    ["education_level", "Education"],
+    ["social_identity", "Social identity"]
 ]);
 
 function requireUuid(value, message) {
@@ -89,6 +105,37 @@ function descriptorValues(row) {
     return result;
 }
 
+function reportParticipantInformation(report) {
+    const information = report?.participant_information;
+    if (!information || typeof information !== "object"
+        || Array.isArray(information)) return {};
+    const result = {};
+    PARTICIPANT_INFORMATION_COLUMNS.forEach(([field]) => {
+        const entry = information[field];
+        const entryValue = entry && typeof entry === "object"
+            && !Array.isArray(entry) ? entry.value : entry;
+        if (entryValue !== null && entryValue !== undefined
+            && entryValue !== "") result[field] = entryValue;
+    });
+    const additional = information.additional_descriptors;
+    if (Array.isArray(additional)) {
+        additional.forEach(entry => {
+            const field = typeof entry?.name === "string"
+                ? entry.name.trim() : "";
+            if (field && entry.value !== null && entry.value !== undefined
+                && entry.value !== "") result[field] = entry.value;
+        });
+    } else if (additional && typeof additional === "object") {
+        Object.entries(additional).forEach(([field, entry]) => {
+            const entryValue = entry && typeof entry === "object"
+                && !Array.isArray(entry) ? entry.value : entry;
+            if (entryValue !== null && entryValue !== undefined
+                && entryValue !== "") result[field] = entryValue;
+        });
+    }
+    return result;
+}
+
 function workbookCase(
     analysisCase,
     attempt,
@@ -113,7 +160,10 @@ function workbookCase(
         stage1Status: analysisCase.stage1_status,
         language: participantTurn?.language
             || inspection.transcript[0]?.language || "",
-        demographics: descriptorValues(descriptor),
+        demographics: {
+            ...descriptorValues(descriptor),
+            ...reportParticipantInformation(reportRow.report_json)
+        },
         inspection
     };
 }
@@ -337,8 +387,17 @@ function appendRow(sheet, entries, decorate) {
 }
 
 function dynamicDemographicFields(cases) {
-    return unique(cases.flatMap(item => Object.keys(item.demographics || {})))
+    const standard = PARTICIPANT_INFORMATION_COLUMNS.map(([field]) => field);
+    const extra = unique(cases.flatMap(item =>
+        Object.keys(item.demographics || {})))
+        .filter(field => !standard.includes(field))
         .sort((left, right) => left.localeCompare(right));
+    return [...standard, ...extra];
+}
+
+function demographicHeading(field) {
+    return PARTICIPANT_INFORMATION_COLUMNS.find(([key]) => key === field)?.[1]
+        || title(field);
 }
 
 function referenceKey(caseNumber, type, id = "") {
@@ -459,44 +518,56 @@ function buildReferences(cases) {
     return { rows, destinations };
 }
 
-function addCasesSheet(workbook, data, references) {
+function addParticipantInformationSheet(workbook, data) {
     const demographics = dynamicDemographicFields(data.cases);
+    const sheet = workbook.addWorksheet(CASE_BOUND_STAGE1_WORKBOOK_SHEETS[0], {
+        views: [{ state: "frozen", xSplit: 3, ySplit: 1 }]
+    });
+    configureSheet(sheet, [
+        "P#", "S#", "Language", ...demographics.map(demographicHeading)
+    ], 3);
+    data.cases.forEach(item => appendRow(sheet, [
+        participantCode(item.caseNumber), sessionNumber(item.caseNumber),
+        item.language,
+        ...demographics.map(field => item.demographics[field] ?? "")
+    ], row => {
+        row.height = 30;
+    }));
+    sheet.commit();
+}
+
+function addMeaningUnitsSheet(workbook, data, references) {
     const maximum = Math.max(...data.cases.map(item =>
         item.inspection.report.meaningUnits.length));
-    const sheet = workbook.addWorksheet(CASE_BOUND_STAGE1_WORKBOOK_SHEETS[0], {
+    const sheet = workbook.addWorksheet(CASE_BOUND_STAGE1_WORKBOOK_SHEETS[1], {
         views: [{ state: "frozen", xSplit: 2, ySplit: 1 }]
     });
     configureSheet(sheet, [
-        "P#", "S#", "Language", ...demographics.map(title),
-        "Stage 1 report",
+        "P#", "S#", "Stage 1 report",
         ...Array.from({ length: maximum }, (_, index) => `MU${index + 1}`)
     ]);
-    const reportColumn = 4 + demographics.length;
-    data.cases.forEach((item, caseIndex) => {
+    data.cases.forEach(item => {
         const report = item.inspection.report;
-        const entries = [
+        appendRow(sheet, [
             participantCode(item.caseNumber), sessionNumber(item.caseNumber),
-            item.language,
-            ...demographics.map(field => item.demographics[field] ?? ""),
-            internalLink("Complete", CASE_BOUND_STAGE1_WORKBOOK_SHEETS[4],
+            internalLink("Complete", CASE_BOUND_STAGE1_WORKBOOK_SHEETS[5],
                 `A${references.destinations.get(referenceKey(item.caseNumber, "report"))}`),
             ...Array.from({ length: maximum }, (_, index) => {
                 const unit = report.meaningUnits[index];
                 if (!unit) return "";
                 return internalLink(unit.englishText,
-                    CASE_BOUND_STAGE1_WORKBOOK_SHEETS[4],
+                    CASE_BOUND_STAGE1_WORKBOOK_SHEETS[5],
                     `A${references.destinations.get(referenceKey(
                         item.caseNumber, "mu", unit.id
                     ))}`);
             })
-        ];
-        appendRow(sheet, entries, row => {
+        ], row => {
             row.height = 42;
-            row.getCell(reportColumn).font = {
+            row.getCell(3).font = {
                 color: { argb: "FF0563C1" }, underline: true
             };
             report.meaningUnits.forEach((unit, index) => {
-                row.getCell(reportColumn + index + 1).font = {
+                row.getCell(index + 4).font = {
                     color: { argb: "FF0563C1" }, underline: true
                 };
             });
@@ -531,7 +602,7 @@ function addLayerSheet(workbook, data, references, {
                 const entry = values[index];
                 if (!entry) return "";
                 return internalLink(layerCell(entry, entry.mentionCount),
-                    CASE_BOUND_STAGE1_WORKBOOK_SHEETS[4],
+                    CASE_BOUND_STAGE1_WORKBOOK_SHEETS[5],
                     `A${references.destinations.get(referenceKey(
                         item.caseNumber, type, entry.id
                     ))}`);
@@ -549,7 +620,7 @@ function addLayerSheet(workbook, data, references, {
 }
 
 function addReferencesSheet(workbook, references) {
-    const sheet = workbook.addWorksheet(CASE_BOUND_STAGE1_WORKBOOK_SHEETS[4], {
+    const sheet = workbook.addWorksheet(CASE_BOUND_STAGE1_WORKBOOK_SHEETS[5], {
         views: [{ state: "frozen", xSplit: 3, ySplit: 1 }]
     });
     configureSheet(sheet, [
@@ -595,23 +666,25 @@ export async function writeCaseBoundStage1Workbook(
     workbook.subject = "Frozen case-bound MU to CO to CA to TH report";
     workbook.description = [
         "The Excel workbook is the Stage 1 report.",
+        "Participant Information and Meaning Units are separate worksheets.",
         "It is a deterministic presentation of the immutable stored report.",
         "No AI call, validator, reviewer, repairer, or retry is used to create it."
     ].join(" ");
     workbook.created = createdAt;
     workbook.modified = createdAt;
     const references = buildReferences(data.cases);
-    addCasesSheet(workbook, data, references);
+    addParticipantInformationSheet(workbook, data);
+    addMeaningUnitsSheet(workbook, data, references);
     addLayerSheet(workbook, data, references, {
-        sheetName: CASE_BOUND_STAGE1_WORKBOOK_SHEETS[1],
+        sheetName: CASE_BOUND_STAGE1_WORKBOOK_SHEETS[2],
         field: "codes", type: "co"
     });
     addLayerSheet(workbook, data, references, {
-        sheetName: CASE_BOUND_STAGE1_WORKBOOK_SHEETS[2],
+        sheetName: CASE_BOUND_STAGE1_WORKBOOK_SHEETS[3],
         field: "categories", type: "ca"
     });
     addLayerSheet(workbook, data, references, {
-        sheetName: CASE_BOUND_STAGE1_WORKBOOK_SHEETS[3],
+        sheetName: CASE_BOUND_STAGE1_WORKBOOK_SHEETS[4],
         field: "themes", type: "th"
     });
     addReferencesSheet(workbook, references);

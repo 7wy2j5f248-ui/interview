@@ -693,7 +693,7 @@
             link.remove();
             URL.revokeObjectURL(url);
             const cases = response.headers.get("X-Stage1-Report-Cases") || "—";
-            status.textContent = `One complete Stage 1 Excel workbook report downloaded. All ${cases} cohort cases are together in that workbook. It uses only the frozen selected-model reports; no AI call, validator, reviewer, repair, or retry was used.`;
+            status.textContent = `One complete Stage 1 Excel workbook report downloaded. All ${cases} cohort cases are together in that workbook. Its analytical worksheets use only the frozen selected-model reports; Participant Information is kept separate and comes from the same report when available or from stored descriptive records for the pilot. No AI call, validator, reviewer, repair, or retry was used to create the workbook.`;
         } catch (error) {
             status.textContent = error.message;
             status.className = "error";

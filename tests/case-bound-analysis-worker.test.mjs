@@ -6,7 +6,16 @@ import {
 } from "../server/caseBoundAnalysis.js";
 
 function completedOutput() {
+    const missing = () => ({ value: null, sources: [] });
     return JSON.stringify({
+        participant_information: {
+            current_country: missing(), current_region: missing(),
+            country_of_origin: missing(), diaspora_status: missing(),
+            gender: missing(), age: missing(), birth_year: missing(),
+            birth_cohort: missing(), youth_status: missing(),
+            occupation: missing(), education_level: missing(),
+            social_identity: missing(), additional_descriptors: []
+        },
         meaning_units: [], preliminary_codes: [], preliminary_categories: [],
         preliminary_tentative_themes: []
     });

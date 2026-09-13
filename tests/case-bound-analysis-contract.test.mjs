@@ -21,6 +21,18 @@ const configuration = {
     analysisSpecificGuidelines: ""
 };
 
+function emptyParticipantInformation() {
+    const missing = () => ({ value: null, sources: [] });
+    return {
+        current_country: missing(), current_region: missing(),
+        country_of_origin: missing(), diaspora_status: missing(),
+        gender: missing(), age: missing(), birth_year: missing(),
+        birth_cohort: missing(), youth_status: missing(), occupation: missing(),
+        education_level: missing(), social_identity: missing(),
+        additional_descriptors: []
+    };
+}
+
 test("Stage 1 freezes one complete case and one connected MU to TH contract", () => {
     const source = {
         caseNumber: "P00001",
@@ -44,8 +56,8 @@ test("Stage 1 freezes one complete case and one connected MU to TH contract", ()
     assert.match(first.request.input[1].content, /"speaker":"interviewer"/);
     assert.match(first.request.input[1].content, /"speaker":"participant"/);
     assert.deepEqual(first.request.text.format.schema.required, [
-        "meaning_units", "preliminary_codes", "preliminary_categories",
-        "preliminary_tentative_themes"
+        "participant_information", "meaning_units", "preliminary_codes",
+        "preliminary_categories", "preliminary_tentative_themes"
     ]);
     assert.ok(STAGE1_GLOBAL_RULES.some(rule =>
         /frozen English analytical transcript/.test(rule)));
@@ -53,6 +65,17 @@ test("Stage 1 freezes one complete case and one connected MU to TH contract", ()
         /All analytical output is English/.test(rule)));
     assert.ok(STAGE1_GLOBAL_RULES.some(rule =>
         /one complete connected report with no blank/.test(rule)));
+    assert.ok(STAGE1_GLOBAL_RULES.some(rule =>
+        /participant_information.*explicit participant evidence/.test(rule)));
+    assert.deepEqual(
+        CASE_BOUND_STAGE1_SCHEMA.properties.participant_information.required,
+        [
+            "current_country", "current_region", "country_of_origin",
+            "diaspora_status", "gender", "age", "birth_year",
+            "birth_cohort", "youth_status", "occupation",
+            "education_level", "social_identity", "additional_descriptors"
+        ]
+    );
     assert.deepEqual(
         CASE_BOUND_STAGE1_SCHEMA.properties.meaning_units.items.properties
             .sources.items.required,
@@ -91,6 +114,7 @@ test("provider outcome is classified only from objective provider status", () =>
 
 test("presentation copies explicit provider fields without inventing hierarchy", () => {
     const payload = {
+        participant_information: emptyParticipantInformation(),
         meaning_units: [{ id: "MU001", sources: [{ turn_id: "T002", message_id: "m2", english_text: "Badly." }] }],
         preliminary_codes: [{ id: "CO001", label: "Poor sleep", meaning_unit_ids: ["MU001"] }],
         preliminary_categories: [{ id: "CA001", label: "Sleep quality", code_ids: ["CO001"] }],

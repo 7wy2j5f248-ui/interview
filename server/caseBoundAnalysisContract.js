@@ -1,9 +1,10 @@
 import { createHash, randomUUID } from "node:crypto";
 import { normalizeAnalysisModel } from "./modelConfiguration.js";
 
-export const CASE_BOUND_ANALYSIS_VERSION = "case-bound-stage1-v2";
-export const CASE_BOUND_PROMPT_VERSION = "case-bound-mu-co-ca-th-v2";
-export const CASE_BOUND_CONTRACT_VERSION = "pli-case-bound-analysis-v4";
+export const CASE_BOUND_ANALYSIS_VERSION = "case-bound-stage1-v3";
+export const CASE_BOUND_PROMPT_VERSION =
+    "case-bound-participant-info-mu-co-ca-th-v3";
+export const CASE_BOUND_CONTRACT_VERSION = "pli-case-bound-analysis-v5";
 export const STAGE2A_PROMPT_VERSION = "whole-cohort-hco-v2";
 export const STAGE2B_PROMPT_VERSION = "whole-cohort-hca-v2";
 export const STAGE2C_PROMPT_VERSION = "whole-cohort-hth-v2";
@@ -22,6 +23,7 @@ export const STAGE1_GLOBAL_RULES = Object.freeze([
     "Do not force a number of MUs, COs, CAs, or THs. Do not standardize terminology across cases in Stage 1.",
     "Do not add unsupported facts, motives, causes, diagnoses, theories, or conclusions.",
     "All analytical output is English. All MU, CO, CA, and TH identifiers are local to this case and begin at 1; their complete identity is the case ID plus the local ID.",
+    "Complete the separate participant_information section from explicit participant evidence in this frozen case. Report demographic values in English, cite the exact supporting participant turn or turns, use null with no sources when information was not stated, and never guess. Participant information remains separate from the MU to CO to CA to TH analysis.",
     "Return one complete connected report with no blank MU, CO, CA, or TH rows. Do not provide a second analysis, quality score, validation report, repair, or recommendation to rerun."
 ]);
 
@@ -40,7 +42,7 @@ export const PLI_CASE_BOUND_SYSTEM_CONTRACT = Object.freeze({
         "The complete assembled provider request is frozen before submission, and the exact provider response is frozen immediately upon receipt before presentation processing.",
         "No validator AI, reviewer AI, repair AI, monitor AI, gatekeeper AI, fallback model, substitute model, or second analytical call may judge, change, complete, correct, or replace the selected model's output.",
         "Run status is determined only from objective provider or technical completion information; qualitative adequacy never determines completion.",
-        "A provider-completed response does not complete the Stage 1 case until the complete workbook source for its MU to CO to CA to TH analysis has been stored. The authoritative researcher-facing Stage 1 report is one deterministic Excel workbook containing every case in the completed researcher-defined cohort. Separate per-case workbooks are not Stage 1 reports. Annotated transcripts are supporting evidence and never substitute for the cohort workbook. Report submission is automatic and objective; researcher viewing, inspection, or approval is never required and never controls progression.",
+        "A provider-completed response does not complete the Stage 1 case until the complete workbook source for its separate Participant Information and MU to CO to CA to TH analysis has been stored. The authoritative researcher-facing Stage 1 report is one deterministic Excel workbook containing every case in the completed researcher-defined cohort, with Participant Information and Meaning Units on separate worksheets. Separate per-case workbooks are not Stage 1 reports. Annotated transcripts are supporting evidence and never substitute for the cohort workbook. Report submission is automatic and objective; researcher viewing, inspection, or approval is never required and never controls progression.",
         "A completed Stage 1 case is final and may never be reopened, rerun, repaired, reanalyzed, or replaced.",
         "A technically incomplete or failed attempt is preserved exactly, receives no automatic retry or recovery, and leaves the case unresolved until the researcher explicitly starts a separate attempt.",
         "An unresolved cohort member may not be dropped, bypassed, or silently treated as complete."
@@ -74,9 +76,69 @@ const sourceSchema = {
     additionalProperties: false
 };
 
+function participantInformationField(valueSchema) {
+    return {
+        type: "object",
+        properties: {
+            value: valueSchema,
+            sources: { type: "array", items: sourceSchema }
+        },
+        required: ["value", "sources"],
+        additionalProperties: false
+    };
+}
+
+const participantInformationTextField = participantInformationField({
+    type: ["string", "null"]
+});
+const participantInformationIntegerField = participantInformationField({
+    type: ["integer", "null"]
+});
+
+export const CASE_BOUND_PARTICIPANT_INFORMATION_SCHEMA = Object.freeze({
+    type: "object",
+    properties: {
+        current_country: participantInformationTextField,
+        current_region: participantInformationTextField,
+        country_of_origin: participantInformationTextField,
+        diaspora_status: participantInformationTextField,
+        gender: participantInformationTextField,
+        age: participantInformationIntegerField,
+        birth_year: participantInformationIntegerField,
+        birth_cohort: participantInformationTextField,
+        youth_status: participantInformationTextField,
+        occupation: participantInformationTextField,
+        education_level: participantInformationTextField,
+        social_identity: participantInformationTextField,
+        additional_descriptors: {
+            type: "array",
+            items: {
+                type: "object",
+                properties: {
+                    name: { type: "string", minLength: 1 },
+                    value: { type: "string", minLength: 1 },
+                    sources: {
+                        type: "array", minItems: 1, items: sourceSchema
+                    }
+                },
+                required: ["name", "value", "sources"],
+                additionalProperties: false
+            }
+        }
+    },
+    required: [
+        "current_country", "current_region", "country_of_origin",
+        "diaspora_status", "gender", "age", "birth_year", "birth_cohort",
+        "youth_status", "occupation", "education_level", "social_identity",
+        "additional_descriptors"
+    ],
+    additionalProperties: false
+});
+
 export const CASE_BOUND_STAGE1_SCHEMA = Object.freeze({
     type: "object",
     properties: {
+        participant_information: CASE_BOUND_PARTICIPANT_INFORMATION_SCHEMA,
         meaning_units: {
             type: "array",
             minItems: 1,
@@ -143,8 +205,8 @@ export const CASE_BOUND_STAGE1_SCHEMA = Object.freeze({
         }
     },
     required: [
-        "meaning_units", "preliminary_codes", "preliminary_categories",
-        "preliminary_tentative_themes"
+        "participant_information", "meaning_units", "preliminary_codes",
+        "preliminary_categories", "preliminary_tentative_themes"
     ],
     additionalProperties: false
 });
@@ -270,7 +332,7 @@ export function buildCaseBoundInstructions(configuration) {
         ),
         "PROJECT CONTEXT\n" + JSON.stringify(projectContext, null, 2),
         "ANALYSIS-SPECIFIC GUIDELINES\n" + (guidelines || "None supplied by the researcher."),
-        "OUTPUT REQUIREMENT\nReturn only the defined MU -> CO -> CA -> TH structure. Each upper-level object must cite the explicit case-local IDs directly supporting it."
+        "OUTPUT REQUIREMENT\nReturn only the defined participant_information plus MU -> CO -> CA -> TH structure. Keep participant information separate from the analysis. Each reported demographic value must cite its explicit participant source, and each analytical upper-level object must cite the explicit case-local IDs directly supporting it."
     ].join("\n\n");
 }
 
@@ -483,6 +545,13 @@ export function explicitStage1Presentation(rawText) {
     ];
     if (!requiredArrays.every(field => Array.isArray(parsed?.[field]))) {
         throw new Error("The completed response does not expose the four defined Stage 1 arrays.");
+    }
+    if (!parsed.participant_information
+        || typeof parsed.participant_information !== "object"
+        || Array.isArray(parsed.participant_information)) {
+        throw new Error(
+            "The completed response does not expose the separate participant-information report."
+        );
     }
     return parsed;
 }
