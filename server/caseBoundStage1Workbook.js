@@ -1,9 +1,11 @@
 import ExcelJS from "exceljs";
+import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { buildCaseInspection } from "./caseBoundInspection.js";
 import { rowsForIds } from "./supabaseBatching.js";
 
 export const CASE_BOUND_STAGE1_WORKBOOK_VERSION =
-    "case-bound-stage1-cohort-workbook-v5";
+    "case-bound-stage1-cohort-workbook-v6";
 
 export const CASE_BOUND_STAGE1_WORKBOOK_SHEETS = Object.freeze([
     "1 Participant Information",
@@ -37,6 +39,18 @@ const PARTICIPANT_INFORMATION_COLUMNS = Object.freeze([
 ]);
 
 const GPT51_PILOT_PARTICIPANT_SHEET = "1 Participant & case";
+const GPT51_PILOT_PARTICIPANT_WORKBOOK = new URL(
+    "./assets/pilot-gpt51-participant-sheet.xlsx",
+    import.meta.url
+);
+const GPT51_PILOT_PARTICIPANT_WORKBOOK_SHA256 =
+    "083505f2fdced3eabf6a41db34a29d05d6188c22b8ee7bddbcd9c0e46d883133";
+const GPT51_PILOT_PARTICIPANT_HEADERS = Object.freeze([
+    "P#", "S#", "Language", "Country of residence",
+    "Region of residence", "Country of origin", "Diaspora status",
+    "Gender", "Age", "Year of birth", "Birth cohort", "Youth status",
+    "Occupation", "Education", "Social identity"
+]);
 
 function requireUuid(value, message) {
     const id = typeof value === "string" ? value.trim() : "";
@@ -457,6 +471,10 @@ function appendRow(sheet, entries, decorate) {
     row.commit();
 }
 
+function commitSheet(sheet) {
+    if (typeof sheet.commit === "function") sheet.commit();
+}
+
 function dynamicDemographicFields(cases) {
     const standard = PARTICIPANT_INFORMATION_COLUMNS.map(([field]) => field);
     const extra = unique(cases.flatMap(item =>
@@ -659,7 +677,7 @@ function addParticipantInformationSheet(workbook, data) {
     ], row => {
         row.height = 30;
     }));
-    sheet.commit();
+    commitSheet(sheet);
 }
 
 function addMeaningUnitsSheet(workbook, data, references) {
@@ -706,7 +724,7 @@ function addMeaningUnitsSheet(workbook, data, references) {
             });
         });
     });
-    sheet.commit();
+    commitSheet(sheet);
 }
 
 function layerCell(item, mentionCount) {
@@ -750,7 +768,7 @@ function addLayerSheet(workbook, data, references, {
             });
         });
     });
-    sheet.commit();
+    commitSheet(sheet);
 }
 
 function addReferencesSheet(workbook, references) {
@@ -782,19 +800,10 @@ function addReferencesSheet(workbook, references) {
                 String(reference.source || "").length
             ) / 80) * 15));
     }));
-    sheet.commit();
+    commitSheet(sheet);
 }
 
-export async function writeCaseBoundStage1Workbook(
-    stream,
-    data,
-    createdAt = new Date()
-) {
-    const workbook = new ExcelJS.stream.xlsx.WorkbookWriter({
-        stream,
-        useStyles: true,
-        useSharedStrings: false
-    });
+function applyWorkbookMetadata(workbook, data, createdAt) {
     workbook.creator = "PLI Researcher Dashboard";
     workbook.title = "PLI Stage 1 Report";
     workbook.subject = "Frozen case-bound MU to CO to CA to TH report";
@@ -802,7 +811,7 @@ export async function writeCaseBoundStage1Workbook(
         "The Excel workbook is the Stage 1 report.",
         "Participant Information and Meaning Units are separate worksheets.",
         data.participantInformationProvenance
-            ? "For this pilot only, the first worksheet reproduces the surviving GPT-5.1 Participant & case worksheet; none of its analytical worksheets or analytical process is included."
+            ? "For this pilot only, the first worksheet is the actual surviving GPT-5.1 Participant & case worksheet copied from the old workbook; none of its analytical worksheets or analytical process is included."
             : "Participant Information is supplied by the selected Stage 1 model.",
         "It is a deterministic presentation of the immutable stored report.",
         "No AI call, validator, reviewer, repairer, or retry is used to create it."
@@ -815,14 +824,55 @@ export async function writeCaseBoundStage1Workbook(
         width: 12000,
         height: 20000,
         firstSheet: 0,
-        activeTab: 1,
+        activeTab: 0,
         visibility: "visible"
     }];
+}
+
+async function pilotWorkbook() {
+    const workbook = new ExcelJS.Workbook();
+    const source = await readFile(GPT51_PILOT_PARTICIPANT_WORKBOOK);
+    const sourceSha256 = createHash("sha256").update(source).digest("hex");
+    if (sourceSha256 !== GPT51_PILOT_PARTICIPANT_WORKBOOK_SHA256) {
+        throw new Error(
+            "The stored GPT-5.1 Participant & case worksheet file is not the authorized source copy."
+        );
+    }
+    await workbook.xlsx.load(source);
+    const sheet = workbook.getWorksheet(GPT51_PILOT_PARTICIPANT_SHEET);
+    const headers = sheet?.getRow(1).values.slice(1);
+    if (workbook.worksheets.length !== 1 || !sheet
+        || sheet.rowCount !== 276 || sheet.columnCount !== 15
+        || JSON.stringify(headers) !== JSON.stringify(
+            GPT51_PILOT_PARTICIPANT_HEADERS)) {
+        throw new Error(
+            "The stored GPT-5.1 Participant & case worksheet is not the authorized 275-row source worksheet."
+        );
+    }
+    return workbook;
+}
+
+export async function writeCaseBoundStage1Workbook(
+    stream,
+    data,
+    createdAt = new Date()
+) {
+    const usesGpt51PilotSource = Boolean(
+        data.participantInformationProvenance
+    );
+    const workbook = usesGpt51PilotSource
+        ? await pilotWorkbook()
+        : new ExcelJS.stream.xlsx.WorkbookWriter({
+            stream,
+            useStyles: true,
+            useSharedStrings: false
+        });
+    applyWorkbookMetadata(workbook, data, createdAt);
     const references = buildReferences(
         data.cases,
         data.participantInformationProvenance
     );
-    addParticipantInformationSheet(workbook, data);
+    if (!usesGpt51PilotSource) addParticipantInformationSheet(workbook, data);
     addMeaningUnitsSheet(workbook, data, references);
     addLayerSheet(workbook, data, references, {
         sheetName: CASE_BOUND_STAGE1_WORKBOOK_SHEETS[2],
@@ -837,7 +887,11 @@ export async function writeCaseBoundStage1Workbook(
         field: "themes", type: "th"
     });
     addReferencesSheet(workbook, references);
-    await workbook.commit();
+    if (usesGpt51PilotSource) {
+        await workbook.xlsx.write(stream);
+    } else {
+        await workbook.commit();
+    }
 }
 
 export function caseBoundStage1WorkbookFilename(data) {
@@ -846,6 +900,6 @@ export function caseBoundStage1WorkbookFilename(data) {
         .replace(/[^a-z0-9]+/gu, "-")
         .replace(/^-+|-+$/gu, "") || "stage1";
     return data.participantInformationProvenance
-        ? `${slug}-stage1-report-v5-gpt51-participant-gpt56-analysis.xlsx`
-        : `${slug}-stage1-report-v5-six-sheets.xlsx`;
+        ? `${slug}-stage1-report-v6-actual-gpt51-worksheet-gpt56-analysis.xlsx`
+        : `${slug}-stage1-report-v6-six-sheets.xlsx`;
 }

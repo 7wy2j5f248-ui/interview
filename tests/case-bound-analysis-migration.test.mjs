@@ -267,7 +267,7 @@ test("the v2 researcher UI never starts an automatic status monitor", async () =
     assert.match(html, /stage1-workbook-v12/);
     assert.match(html, /The Stage 1 report is one six-sheet Excel workbook containing every case/);
     assert.match(html, /Participant Information is never combined with Meaning Units/);
-    assert.match(html, /first worksheet reproduces the original GPT-5\.1 Participant/);
+    assert.match(html, /first worksheet is the actual original GPT-5\.1 Participant/);
     assert.match(html, /No GPT-5\.1 Meaning Unit, Code, Category, Theme, calculation, or analytical process is included/);
     assert.doesNotMatch(javascript, /setInterval|refreshTimer/);
     assert.match(javascript, /confirmedConfigurationSha256/);

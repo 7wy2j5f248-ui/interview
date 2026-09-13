@@ -4,7 +4,6 @@ import { PassThrough } from "node:stream";
 import { finished } from "node:stream/promises";
 import { readFile } from "node:fs/promises";
 import ExcelJS from "exceljs";
-import JSZip from "jszip";
 import { buildCaseInspection } from "../server/caseBoundInspection.js";
 import {
     CASE_BOUND_STAGE1_WORKBOOK_SHEETS,
@@ -161,7 +160,7 @@ test("the authoritative Stage 1 report is one cohort workbook containing every c
     assert.match(rows.flat().join("\n"), /gpt-5\.6-sol/);
     assert.doesNotMatch(rows.flat().join("\n"), /gpt-5\.1/);
     assert.equal(caseBoundStage1WorkbookFilename(data()),
-        "pilot-cohort-stage1-report-v5-six-sheets.xlsx");
+        "pilot-cohort-stage1-report-v6-six-sheets.xlsx");
 });
 
 test("the pilot workbook visibly combines only the original GPT-5.1 participant worksheet with GPT-5.6 analysis", async () => {
@@ -192,14 +191,10 @@ test("the pilot workbook visibly combines only the original GPT-5.1 participant 
         ...CASE_BOUND_STAGE1_WORKBOOK_SHEETS.slice(1)
     ]);
     assert.equal(workbook.views[0].firstSheet, 0);
-    assert.equal(workbook.views[0].activeTab, 1);
+    assert.equal(workbook.views[0].activeTab, 0);
     assert.equal(workbook.worksheets[0].state, "visible");
     assert.equal(workbook.worksheets[1].state, "visible");
-    const archive = await JSZip.loadAsync(generated);
-    const meaningUnitsXml = await archive.file(
-        "xl/worksheets/sheet2.xml").async("string");
-    assert.match(meaningUnitsXml, /<sheetView[^>]+tabSelected="1"/);
-    assert.match(workbook.description, /reproduces the surviving GPT-5\.1 Participant & case worksheet/);
+    assert.match(workbook.description, /actual surviving GPT-5\.1 Participant & case worksheet copied from the old workbook/);
     assert.match(workbook.description, /none of its analytical worksheets or analytical process is included/);
 
     const participants = workbook.getWorksheet("1 Participant & case");
@@ -209,10 +204,20 @@ test("the pilot workbook visibly combines only the original GPT-5.1 participant 
         "Gender", "Age", "Year of birth", "Birth cohort", "Youth status",
         "Occupation", "Education", "Social identity"
     ]);
-    assert.equal(participants.getCell("A2").value, "P0171");
-    assert.equal(participants.getCell("I2").value, 42);
-    assert.equal(participants.getCell("A3").value, "P0175");
-    assert.equal(participants.getCell("I3").value, null);
+    assert.equal(participants.rowCount, 276);
+    assert.equal(participants.columnCount, 15);
+    assert.equal(participants.getCell("A2").value, "P0034");
+    assert.equal(participants.getCell("D2").value, "Canada");
+    assert.equal(participants.getCell("I2").value, 22);
+    assert.equal(participants.getCell("A128").value, "P0171");
+    assert.equal(participants.getCell("A132").value, "P0175");
+    assert.deepEqual(Object.keys(participants.tables), [
+        "Stage1ParticipantInformation"
+    ]);
+    assert.equal(
+        participants.getTable("Stage1ParticipantInformation").table.tableRef,
+        "A1:O276"
+    );
 
     const notes = workbook.getWorksheet(CASE_BOUND_STAGE1_WORKBOOK_SHEETS[5]);
     const text = notes.getRows(2, notes.rowCount - 1)
@@ -224,7 +229,7 @@ test("the pilot workbook visibly combines only the original GPT-5.1 participant 
     assert.match(text, /GPT-5\.1 analytical process inherited: no/);
     assert.match(text, /gpt-5\.6-sol/);
     assert.equal(caseBoundStage1WorkbookFilename(reportData),
-        "pilot-cohort-stage1-report-v5-gpt51-participant-gpt56-analysis.xlsx");
+        "pilot-cohort-stage1-report-v6-actual-gpt51-worksheet-gpt56-analysis.xlsx");
 });
 
 test("the case-bound page makes the workbook primary and the annotated transcript supporting evidence", async () => {
@@ -240,7 +245,7 @@ test("the case-bound page makes the workbook primary and the annotated transcrip
     assert.doesNotMatch(client, /caseId=.*stage1-report-xlsx/);
     assert.match(client, /View supporting annotated transcript/);
     assert.match(html, /all cases are presented together in one Excel workbook report/);
-    assert.match(html, /opens on worksheet 2, Meaning Units/);
+    assert.match(html, /actual original GPT-5\.1 Participant &amp; case worksheet copied from the old workbook/);
     assert.match(html, /annotated transcripts are supporting evidence, not substitutes/);
     assert.match(contract, /one deterministic Excel workbook containing every case/);
     assert.match(contract, /Participant Information and Meaning Units on separate worksheets/);
