@@ -160,28 +160,43 @@ test("the authoritative Stage 1 report is one cohort workbook containing every c
     assert.match(rows.flat().join("\n"), /gpt-5\.6-sol/);
     assert.doesNotMatch(rows.flat().join("\n"), /gpt-5\.1/);
     assert.equal(caseBoundStage1WorkbookFilename(data()),
-        "pilot-cohort-stage1-report-v6-six-sheets.xlsx");
+        "pilot-cohort-stage1-report-v7-six-sheets.xlsx");
 });
 
-test("the pilot workbook visibly combines only the original GPT-5.1 participant worksheet with GPT-5.6 analysis", async () => {
+test("the pilot workbook uses corrected GPT-5.1 demographics without importing GPT-5.1 analysis", async () => {
     const reportData = data();
     reportData.participantInformationProvenance = {
         sourceModel: "gpt-5.1",
-        sourceFilename: "Stage1_Preliminary_Analysis_Forms.xlsx",
-        sourceSheetName: "1 Participant & case",
-        sourceWorkbookSha256: "6f8584df06ea5bfe67d51cca3a4f9d99ffa60212915cf02130aa957f988ca395",
+        sourceFilename: "5.1-complete-case-analysis-2026-08-31.xlsx",
+        sourceSheetName: "1 Cases & meaning units",
+        sourceRange: "A:O",
+        sourceWorkbookSha256: "28505922345d9d535fb3eff193e528a0077547a846b9d848d5d51452ba157871",
         sourceScope: "participant_information_only",
-        sourceRows: 275,
-        populatedDemographicRows: 8,
+        sourceRows: 272,
+        cohortRows: 275,
+        missingSourceRows: 3,
+        populatedDemographicRows: 270,
         analyticalContentImported: false,
         priorAnalyticalProcessInherited: false
     };
     reportData.cases[0].participantCode = "P0171";
     reportData.cases[0].sessionNumber = 1;
-    reportData.cases[0].demographics = { age: 42 };
+    reportData.cases[0].demographics = {
+        current_country: "Belgium",
+        current_region: "Ghent area",
+        country_of_origin: "Belgium",
+        diaspora_status: "Non-diaspora (lives in country of birth)",
+        occupation: "Logistics coordination / dispatching in fruit and vegetable wholesale"
+    };
     reportData.cases[1].participantCode = "P0175";
     reportData.cases[1].sessionNumber = 1;
-    reportData.cases[1].demographics = {};
+    reportData.cases[1].demographics = {
+        current_country: "China",
+        country_of_origin: "China",
+        diaspora_status: "non-diaspora (lives in country of origin)",
+        age: 52,
+        occupation: "part-time bookkeeper for several small businesses"
+    };
 
     const generated = await workbookBuffer(reportData);
     const workbook = new ExcelJS.Workbook();
@@ -194,8 +209,8 @@ test("the pilot workbook visibly combines only the original GPT-5.1 participant 
     assert.equal(workbook.views[0].activeTab, 0);
     assert.equal(workbook.worksheets[0].state, "visible");
     assert.equal(workbook.worksheets[1].state, "visible");
-    assert.match(workbook.description, /actual surviving GPT-5\.1 Participant & case worksheet copied from the old workbook/);
-    assert.match(workbook.description, /none of its analytical worksheets or analytical process is included/);
+    assert.match(workbook.description, /demographic columns A:O from the actual saved GPT-5\.1 complete-case report/);
+    assert.match(workbook.description, /No GPT-5\.1 analytical worksheet or analytical process is included/);
 
     const participants = workbook.getWorksheet("1 Participant & case");
     assert.deepEqual(participants.getRow(1).values.slice(1), [
@@ -204,32 +219,32 @@ test("the pilot workbook visibly combines only the original GPT-5.1 participant 
         "Gender", "Age", "Year of birth", "Birth cohort", "Youth status",
         "Occupation", "Education", "Social identity"
     ]);
-    assert.equal(participants.rowCount, 276);
+    assert.equal(participants.rowCount, 3);
     assert.equal(participants.columnCount, 15);
-    assert.equal(participants.getCell("A2").value, "P0034");
-    assert.equal(participants.getCell("D2").value, "Canada");
-    assert.equal(participants.getCell("I2").value, 22);
-    assert.equal(participants.getCell("A128").value, "P0171");
-    assert.equal(participants.getCell("A132").value, "P0175");
-    assert.deepEqual(Object.keys(participants.tables), [
-        "Stage1ParticipantInformation"
-    ]);
-    assert.equal(
-        participants.getTable("Stage1ParticipantInformation").table.tableRef,
-        "A1:O276"
-    );
+    assert.equal(participants.getCell("A2").value, "P0171");
+    assert.equal(participants.getCell("D2").value, "Belgium");
+    assert.equal(participants.getCell("E2").value, "Ghent area");
+    assert.match(participants.getCell("M2").value, /Logistics coordination/);
+    assert.equal(participants.getCell("A3").value, "P0175");
+    assert.equal(participants.getCell("D3").value, "China");
+    assert.equal(participants.getCell("I3").value, 52);
+    assert.match(participants.getCell("M3").value, /part-time bookkeeper/);
+    assert.deepEqual(Object.keys(participants.tables), []);
+    assert.equal(participants.autoFilter, undefined);
 
     const notes = workbook.getWorksheet(CASE_BOUND_STAGE1_WORKBOOK_SHEETS[5]);
     const text = notes.getRows(2, notes.rowCount - 1)
         .flatMap(row => row.values.slice(1)).join("\n");
     assert.match(text, /Model\/source: gpt-5\.1/);
-    assert.match(text, /Workbook: Stage1_Preliminary_Analysis_Forms\.xlsx/);
-    assert.match(text, /Worksheet: 1 Participant & case/);
+    assert.match(text, /Workbook: 5\.1-complete-case-analysis-2026-08-31\.xlsx/);
+    assert.match(text, /Worksheet: 1 Cases & meaning units/);
+    assert.match(text, /Imported range: A:O/);
+    assert.match(text, /272 source rows copied; 3 cohort cases absent/);
     assert.match(text, /GPT-5\.1 analytical content imported: no/);
     assert.match(text, /GPT-5\.1 analytical process inherited: no/);
     assert.match(text, /gpt-5\.6-sol/);
     assert.equal(caseBoundStage1WorkbookFilename(reportData),
-        "pilot-cohort-stage1-report-v6-actual-gpt51-worksheet-gpt56-analysis.xlsx");
+        "pilot-cohort-stage1-report-v7-corrected-gpt51-demographics-gpt56-analysis.xlsx");
 });
 
 test("the case-bound page makes the workbook primary and the annotated transcript supporting evidence", async () => {
@@ -245,7 +260,7 @@ test("the case-bound page makes the workbook primary and the annotated transcrip
     assert.doesNotMatch(client, /caseId=.*stage1-report-xlsx/);
     assert.match(client, /View supporting annotated transcript/);
     assert.match(html, /all cases are presented together in one Excel workbook report/);
-    assert.match(html, /actual original GPT-5\.1 Participant &amp; case worksheet copied from the old workbook/);
+    assert.match(html, /demographic columns A:O from the actual saved GPT-5\.1 complete-case report/);
     assert.match(html, /annotated transcripts are supporting evidence, not substitutes/);
     assert.match(contract, /one deterministic Excel workbook containing every case/);
     assert.match(contract, /Participant Information and Meaning Units on separate worksheets/);

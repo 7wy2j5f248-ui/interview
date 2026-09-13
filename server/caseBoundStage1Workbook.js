@@ -1,11 +1,9 @@
 import ExcelJS from "exceljs";
-import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
 import { buildCaseInspection } from "./caseBoundInspection.js";
 import { rowsForIds } from "./supabaseBatching.js";
 
 export const CASE_BOUND_STAGE1_WORKBOOK_VERSION =
-    "case-bound-stage1-cohort-workbook-v6";
+    "case-bound-stage1-cohort-workbook-v7";
 
 export const CASE_BOUND_STAGE1_WORKBOOK_SHEETS = Object.freeze([
     "1 Participant Information",
@@ -39,18 +37,6 @@ const PARTICIPANT_INFORMATION_COLUMNS = Object.freeze([
 ]);
 
 const GPT51_PILOT_PARTICIPANT_SHEET = "1 Participant & case";
-const GPT51_PILOT_PARTICIPANT_WORKBOOK = new URL(
-    "./assets/pilot-gpt51-participant-sheet.xlsx",
-    import.meta.url
-);
-const GPT51_PILOT_PARTICIPANT_WORKBOOK_SHA256 =
-    "083505f2fdced3eabf6a41db34a29d05d6188c22b8ee7bddbcd9c0e46d883133";
-const GPT51_PILOT_PARTICIPANT_HEADERS = Object.freeze([
-    "P#", "S#", "Language", "Country of residence",
-    "Region of residence", "Country of origin", "Diaspora status",
-    "Gender", "Age", "Year of birth", "Birth cohort", "Youth status",
-    "Occupation", "Education", "Social identity"
-]);
 
 function requireUuid(value, message) {
     const id = typeof value === "string" ? value.trim() : "";
@@ -358,8 +344,8 @@ export async function loadCaseBoundStage1Workbook(supabase, selection = {}) {
             "The Stage 1 workbook participant information could not be loaded.")
             : [],
         relatedRows(caseIds, chunk => supabase
-            .from("pilot_stage1_participant_information_v2")
-            .select("case_id, source_worksheet_row_number, source_participant_code, source_session_number, source_language, participant_information, source_model, source_filename, source_sheet_name, source_workbook_sha256, source_scope, analytical_content_imported, prior_analytical_process_inherited")
+            .from("pilot_stage1_participant_information_v3")
+            .select("case_id, source_worksheet_row_number, source_row_present, source_participant_code, source_session_number, source_language, participant_information, source_model, source_filename, source_sheet_name, source_range, source_workbook_sha256, source_scope, analytical_content_imported, prior_analytical_process_inherited")
             .in("case_id", chunk),
         "The pilot GPT-5.1 participant worksheet could not be loaded.")
     ]);
@@ -402,6 +388,9 @@ export async function loadCaseBoundStage1Workbook(supabase, selection = {}) {
         Object.values(row.participant_information || {}).some(entry =>
             entry !== null && entry !== undefined && entry !== ""))
         : [];
+    const copiedPilotRows = usePilotParticipantWorksheet
+        ? pilotParticipantRows.filter(row => row.source_row_present)
+        : [];
 
     return {
         workbookVersion: CASE_BOUND_STAGE1_WORKBOOK_VERSION,
@@ -412,9 +401,13 @@ export async function loadCaseBoundStage1Workbook(supabase, selection = {}) {
             sourceModel: pilotSource.source_model,
             sourceFilename: pilotSource.source_filename,
             sourceSheetName: pilotSource.source_sheet_name,
+            sourceRange: pilotSource.source_range,
             sourceWorkbookSha256: pilotSource.source_workbook_sha256,
             sourceScope: pilotSource.source_scope,
-            sourceRows: pilotParticipantRows.length,
+            sourceRows: copiedPilotRows.length,
+            cohortRows: pilotParticipantRows.length,
+            missingSourceRows:
+                pilotParticipantRows.length - copiedPilotRows.length,
             populatedDemographicRows: populatedPilotRows.length,
             analyticalContentImported: pilotSource.analytical_content_imported,
             priorAnalyticalProcessInherited:
@@ -528,7 +521,9 @@ function buildReferences(cases, participantInformationProvenance = null) {
                 `Model/source: ${participantInformationProvenance.sourceModel}`,
                 `Workbook: ${participantInformationProvenance.sourceFilename}`,
                 `Worksheet: ${participantInformationProvenance.sourceSheetName}`,
+                `Imported range: ${participantInformationProvenance.sourceRange}`,
                 `Workbook SHA-256: ${participantInformationProvenance.sourceWorkbookSha256}`,
+                `${participantInformationProvenance.sourceRows} source rows copied; ${participantInformationProvenance.missingSourceRows} cohort cases absent from that report have blank demographic fields`,
                 "Scope: participant information only",
                 "GPT-5.1 analytical content imported: no",
                 "GPT-5.1 analytical process inherited: no"
@@ -811,7 +806,7 @@ function applyWorkbookMetadata(workbook, data, createdAt) {
         "The Excel workbook is the Stage 1 report.",
         "Participant Information and Meaning Units are separate worksheets.",
         data.participantInformationProvenance
-            ? "For this pilot only, the first worksheet is the actual surviving GPT-5.1 Participant & case worksheet copied from the old workbook; none of its analytical worksheets or analytical process is included."
+            ? "For this pilot only, the first worksheet uses demographic columns A:O from the actual saved GPT-5.1 complete-case report. The three cohort cases absent from that report have blank demographic fields. No GPT-5.1 analytical worksheet or analytical process is included."
             : "Participant Information is supplied by the selected Stage 1 model.",
         "It is a deterministic presentation of the immutable stored report.",
         "No AI call, validator, reviewer, repairer, or retry is used to create it."
@@ -829,29 +824,6 @@ function applyWorkbookMetadata(workbook, data, createdAt) {
     }];
 }
 
-async function pilotWorkbook() {
-    const workbook = new ExcelJS.Workbook();
-    const source = await readFile(GPT51_PILOT_PARTICIPANT_WORKBOOK);
-    const sourceSha256 = createHash("sha256").update(source).digest("hex");
-    if (sourceSha256 !== GPT51_PILOT_PARTICIPANT_WORKBOOK_SHA256) {
-        throw new Error(
-            "The stored GPT-5.1 Participant & case worksheet file is not the authorized source copy."
-        );
-    }
-    await workbook.xlsx.load(source);
-    const sheet = workbook.getWorksheet(GPT51_PILOT_PARTICIPANT_SHEET);
-    const headers = sheet?.getRow(1).values.slice(1);
-    if (workbook.worksheets.length !== 1 || !sheet
-        || sheet.rowCount !== 276 || sheet.columnCount !== 15
-        || JSON.stringify(headers) !== JSON.stringify(
-            GPT51_PILOT_PARTICIPANT_HEADERS)) {
-        throw new Error(
-            "The stored GPT-5.1 Participant & case worksheet is not the authorized 275-row source worksheet."
-        );
-    }
-    return workbook;
-}
-
 export async function writeCaseBoundStage1Workbook(
     stream,
     data,
@@ -860,19 +832,17 @@ export async function writeCaseBoundStage1Workbook(
     const usesGpt51PilotSource = Boolean(
         data.participantInformationProvenance
     );
-    const workbook = usesGpt51PilotSource
-        ? await pilotWorkbook()
-        : new ExcelJS.stream.xlsx.WorkbookWriter({
-            stream,
-            useStyles: true,
-            useSharedStrings: false
-        });
+    const workbook = new ExcelJS.stream.xlsx.WorkbookWriter({
+        stream,
+        useStyles: true,
+        useSharedStrings: false
+    });
     applyWorkbookMetadata(workbook, data, createdAt);
     const references = buildReferences(
         data.cases,
         data.participantInformationProvenance
     );
-    if (!usesGpt51PilotSource) addParticipantInformationSheet(workbook, data);
+    addParticipantInformationSheet(workbook, data);
     addMeaningUnitsSheet(workbook, data, references);
     addLayerSheet(workbook, data, references, {
         sheetName: CASE_BOUND_STAGE1_WORKBOOK_SHEETS[2],
@@ -887,11 +857,7 @@ export async function writeCaseBoundStage1Workbook(
         field: "themes", type: "th"
     });
     addReferencesSheet(workbook, references);
-    if (usesGpt51PilotSource) {
-        await workbook.xlsx.write(stream);
-    } else {
-        await workbook.commit();
-    }
+    await workbook.commit();
 }
 
 export function caseBoundStage1WorkbookFilename(data) {
@@ -900,6 +866,6 @@ export function caseBoundStage1WorkbookFilename(data) {
         .replace(/[^a-z0-9]+/gu, "-")
         .replace(/^-+|-+$/gu, "") || "stage1";
     return data.participantInformationProvenance
-        ? `${slug}-stage1-report-v6-actual-gpt51-worksheet-gpt56-analysis.xlsx`
-        : `${slug}-stage1-report-v6-six-sheets.xlsx`;
+        ? `${slug}-stage1-report-v7-corrected-gpt51-demographics-gpt56-analysis.xlsx`
+        : `${slug}-stage1-report-v7-six-sheets.xlsx`;
 }
