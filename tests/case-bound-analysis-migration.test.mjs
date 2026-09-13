@@ -51,6 +51,14 @@ const requiredReportMigrationUrls = [
 ].map(path => new URL(path, import.meta.url));
 const dashboardUrl = new URL("../server/caseBoundAnalysisDashboard.js", import.meta.url);
 const researcherScriptUrl = new URL("../researcher-case-bound-analysis.js", import.meta.url);
+const pilotParticipantWorksheetMigrationUrl = new URL(
+    "../supabase/migrations/20260913141434_import_gpt51_pilot_participant_worksheet.sql",
+    import.meta.url
+);
+const pilotParticipantWorksheetRestrictionMigrationUrl = new URL(
+    "../supabase/migrations/20260913143000_restrict_pilot_participant_worksheet.sql",
+    import.meta.url
+);
 
 test("migration isolates immutable Stage 1 request, source, response, and presentation", async () => {
     const sql = await readFile(migrationUrl, "utf8");
@@ -107,6 +115,28 @@ test("pilot import assumes outputs without inheriting the historical process", a
     assert.match(sql, /expected exactly 10,211 preliminary Code fixtures/);
     assert.doesNotMatch(sql, /insert into public\.stage2_runs_v2/);
     assert.doesNotMatch(sql, /responses\.create|OPENAI_API_KEY/);
+});
+
+test("pilot participant worksheet import is isolated from GPT-5.1 analysis", async () => {
+    const [sql, restriction] = await Promise.all([
+        readFile(pilotParticipantWorksheetMigrationUrl, "utf8"),
+        readFile(pilotParticipantWorksheetRestrictionMigrationUrl, "utf8")
+    ]);
+    assert.match(sql, /participant_information_only/);
+    assert.match(sql, /analytical_content_imported boolean not null default false/);
+    assert.match(sql, /prior_analytical_process_inherited boolean not null default false/);
+    assert.match(sql, /analytical_content_imported = false/);
+    assert.match(sql, /prior_analytical_process_inherited = false/);
+    assert.match(sql, /source_sheet_name/);
+    assert.match(sql, /1 Participant & case/);
+    assert.match(sql, /private worksheet rows are imported directly/);
+    assert.match(sql, /intentionally never committed to Git/);
+    assert.doesNotMatch(sql, /insert into public\.pilot_stage1_participant_information_v2/);
+    assert.match(sql, /enable row level security/);
+    assert.match(sql, /from public, anon, authenticated/);
+    assert.match(restriction, /revoke all[\s\S]*from service_role/);
+    assert.match(restriction, /grant select[\s\S]*to service_role/);
+    assert.doesNotMatch(sql, /meaning_units|preliminary_codes|preliminary_categories|preliminary_themes/);
 });
 
 test("Stage 2 private lineage has a covering case index", async () => {
@@ -234,9 +264,11 @@ test("the v2 researcher UI never starts an automatic status monitor", async () =
         readFile(new URL("../researcher-case-bound-analysis.js", import.meta.url), "utf8")
     ]);
     assert.match(html, /dashboard does not monitor or poll/);
-    assert.match(html, /stage1-workbook-v9/);
+    assert.match(html, /stage1-workbook-v10/);
     assert.match(html, /The Stage 1 report is one six-sheet Excel workbook containing every case/);
     assert.match(html, /Participant Information is never combined with Meaning Units/);
+    assert.match(html, /first worksheet reproduces the original GPT-5\.1 Participant/);
+    assert.match(html, /No GPT-5\.1 Meaning Unit, Code, Category, Theme, calculation, or analytical process is included/);
     assert.doesNotMatch(javascript, /setInterval|refreshTimer/);
     assert.match(javascript, /confirmedConfigurationSha256/);
     assert.match(javascript, /Full transcript with inline MU highlights/);

@@ -160,7 +160,61 @@ test("the authoritative Stage 1 report is one cohort workbook containing every c
     assert.match(rows.flat().join("\n"), /gpt-5\.6-sol/);
     assert.doesNotMatch(rows.flat().join("\n"), /gpt-5\.1/);
     assert.equal(caseBoundStage1WorkbookFilename(data()),
-        "pilot-cohort-stage1-report-v3-six-sheets.xlsx");
+        "pilot-cohort-stage1-report-v4-six-sheets.xlsx");
+});
+
+test("the pilot workbook visibly combines only the original GPT-5.1 participant worksheet with GPT-5.6 analysis", async () => {
+    const reportData = data();
+    reportData.participantInformationProvenance = {
+        sourceModel: "gpt-5.1",
+        sourceFilename: "Stage1_Preliminary_Analysis_Forms.xlsx",
+        sourceSheetName: "1 Participant & case",
+        sourceWorkbookSha256: "6f8584df06ea5bfe67d51cca3a4f9d99ffa60212915cf02130aa957f988ca395",
+        sourceScope: "participant_information_only",
+        sourceRows: 275,
+        populatedDemographicRows: 8,
+        analyticalContentImported: false,
+        priorAnalyticalProcessInherited: false
+    };
+    reportData.cases[0].participantCode = "P0171";
+    reportData.cases[0].sessionNumber = 1;
+    reportData.cases[0].demographics = { age: 42 };
+    reportData.cases[1].participantCode = "P0175";
+    reportData.cases[1].sessionNumber = 1;
+    reportData.cases[1].demographics = {};
+
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(await workbookBuffer(reportData));
+    assert.deepEqual(workbook.worksheets.map(sheet => sheet.name), [
+        "1 Participant & case",
+        ...CASE_BOUND_STAGE1_WORKBOOK_SHEETS.slice(1)
+    ]);
+    assert.match(workbook.description, /reproduces the surviving GPT-5\.1 Participant & case worksheet/);
+    assert.match(workbook.description, /none of its analytical worksheets or analytical process is included/);
+
+    const participants = workbook.getWorksheet("1 Participant & case");
+    assert.deepEqual(participants.getRow(1).values.slice(1), [
+        "P#", "S#", "Language", "Country of residence",
+        "Region of residence", "Country of origin", "Diaspora status",
+        "Gender", "Age", "Year of birth", "Birth cohort", "Youth status",
+        "Occupation", "Education", "Social identity"
+    ]);
+    assert.equal(participants.getCell("A2").value, "P0171");
+    assert.equal(participants.getCell("I2").value, 42);
+    assert.equal(participants.getCell("A3").value, "P0175");
+    assert.equal(participants.getCell("I3").value, null);
+
+    const notes = workbook.getWorksheet(CASE_BOUND_STAGE1_WORKBOOK_SHEETS[5]);
+    const text = notes.getRows(2, notes.rowCount - 1)
+        .flatMap(row => row.values.slice(1)).join("\n");
+    assert.match(text, /Model\/source: gpt-5\.1/);
+    assert.match(text, /Workbook: Stage1_Preliminary_Analysis_Forms\.xlsx/);
+    assert.match(text, /Worksheet: 1 Participant & case/);
+    assert.match(text, /GPT-5\.1 analytical content imported: no/);
+    assert.match(text, /GPT-5\.1 analytical process inherited: no/);
+    assert.match(text, /gpt-5\.6-sol/);
+    assert.equal(caseBoundStage1WorkbookFilename(reportData),
+        "pilot-cohort-stage1-report-v4-gpt51-participant-gpt56-analysis.xlsx");
 });
 
 test("the case-bound page makes the workbook primary and the annotated transcript supporting evidence", async () => {

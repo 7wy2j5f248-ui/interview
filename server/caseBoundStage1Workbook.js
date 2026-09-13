@@ -3,7 +3,7 @@ import { buildCaseInspection } from "./caseBoundInspection.js";
 import { rowsForIds } from "./supabaseBatching.js";
 
 export const CASE_BOUND_STAGE1_WORKBOOK_VERSION =
-    "case-bound-stage1-cohort-workbook-v3";
+    "case-bound-stage1-cohort-workbook-v4";
 
 export const CASE_BOUND_STAGE1_WORKBOOK_SHEETS = Object.freeze([
     "1 Participant Information",
@@ -35,6 +35,8 @@ const PARTICIPANT_INFORMATION_COLUMNS = Object.freeze([
     ["education_level", "Education"],
     ["social_identity", "Social identity"]
 ]);
+
+const GPT51_PILOT_PARTICIPANT_SHEET = "1 Participant & case";
 
 function requireUuid(value, message) {
     const id = typeof value === "string" ? value.trim() : "";
@@ -78,12 +80,23 @@ function participantCode(caseNumber) {
     return String(caseNumber || "").split("-S")[0];
 }
 
+function legacyParticipantCode(caseNumber) {
+    const digits = participantCode(caseNumber).match(/\d+/u)?.[0] || "";
+    return digits
+        ? `P${String(Number.parseInt(digits, 10)).padStart(4, "0")}`
+        : participantCode(caseNumber);
+}
+
 function sessionNumber(caseNumber) {
     const match = String(caseNumber || "").match(/-S(\d+)$/iu);
     return match ? Number.parseInt(match[1], 10) : 1;
 }
 
 function naturalCaseOrder(left, right) {
+    if (Number.isInteger(left.participantWorksheetRow)
+        && Number.isInteger(right.participantWorksheetRow)) {
+        return left.participantWorksheetRow - right.participantWorksheetRow;
+    }
     return participantCode(left.caseNumber).localeCompare(
         participantCode(right.caseNumber), undefined, { numeric: true }
     ) || sessionNumber(left.caseNumber) - sessionNumber(right.caseNumber);
@@ -136,13 +149,23 @@ function reportParticipantInformation(report) {
     return result;
 }
 
+function pilotParticipantInformation(row) {
+    const information = row?.participant_information;
+    if (!information || typeof information !== "object"
+        || Array.isArray(information)) return {};
+    return Object.fromEntries(Object.entries(information).filter(([, entry]) =>
+        entry !== null && entry !== undefined && entry !== ""));
+}
+
 function workbookCase(
     analysisCase,
     attempt,
     reportRow,
     sourceSnapshot,
     storedMessages,
-    descriptor
+    descriptor,
+    pilotParticipantRow,
+    usePilotParticipantWorksheet
 ) {
     const inspection = buildCaseInspection({
         caseNumber: analysisCase.case_number,
@@ -155,15 +178,30 @@ function workbookCase(
     });
     const participantTurn = inspection.transcript.find(message =>
         message.speaker === "participant");
+    const currentLanguage = participantTurn?.language
+        || inspection.transcript[0]?.language || "";
     return {
         caseNumber: analysisCase.case_number,
+        participantCode: usePilotParticipantWorksheet
+            ? pilotParticipantRow?.source_participant_code
+                || legacyParticipantCode(analysisCase.case_number)
+            : participantCode(analysisCase.case_number),
+        sessionNumber: usePilotParticipantWorksheet
+            ? pilotParticipantRow?.source_session_number || 1
+            : sessionNumber(analysisCase.case_number),
+        participantWorksheetRow: usePilotParticipantWorksheet
+            ? pilotParticipantRow?.source_worksheet_row_number || null
+            : null,
         stage1Status: analysisCase.stage1_status,
-        language: participantTurn?.language
-            || inspection.transcript[0]?.language || "",
-        demographics: {
-            ...descriptorValues(descriptor),
-            ...reportParticipantInformation(reportRow.report_json)
-        },
+        language: usePilotParticipantWorksheet
+            ? pilotParticipantRow?.source_language || currentLanguage
+            : currentLanguage,
+        demographics: usePilotParticipantWorksheet
+            ? pilotParticipantInformation(pilotParticipantRow)
+            : {
+                ...descriptorValues(descriptor),
+                ...reportParticipantInformation(reportRow.report_json)
+            },
         inspection
     };
 }
@@ -297,15 +335,26 @@ export async function loadCaseBoundStage1Workbook(supabase, selection = {}) {
         return source?.source_json?.terminalSessionId
             || sessions.at(-1)?.session_id;
     }));
-    const descriptors = terminalSessionIds.length
-        ? await relatedRows(terminalSessionIds, chunk => supabase
-            .from("participant_descriptors")
-            .select(`session_id, ${DESCRIPTOR_COLUMNS.join(", ")}`)
-            .in("session_id", chunk),
-        "The Stage 1 workbook participant information could not be loaded.")
-        : [];
+    const [descriptors, pilotParticipantRows] = await Promise.all([
+        terminalSessionIds.length
+            ? relatedRows(terminalSessionIds, chunk => supabase
+                .from("participant_descriptors")
+                .select(`session_id, ${DESCRIPTOR_COLUMNS.join(", ")}`)
+                .in("session_id", chunk),
+            "The Stage 1 workbook participant information could not be loaded.")
+            : [],
+        relatedRows(caseIds, chunk => supabase
+            .from("pilot_stage1_participant_information_v2")
+            .select("case_id, source_worksheet_row_number, source_participant_code, source_session_number, source_language, participant_information, source_model, source_filename, source_sheet_name, source_workbook_sha256, source_scope, analytical_content_imported, prior_analytical_process_inherited")
+            .in("case_id", chunk),
+        "The pilot GPT-5.1 participant worksheet could not be loaded.")
+    ]);
     const descriptorBySession = new Map(descriptors.map(item =>
         [item.session_id, item]));
+    const pilotParticipantByCase = new Map(pilotParticipantRows.map(item =>
+        [item.case_id, item]));
+    const usePilotParticipantWorksheet = caseIds.length > 0
+        && pilotParticipantRows.length === caseIds.length;
 
     const cases = analysisCases.map(analysisCase => {
         const attempt = attemptByCase.get(analysisCase.id);
@@ -326,15 +375,37 @@ export async function loadCaseBoundStage1Workbook(supabase, selection = {}) {
             source,
             messages,
             descriptorBySession.get(source?.source_json?.terminalSessionId
-                || sessions.at(-1)?.session_id)
+                || sessions.at(-1)?.session_id),
+            pilotParticipantByCase.get(analysisCase.id) || null,
+            usePilotParticipantWorksheet
         );
     }).sort(naturalCaseOrder);
+
+    const pilotSource = usePilotParticipantWorksheet
+        ? pilotParticipantRows[0] : null;
+    const populatedPilotRows = usePilotParticipantWorksheet
+        ? pilotParticipantRows.filter(row =>
+        Object.values(row.participant_information || {}).some(entry =>
+            entry !== null && entry !== undefined && entry !== ""))
+        : [];
 
     return {
         workbookVersion: CASE_BOUND_STAGE1_WORKBOOK_VERSION,
         project: projects[0] || { project_name: "Research project" },
         cohort,
         selection: { type: "cohort", id: suppliedCohortId },
+        participantInformationProvenance: pilotSource ? {
+            sourceModel: pilotSource.source_model,
+            sourceFilename: pilotSource.source_filename,
+            sourceSheetName: pilotSource.source_sheet_name,
+            sourceWorkbookSha256: pilotSource.source_workbook_sha256,
+            sourceScope: pilotSource.source_scope,
+            sourceRows: pilotParticipantRows.length,
+            populatedDemographicRows: populatedPilotRows.length,
+            analyticalContentImported: pilotSource.analytical_content_imported,
+            priorAnalyticalProcessInherited:
+                pilotSource.prior_analytical_process_inherited
+        } : null,
         cases
     };
 }
@@ -415,7 +486,7 @@ function presentationSource(unit, model) {
     return "English source evidence unavailable";
 }
 
-function buildReferences(cases) {
+function buildReferences(cases, participantInformationProvenance = null) {
     const rows = [];
     const destinations = new Map();
     function add(key, row) {
@@ -423,9 +494,37 @@ function buildReferences(cases) {
         destinations.set(key, rowNumber);
         rows.push({ reference: `R${String(rows.length + 1).padStart(6, "0")}`, ...row });
     }
+    if (participantInformationProvenance) {
+        add("participant-information-source", {
+            caseNumber: "",
+            participantCode: "",
+            type: "Participant information source",
+            localId: "",
+            englishText: "Pilot participant worksheet imported separately from the analytical report",
+            mentions: 0,
+            linkedIds: "",
+            messageIds: "",
+            inlineStatus: `${participantInformationProvenance.sourceRows} original worksheet rows; ${participantInformationProvenance.populatedDemographicRows} contain demographic values`,
+            originalEvidence: "",
+            source: [
+                `Model/source: ${participantInformationProvenance.sourceModel}`,
+                `Workbook: ${participantInformationProvenance.sourceFilename}`,
+                `Worksheet: ${participantInformationProvenance.sourceSheetName}`,
+                `Workbook SHA-256: ${participantInformationProvenance.sourceWorkbookSha256}`,
+                "Scope: participant information only",
+                "GPT-5.1 analytical content imported: no",
+                "GPT-5.1 analytical process inherited: no"
+            ].join("\n")
+        });
+    }
     cases.forEach(item => {
+        const addCaseReference = (key, row) => add(key, {
+            participantCode: item.participantCode
+                || participantCode(item.caseNumber),
+            ...row
+        });
         const inspection = item.inspection;
-        add(referenceKey(item.caseNumber, "report"), {
+        addCaseReference(referenceKey(item.caseNumber, "report"), {
             caseNumber: item.caseNumber,
             type: "Stage 1 report",
             localId: "",
@@ -446,7 +545,7 @@ function buildReferences(cases) {
                 `Response SHA-256: ${inspection.provenance.sourceResponseSha256 || "—"}`
             ].join("\n")
         });
-        inspection.report.meaningUnits.forEach(unit => add(
+        inspection.report.meaningUnits.forEach(unit => addCaseReference(
             referenceKey(item.caseNumber, "mu", unit.id), {
                 caseNumber: item.caseNumber,
                 type: "Meaning Unit",
@@ -466,7 +565,7 @@ function buildReferences(cases) {
                 source: presentationSource(unit, inspection.provenance.model)
             }
         ));
-        inspection.report.codes.forEach(code => add(
+        inspection.report.codes.forEach(code => addCaseReference(
             referenceKey(item.caseNumber, "co", code.id), {
                 caseNumber: item.caseNumber,
                 type: "Preliminary Code",
@@ -486,7 +585,7 @@ function buildReferences(cases) {
                 source: `Exact ${inspection.provenance.model || "selected-model"} Code label and stored mappings`
             }
         ));
-        inspection.report.categories.forEach(category => add(
+        inspection.report.categories.forEach(category => addCaseReference(
             referenceKey(item.caseNumber, "ca", category.id), {
                 caseNumber: item.caseNumber,
                 type: "Preliminary Category",
@@ -500,7 +599,7 @@ function buildReferences(cases) {
                 source: `Exact ${inspection.provenance.model || "selected-model"} Category label and stored mappings`
             }
         ));
-        inspection.report.themes.forEach(theme => add(
+        inspection.report.themes.forEach(theme => addCaseReference(
             referenceKey(item.caseNumber, "th", theme.id), {
                 caseNumber: item.caseNumber,
                 type: "Preliminary Tentative Theme",
@@ -519,15 +618,42 @@ function buildReferences(cases) {
 }
 
 function addParticipantInformationSheet(workbook, data) {
-    const demographics = dynamicDemographicFields(data.cases);
-    const sheet = workbook.addWorksheet(CASE_BOUND_STAGE1_WORKBOOK_SHEETS[0], {
-        views: [{ state: "frozen", xSplit: 3, ySplit: 1 }]
-    });
-    configureSheet(sheet, [
+    const usesGpt51PilotSource = Boolean(data.participantInformationProvenance);
+    const demographics = usesGpt51PilotSource
+        ? PARTICIPANT_INFORMATION_COLUMNS.map(([field]) => field)
+        : dynamicDemographicFields(data.cases);
+    const sheet = workbook.addWorksheet(
+        usesGpt51PilotSource
+            ? GPT51_PILOT_PARTICIPANT_SHEET
+            : CASE_BOUND_STAGE1_WORKBOOK_SHEETS[0],
+        usesGpt51PilotSource
+            ? {}
+            : { views: [{ state: "frozen", xSplit: 3, ySplit: 1 }] }
+    );
+    const headers = [
         "P#", "S#", "Language", ...demographics.map(demographicHeading)
-    ], 3);
+    ];
+    if (usesGpt51PilotSource) {
+        sheet.columns = headers.map((header, index) => ({
+            header,
+            key: `column_${index + 1}`,
+            width: index < 3 || index === 8 || index === 9 ? 12 : 22
+        }));
+        const header = sheet.getRow(1);
+        header.font = { bold: true, color: { argb: "FFFFFFFF" } };
+        header.fill = {
+            type: "pattern", pattern: "solid", fgColor: { argb: "FF1F4E78" }
+        };
+        header.alignment = {
+            horizontal: "center", vertical: "middle", wrapText: true
+        };
+        header.commit();
+    } else {
+        configureSheet(sheet, headers, 3);
+    }
     data.cases.forEach(item => appendRow(sheet, [
-        participantCode(item.caseNumber), sessionNumber(item.caseNumber),
+        item.participantCode || participantCode(item.caseNumber),
+        item.sessionNumber || sessionNumber(item.caseNumber),
         item.language,
         ...demographics.map(field => item.demographics[field] ?? "")
     ], row => {
@@ -549,7 +675,8 @@ function addMeaningUnitsSheet(workbook, data, references) {
     data.cases.forEach(item => {
         const report = item.inspection.report;
         appendRow(sheet, [
-            participantCode(item.caseNumber), sessionNumber(item.caseNumber),
+            item.participantCode || participantCode(item.caseNumber),
+            item.sessionNumber || sessionNumber(item.caseNumber),
             internalLink("Complete", CASE_BOUND_STAGE1_WORKBOOK_SHEETS[5],
                 `A${references.destinations.get(referenceKey(item.caseNumber, "report"))}`),
             ...Array.from({ length: maximum }, (_, index) => {
@@ -597,7 +724,8 @@ function addLayerSheet(workbook, data, references, {
     data.cases.forEach(item => {
         const values = item.inspection.report[field];
         appendRow(sheet, [
-            participantCode(item.caseNumber), sessionNumber(item.caseNumber),
+            item.participantCode || participantCode(item.caseNumber),
+            item.sessionNumber || sessionNumber(item.caseNumber),
             ...Array.from({ length: maximum }, (_, index) => {
                 const entry = values[index];
                 if (!entry) return "";
@@ -630,7 +758,7 @@ function addReferencesSheet(workbook, references) {
     ], 3);
     references.rows.forEach(reference => appendRow(sheet, [
         reference.reference,
-        participantCode(reference.caseNumber),
+        reference.participantCode || participantCode(reference.caseNumber),
         reference.type,
         reference.localId,
         reference.englishText,
@@ -667,12 +795,18 @@ export async function writeCaseBoundStage1Workbook(
     workbook.description = [
         "The Excel workbook is the Stage 1 report.",
         "Participant Information and Meaning Units are separate worksheets.",
+        data.participantInformationProvenance
+            ? "For this pilot only, the first worksheet reproduces the surviving GPT-5.1 Participant & case worksheet; none of its analytical worksheets or analytical process is included."
+            : "Participant Information is supplied by the selected Stage 1 model.",
         "It is a deterministic presentation of the immutable stored report.",
         "No AI call, validator, reviewer, repairer, or retry is used to create it."
     ].join(" ");
     workbook.created = createdAt;
     workbook.modified = createdAt;
-    const references = buildReferences(data.cases);
+    const references = buildReferences(
+        data.cases,
+        data.participantInformationProvenance
+    );
     addParticipantInformationSheet(workbook, data);
     addMeaningUnitsSheet(workbook, data, references);
     addLayerSheet(workbook, data, references, {
@@ -696,5 +830,7 @@ export function caseBoundStage1WorkbookFilename(data) {
     const slug = String(scope || "stage1").toLowerCase()
         .replace(/[^a-z0-9]+/gu, "-")
         .replace(/^-+|-+$/gu, "") || "stage1";
-    return `${slug}-stage1-report-v3-six-sheets.xlsx`;
+    return data.participantInformationProvenance
+        ? `${slug}-stage1-report-v4-gpt51-participant-gpt56-analysis.xlsx`
+        : `${slug}-stage1-report-v4-six-sheets.xlsx`;
 }
