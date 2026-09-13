@@ -3,7 +3,7 @@ import { buildCaseInspection } from "./caseBoundInspection.js";
 import { rowsForIds } from "./supabaseBatching.js";
 
 export const CASE_BOUND_STAGE1_WORKBOOK_VERSION =
-    "case-bound-stage1-cohort-workbook-v4";
+    "case-bound-stage1-cohort-workbook-v5";
 
 export const CASE_BOUND_STAGE1_WORKBOOK_SHEETS = Object.freeze([
     "1 Participant Information",
@@ -666,7 +666,13 @@ function addMeaningUnitsSheet(workbook, data, references) {
     const maximum = Math.max(...data.cases.map(item =>
         item.inspection.report.meaningUnits.length));
     const sheet = workbook.addWorksheet(CASE_BOUND_STAGE1_WORKBOOK_SHEETS[1], {
-        views: [{ state: "frozen", xSplit: 2, ySplit: 1 }]
+        views: [{
+            state: "frozen",
+            xSplit: 2,
+            ySplit: 1,
+            activeCell: "A1",
+            tabSelected: true
+        }]
     });
     configureSheet(sheet, [
         "P#", "S#", "Stage 1 report",
@@ -840,6 +846,6 @@ export function caseBoundStage1WorkbookFilename(data) {
         .replace(/[^a-z0-9]+/gu, "-")
         .replace(/^-+|-+$/gu, "") || "stage1";
     return data.participantInformationProvenance
-        ? `${slug}-stage1-report-v4-gpt51-participant-gpt56-analysis.xlsx`
-        : `${slug}-stage1-report-v4-six-sheets.xlsx`;
+        ? `${slug}-stage1-report-v5-gpt51-participant-gpt56-analysis.xlsx`
+        : `${slug}-stage1-report-v5-six-sheets.xlsx`;
 }

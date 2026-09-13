@@ -4,6 +4,7 @@ import { PassThrough } from "node:stream";
 import { finished } from "node:stream/promises";
 import { readFile } from "node:fs/promises";
 import ExcelJS from "exceljs";
+import JSZip from "jszip";
 import { buildCaseInspection } from "../server/caseBoundInspection.js";
 import {
     CASE_BOUND_STAGE1_WORKBOOK_SHEETS,
@@ -160,7 +161,7 @@ test("the authoritative Stage 1 report is one cohort workbook containing every c
     assert.match(rows.flat().join("\n"), /gpt-5\.6-sol/);
     assert.doesNotMatch(rows.flat().join("\n"), /gpt-5\.1/);
     assert.equal(caseBoundStage1WorkbookFilename(data()),
-        "pilot-cohort-stage1-report-v4-six-sheets.xlsx");
+        "pilot-cohort-stage1-report-v5-six-sheets.xlsx");
 });
 
 test("the pilot workbook visibly combines only the original GPT-5.1 participant worksheet with GPT-5.6 analysis", async () => {
@@ -183,8 +184,9 @@ test("the pilot workbook visibly combines only the original GPT-5.1 participant 
     reportData.cases[1].sessionNumber = 1;
     reportData.cases[1].demographics = {};
 
+    const generated = await workbookBuffer(reportData);
     const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(await workbookBuffer(reportData));
+    await workbook.xlsx.load(generated);
     assert.deepEqual(workbook.worksheets.map(sheet => sheet.name), [
         "1 Participant & case",
         ...CASE_BOUND_STAGE1_WORKBOOK_SHEETS.slice(1)
@@ -193,6 +195,10 @@ test("the pilot workbook visibly combines only the original GPT-5.1 participant 
     assert.equal(workbook.views[0].activeTab, 1);
     assert.equal(workbook.worksheets[0].state, "visible");
     assert.equal(workbook.worksheets[1].state, "visible");
+    const archive = await JSZip.loadAsync(generated);
+    const meaningUnitsXml = await archive.file(
+        "xl/worksheets/sheet2.xml").async("string");
+    assert.match(meaningUnitsXml, /<sheetView[^>]+tabSelected="1"/);
     assert.match(workbook.description, /reproduces the surviving GPT-5\.1 Participant & case worksheet/);
     assert.match(workbook.description, /none of its analytical worksheets or analytical process is included/);
 
@@ -218,7 +224,7 @@ test("the pilot workbook visibly combines only the original GPT-5.1 participant 
     assert.match(text, /GPT-5\.1 analytical process inherited: no/);
     assert.match(text, /gpt-5\.6-sol/);
     assert.equal(caseBoundStage1WorkbookFilename(reportData),
-        "pilot-cohort-stage1-report-v4-gpt51-participant-gpt56-analysis.xlsx");
+        "pilot-cohort-stage1-report-v5-gpt51-participant-gpt56-analysis.xlsx");
 });
 
 test("the case-bound page makes the workbook primary and the annotated transcript supporting evidence", async () => {
