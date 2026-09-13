@@ -61,6 +61,292 @@
         return node;
     }
 
+    function make(tag, className, textValue) {
+        const node = document.createElement(tag);
+        if (className) node.className = className;
+        if (textValue !== undefined && textValue !== null) {
+            node.textContent = String(textValue);
+        }
+        return node;
+    }
+
+    function chip(textValue, kind = "") {
+        return make("span", `report-chip ${kind}`.trim(), textValue);
+    }
+
+    function appendChips(host, values, kind = "") {
+        (values || []).forEach(value => host.appendChild(chip(value, kind)));
+        if (!(values || []).length) host.appendChild(make("span", "muted", "—"));
+    }
+
+    function technicalDetails(record) {
+        const details = make("details", "technical-record");
+        details.appendChild(make("summary", "", "Technical frozen request and response"));
+        details.appendChild(make("p", "muted",
+            "This evidence is preserved for exact technical audit. It is not the default research report view."));
+        details.appendChild(make("pre", "", JSON.stringify(record, null, 2)));
+        return details;
+    }
+
+    function reportTable(columns, rows) {
+        const wrap = make("div", "table report-table");
+        const table = document.createElement("table");
+        const head = document.createElement("thead");
+        const headRow = document.createElement("tr");
+        columns.forEach(column => headRow.appendChild(make("th", "", column.label)));
+        head.appendChild(headRow);
+        const body = document.createElement("tbody");
+        rows.forEach(row => {
+            const tableRow = document.createElement("tr");
+            columns.forEach(column => {
+                const cell = document.createElement("td");
+                const value = column.value(row);
+                if (value instanceof Node) cell.appendChild(value);
+                else cell.textContent = value === null || value === undefined ? "—" : String(value);
+                tableRow.appendChild(cell);
+            });
+            body.appendChild(tableRow);
+        });
+        table.append(head, body);
+        wrap.appendChild(table);
+        return wrap;
+    }
+
+    function linkedLabels(ids, lookup, kind) {
+        const host = make("div", "chip-list");
+        (ids || []).forEach(id => {
+            const item = lookup.get(id);
+            host.appendChild(chip(item ? `${id} · ${item.label || item.statement}` : id, kind));
+        });
+        return host;
+    }
+
+    function connectedHierarchy(report) {
+        const unitLookup = new Map(report.meaningUnits.map(item => [item.id, item]));
+        const codeLookup = new Map(report.codes.map(item => [item.id, item]));
+        const categoryLookup = new Map(report.categories.map(item => [item.id, item]));
+        const rows = [];
+        report.themes.forEach(theme => theme.categoryIds.forEach(categoryId => {
+            const category = categoryLookup.get(categoryId);
+            (category?.codeIds || []).forEach(codeId => {
+                const code = codeLookup.get(codeId);
+                rows.push({ theme, category, code });
+            });
+        }));
+        return reportTable([
+            { label: "Tentative Theme", value: row => `${row.theme.id} · ${row.theme.statement}` },
+            { label: "Preliminary Category", value: row => `${row.category.id} · ${row.category.label}` },
+            { label: "Preliminary Code", value: row => `${row.code.id} · ${row.code.label} · ${row.code.mentionCount} MU mention${row.code.mentionCount === 1 ? "" : "s"}` },
+            { label: "Supporting Meaning Units", value: row => {
+                const list = document.createElement("ul");
+                row.code.meaningUnitIds.forEach(id => {
+                    const unit = unitLookup.get(id);
+                    list.appendChild(make("li", "", `${id}: ${unit?.exactText || "—"}`));
+                });
+                return list;
+            } }
+        ], rows);
+    }
+
+    function annotatedTranscript(inspection) {
+        const report = inspection.report;
+        const codeByMu = new Map();
+        const categoryByCode = new Map();
+        report.codes.forEach(code => code.meaningUnitIds.forEach(id => {
+            const list = codeByMu.get(id) || [];
+            list.push(code);
+            codeByMu.set(id, list);
+        }));
+        report.categories.forEach(category => category.codeIds.forEach(id => {
+            const list = categoryByCode.get(id) || [];
+            list.push(category);
+            categoryByCode.set(id, list);
+        }));
+        const anchored = new Set();
+        const host = make("div", "transcript-report");
+        inspection.transcript.forEach(message => {
+            const card = make("article", `transcript-turn ${message.speaker}`);
+            card.appendChild(make("h4", "",
+                `${message.turnId} · ${message.speaker === "participant" ? "Participant" : "Interviewer"}`));
+            const sourceText = message.englishText || message.originalText || "";
+            const ranges = [];
+            report.meaningUnits.forEach(unit => unit.segments.forEach(segment => {
+                if (String(segment.messageId) !== String(message.id)) return;
+                let start = Number.isInteger(segment.startOffset) ? segment.startOffset : -1;
+                let end = Number.isInteger(segment.endOffset) ? segment.endOffset : -1;
+                const exact = (segment.exactText || "").trim();
+                if (start < 0 || end <= start
+                    || sourceText.slice(start, end).trim() !== exact) {
+                    start = sourceText.toLocaleLowerCase().indexOf(exact.toLocaleLowerCase());
+                    end = start < 0 ? -1 : start + exact.length;
+                }
+                if (start >= 0 && end > start) ranges.push({ start, end, unit });
+            }));
+            ranges.sort((left, right) => left.start - right.start || left.end - right.end);
+            const textLine = make("p", "annotated-text");
+            let cursor = 0;
+            ranges.forEach(range => {
+                if (range.start < cursor) return;
+                textLine.appendChild(document.createTextNode(sourceText.slice(cursor, range.start)));
+                const mark = make("mark", "meaning-unit-mark", sourceText.slice(range.start, range.end));
+                const codes = codeByMu.get(range.unit.id) || [];
+                mark.title = `${range.unit.id}: ${codes.map(code => `${code.id} ${code.label}`).join("; ")}`;
+                textLine.appendChild(mark);
+                cursor = range.end;
+                anchored.add(range.unit.id);
+            });
+            textLine.appendChild(document.createTextNode(sourceText.slice(cursor)));
+            card.appendChild(textLine);
+            const units = [...new Map(ranges.map(range => [range.unit.id, range.unit])).values()];
+            units.forEach(unit => {
+                const mapping = make("div", "mu-mapping");
+                mapping.appendChild(chip(unit.id, "mu"));
+                const codes = codeByMu.get(unit.id) || [];
+                codes.forEach(code => {
+                    mapping.appendChild(chip(
+                        `${code.id} · ${code.label} · ${code.mentionCount} MU mention${code.mentionCount === 1 ? "" : "s"}`,
+                        "co"
+                    ));
+                    (categoryByCode.get(code.id) || []).forEach(category =>
+                        mapping.appendChild(chip(`${category.id} · ${category.label}`, "ca")));
+                });
+                card.appendChild(mapping);
+            });
+            if (message.originalText && message.englishText
+                && message.originalText !== message.englishText) {
+                const original = make("details", "original-language");
+                original.appendChild(make("summary", "", "Original-language turn"));
+                original.appendChild(make("p", "", message.originalText));
+                card.appendChild(original);
+            }
+            host.appendChild(card);
+        });
+        const unanchored = report.meaningUnits.filter(unit => !anchored.has(unit.id));
+        if (unanchored.length) {
+            const panel = make("div", "warning");
+            panel.appendChild(make("strong", "", "Meaning Units preserved without a reliable screen position"));
+            panel.appendChild(make("p", "",
+                "Their exact GPT-5.6 text remains in the report; the interface does not invent a transcript location."));
+            const list = document.createElement("ul");
+            unanchored.forEach(unit => list.appendChild(
+                make("li", "", `${unit.id}: ${unit.exactText}`)));
+            panel.appendChild(list);
+            host.appendChild(panel);
+        }
+        return host;
+    }
+
+    function showCaseReport(record) {
+        const inspection = record.inspection;
+        const report = inspection.report;
+        const codeLookup = new Map(report.codes.map(item => [item.id, item]));
+        const categoryLookup = new Map(report.categories.map(item => [item.id, item]));
+        const content = element("v2RecordContent");
+        content.replaceChildren();
+        element("v2RecordTitle").textContent = `${inspection.caseNumber} · Stage 1 report`;
+
+        const completion = make("div", "contract report-completion");
+        completion.appendChild(make("strong", "", "Stage 1 report submitted"));
+        completion.appendChild(make("p", "",
+            "The complete MU → CO → CA → TH report is required before Stage 1 can be complete. Viewing this page is optional and never affects progression."));
+        content.appendChild(completion);
+
+        const provenance = make("section", "report-section provenance");
+        provenance.appendChild(make("h3", "", "Source and lineage"));
+        const p = inspection.provenance;
+        provenance.appendChild(make("p", "lineage-primary",
+            `${p.provider || "Provider"} · ${p.model || "model unavailable"} · ${p.reasoningEffort || "reasoning unavailable"} reasoning`));
+        provenance.appendChild(make("p", p.sourceResponseHashMatches ? "lineage-ok" : "warning",
+            p.sourceResponseHashMatches
+                ? "Verified: this report is derived from the exact frozen provider response. No GPT-5.1 analytical content and no new AI call were used."
+                : "The frozen-response hash could not be verified in this view."));
+        provenance.appendChild(make("p", "muted",
+            `Attempt ${p.attemptNumber || "—"}; preserved provider status: ${p.providerStatus || "—"}; source response SHA-256: ${p.sourceResponseSha256 || "—"}`));
+        content.appendChild(provenance);
+
+        const metrics = make("div", "grid report-metrics");
+        [
+            ["Transcript messages", inspection.counts.messages],
+            ["Participant turns", inspection.counts.participantTurns],
+            ["Meaning Units", inspection.counts.meaningUnits],
+            ["Preliminary Codes", inspection.counts.codes],
+            ["Preliminary Categories", inspection.counts.categories],
+            ["Tentative Themes", inspection.counts.themes],
+            ["Linked MU mentions", inspection.counts.linkedMeaningUnitMentions]
+        ].forEach(([label, value]) => metrics.appendChild(metric(label, value)));
+        content.appendChild(metrics);
+
+        const transcriptSection = make("section", "report-section");
+        transcriptSection.appendChild(make("h3", "", "Annotated transcript"));
+        transcriptSection.appendChild(make("p", "muted",
+            "Highlighted passages are GPT-5.6 Meaning Units. The chips show their linked Codes and Categories."));
+        transcriptSection.appendChild(annotatedTranscript(inspection));
+        content.appendChild(transcriptSection);
+
+        const hierarchy = make("section", "report-section");
+        hierarchy.appendChild(make("h3", "", "MU → CO → CA → TH hierarchy"));
+        hierarchy.appendChild(make("p", "muted",
+            "A mention count is the mechanical number of linked Meaning Units, not a quality judgment or keyword count."));
+        hierarchy.appendChild(make("h4", "", "Connected four-layer report"));
+        hierarchy.appendChild(connectedHierarchy(report));
+        hierarchy.appendChild(make("h4", "", "Preliminary Codes"));
+        hierarchy.appendChild(reportTable([
+            { label: "Code", value: row => `${row.id} · ${row.label}` },
+            { label: "MU mentions", value: row => row.mentionCount },
+            { label: "Meaning Units", value: row => { const host = make("div", "chip-list"); appendChips(host, row.meaningUnitIds, "mu"); return host; } },
+            { label: "Categories", value: row => linkedLabels(row.categoryIds, categoryLookup, "ca") }
+        ], report.codes));
+        hierarchy.appendChild(make("h4", "", "Preliminary Categories"));
+        hierarchy.appendChild(reportTable([
+            { label: "Category", value: row => `${row.id} · ${row.label}` },
+            { label: "MU mentions", value: row => row.mentionCount },
+            { label: "Codes", value: row => linkedLabels(row.codeIds, codeLookup, "co") }
+        ], report.categories));
+        hierarchy.appendChild(make("h4", "", "Preliminary Tentative Themes"));
+        hierarchy.appendChild(reportTable([
+            { label: "Theme", value: row => `${row.id} · ${row.statement}` },
+            { label: "MU mentions", value: row => row.mentionCount },
+            { label: "Categories", value: row => linkedLabels(row.categoryIds, categoryLookup, "ca") }
+        ], report.themes));
+        content.appendChild(hierarchy);
+        content.appendChild(technicalDetails(record));
+        element("v2RecordDialog").showModal();
+    }
+
+    function showStage2Report(record) {
+        const content = element("v2RecordContent");
+        const run = record.run;
+        const layer = String(run.analysis_layer).toUpperCase();
+        const presentation = record.explicitPresentation?.presentation_json;
+        content.replaceChildren();
+        element("v2RecordTitle").textContent = `Stage ${layer} report · attempt ${run.attempt_number}`;
+        const source = layer === "2A" ? presentation?.harmonized_codes
+            : layer === "2B" ? presentation?.harmonized_categories
+                : presentation?.harmonized_themes;
+        const labelField = layer === "2C" ? "statement" : "label";
+        const linkField = layer === "2A" ? "source_codes"
+            : layer === "2B" ? "source_categories" : "source_themes";
+        const intro = make("div", presentation ? "contract" : "warning");
+        intro.appendChild(make("strong", "",
+            presentation ? `Stage ${layer} report submitted` : `Stage ${layer} is not finalized with a report`));
+        intro.appendChild(make("p", "",
+            presentation
+                ? "This stored report finalizes the stage. Opening it is optional and has no workflow effect."
+                : "The exact attempt remains preserved, but this stage is not report-complete."));
+        content.appendChild(intro);
+        content.appendChild(make("p", "lineage-primary",
+            `${run.provider} · ${run.model} · ${run.reasoning_effort} reasoning · preserved provider status: ${run.provider_status || "—"}`));
+        if (presentation) {
+            content.appendChild(reportTable([
+                { label: layer === "2A" ? "Harmonized Code" : layer === "2B" ? "Harmonized Category" : "Harmonized Theme", value: row => `${row.id} · ${row[labelField]}` },
+                { label: "Source mentions", value: row => (row[linkField] || []).length },
+                { label: "Frozen source references", value: row => { const host = make("div", "chip-list"); appendChips(host, row[linkField], "source"); return host; } }
+            ], source || []));
+        }
+        content.appendChild(technicalDetails(record));
+        element("v2RecordDialog").showModal();
+    }
+
     async function downloadHarmonizedReport(cohort, button) {
         button.disabled = true;
         status.textContent = "Preparing the five-form Harmonized Report from the three exact provider outputs…";
@@ -113,7 +399,7 @@
         }
         const table = document.createElement("table");
         const head = document.createElement("thead");
-        head.innerHTML = "<tr><th>Case</th><th>Frozen source</th><th>Stage 1</th><th>Attempts</th><th>Researcher action</th></tr>";
+        head.innerHTML = "<tr><th>Case</th><th>Frozen source</th><th>Stage 1</th><th>Attempts</th><th>Optional report view</th></tr>";
         const body = document.createElement("tbody");
         state.cases.forEach(item => {
             const attempts = state.attempts.filter(attempt => attempt.case_id === item.id);
@@ -141,14 +427,12 @@
             }
             const inspect = document.createElement("button");
             inspect.type = "button";
-            inspect.textContent = "Inspect frozen record";
+            inspect.textContent = "View annotated Stage 1 report";
             inspect.addEventListener("click", async () => {
                 const record = await request({
                     url: `${API}&caseId=${encodeURIComponent(item.id)}`
                 });
-                element("v2RecordTitle").textContent = "Immutable case record";
-                element("v2RecordText").textContent = JSON.stringify(record, null, 2);
-                element("v2RecordDialog").showModal();
+                showCaseReport(record);
             });
             action.appendChild(document.createTextNode(" "));
             action.appendChild(inspect);
@@ -175,15 +459,12 @@
             runs.forEach(run => {
                 const inspect = document.createElement("button");
                 inspect.type = "button";
-                inspect.textContent = `Inspect frozen Stage ${run.analysis_layer.toUpperCase()} attempt ${run.attempt_number}`;
+                inspect.textContent = `${run.status === "completed" ? "View" : "Inspect"} Stage ${run.analysis_layer.toUpperCase()} ${run.status === "completed" ? "report" : "attempt record"} ${run.attempt_number}`;
                 inspect.addEventListener("click", async () => {
                     const record = await request({
                         url: `${API}&runId=${encodeURIComponent(run.id)}`
                     });
-                    element("v2RecordTitle").textContent =
-                        `Immutable Stage ${run.analysis_layer.toUpperCase()} attempt ${run.attempt_number}`;
-                    element("v2RecordText").textContent = JSON.stringify(record, null, 2);
-                    element("v2RecordDialog").showModal();
+                    showStage2Report(record);
                 });
                 panel.appendChild(inspect);
                 panel.appendChild(document.createTextNode(" "));
@@ -237,13 +518,13 @@
 
     function render() {
         renderSelections();
-        const counts = Object.fromEntries(["pending", "processing", "provider_pending", "completed", "unresolved"]
+        const counts = Object.fromEntries(["pending", "processing", "provider_pending", "report_pending", "completed", "unresolved"]
             .map(name => [name, state.cases.filter(item => item.stage1_status === name).length]));
         element("v2Metrics").replaceChildren(
             metric("Frozen cases", state.cases.length),
             metric("Stage 1 completed", counts.completed),
             metric("Unresolved blockers", counts.unresolved),
-            metric("Open or processing", counts.pending + counts.processing + counts.provider_pending)
+            metric("Open or processing", counts.pending + counts.processing + counts.provider_pending + counts.report_pending)
         );
         renderCases();
         renderCohorts();

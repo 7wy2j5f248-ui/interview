@@ -19,6 +19,10 @@ import {
     loadHarmonizedReport,
     writeHarmonizedReportWorkbook
 } from "./harmonizedReport.js";
+import {
+    buildCaseInspection,
+    normalizePilotReport
+} from "./caseBoundInspection.js";
 
 function client() {
     return createClient(
@@ -135,43 +139,117 @@ async function caseRecord(supabase, caseId) {
         throw Object.assign(new Error("The case does not exist."), { status: 404 });
     }
     const attemptIds = attempts.map(item => item.id);
-    const [requests, presentations] = attemptIds.length ? await Promise.all([
-        requireRows(supabase.from("stage1_requests_v2").select("*")
-            .in("attempt_id", attemptIds), "Frozen Stage 1 requests could not be loaded."),
-        requireRows(supabase.from("stage1_presentations_v2").select("*")
-            .in("attempt_id", attemptIds), "Stage 1 presentations could not be loaded.")
-    ]) : [[], []];
+    const [requests, presentations, readableReports] = attemptIds.length
+        ? await Promise.all([
+            requireRows(supabase.from("stage1_requests_v2").select("*")
+                .in("attempt_id", attemptIds), "Frozen Stage 1 requests could not be loaded."),
+            requireRows(supabase.from("stage1_presentations_v2").select("*")
+                .in("attempt_id", attemptIds), "Stage 1 presentations could not be loaded."),
+            requireRows(supabase.from("stage1_readable_reports_v2").select("*")
+                .in("attempt_id", attemptIds), "Stage 1 readable reports could not be loaded.")
+        ]) : [[], [], []];
+    const sessionIds = sessions.map(item => item.session_id);
+    const [storedMessages, pilotAssumptions] = await Promise.all([
+        sessionIds.length
+            ? requireRows(supabase.from("interview_messages")
+                .select("id, Session, Speaker, Language, Message, EnglishTranslation, Timestamp")
+                .in("Session", sessionIds)
+                .order("Timestamp", { ascending: true }),
+            "The frozen source transcript could not be presented.")
+            : [],
+        requireRows(supabase.from("pilot_stage1_assumptions_v2")
+            .select("case_id, source_job_id, source_report_id")
+            .eq("case_id", caseId),
+        "The pilot presentation lineage could not be loaded.")
+    ]);
+    const pilot = pilotAssumptions[0] || null;
+    let normalizedPilotReport = null;
+    if (pilot?.source_report_id) {
+        const reportId = pilot.source_report_id;
+        const [meaningUnits, codes, codeMeaningUnits, categories, categoryCodes,
+            themes, themeCategories] = await Promise.all([
+            requireRows(supabase.from("advanced_preliminary_meaning_units")
+                .select("id, unit_number, message_id, exact_source_text, start_offset, end_offset")
+                .eq("report_id", reportId).order("unit_number"),
+            "Stored Meaning Units could not be presented."),
+            requireRows(supabase.from("advanced_preliminary_codes")
+                .select("id, code_number, code_label, occurrence_count")
+                .eq("report_id", reportId).order("code_number"),
+            "Stored Codes could not be presented."),
+            requireRows(supabase.from("advanced_preliminary_code_meaning_units")
+                .select("code_id, meaning_unit_id").eq("report_id", reportId),
+            "Stored Code-to-MU links could not be presented."),
+            requireRows(supabase.from("advanced_preliminary_categories")
+                .select("id, category_number, category_label")
+                .eq("report_id", reportId).order("category_number"),
+            "Stored Categories could not be presented."),
+            requireRows(supabase.from("advanced_preliminary_category_codes")
+                .select("category_id, code_id").eq("report_id", reportId),
+            "Stored Category-to-Code links could not be presented."),
+            requireRows(supabase.from("advanced_preliminary_themes")
+                .select("id, theme_number, theme_label")
+                .eq("report_id", reportId).order("theme_number"),
+            "Stored Themes could not be presented."),
+            requireRows(supabase.from("advanced_preliminary_theme_categories")
+                .select("theme_id, category_id").eq("report_id", reportId),
+            "Stored Theme-to-Category links could not be presented.")
+        ]);
+        normalizedPilotReport = normalizePilotReport({
+            meaningUnits, codes, codeMeaningUnits, categories, categoryCodes,
+            themes, themeCategories
+        });
+    }
+    const latestAttempt = [...attempts].sort((left, right) =>
+        Number(right.attempt_number) - Number(left.attempt_number))[0] || null;
+    const latestPresentation = presentations.find(item =>
+        item.attempt_id === latestAttempt?.id)?.presentation_json || null;
+    const submittedReport = readableReports.find(item =>
+        item.attempt_id === latestAttempt?.id) || null;
+    const inspection = buildCaseInspection({
+        caseNumber: analysisCase[0].case_number,
+        sourceSnapshot: source[0] || null,
+        storedMessages,
+        presentation: submittedReport?.report_json
+            || (pilot ? null : latestPresentation),
+        attempt: latestAttempt,
+        normalizedPilotReport: submittedReport ? null : normalizedPilotReport,
+        submittedReport
+    });
     const presentedAttempts = attempts.map(attempt => {
         const frozenRequest = requests.find(item =>
             item.attempt_id === attempt.id) || null;
         const explicitPresentation = presentations.find(item =>
+            item.attempt_id === attempt.id) || null;
+        const readableReport = readableReports.find(item =>
             item.attempt_id === attempt.id) || null;
         const researcherResolution =
             attempt.completion_authority === "researcher_pilot_assumption"
                 ? {
                     current_stage1_status: analysisCase[0].stage1_status,
                     stage2_readiness: attempt.status === "completed"
-                        && explicitPresentation?.presentation_json
+                        && readableReport?.report_json
                         ? "ready" : "not_ready",
                     completion_authority: attempt.completion_authority,
                     historical_provider_status: attempt.provider_status,
                     historical_provider_status_preserved: true,
                     resolution_record: attempt.completion_record,
-                    explanation: "The historical provider status remains immutable. The researcher separately resolved this case for the Stage 2 pilot using the preserved preliminary Codes."
+                    explanation: "The historical provider status remains immutable. The readable report is deterministically presented from the preserved provider output; opening it is optional and never controls progression."
                 }
                 : null;
         return {
             ...attempt,
             researcherResolution,
             frozenRequest,
-            explicitPresentation
+            explicitPresentation,
+            readableReport
         };
     });
     return {
         case: analysisCase[0],
         sessions,
         frozenSource: source[0] || null,
-        attempts: presentedAttempts
+        attempts: presentedAttempts,
+        inspection
     };
 }
 

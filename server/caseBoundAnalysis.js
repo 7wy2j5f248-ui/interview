@@ -73,7 +73,12 @@ async function saveStage1Outcome(supabase, claim, response) {
         p_materialization_error: materializationError
     });
 
-    return { claimed: true, layer: "stage1", status: "completed", active: false };
+    return {
+        claimed: true,
+        layer: "stage1",
+        status: materializationError ? "unresolved" : "completed",
+        active: false
+    };
 }
 
 async function processStage1Claim(supabase, claim, providerClientFactory) {
@@ -153,7 +158,7 @@ async function saveStage2Outcome(supabase, claim, response) {
     return {
         claimed: true,
         layer: claim.analysisLayer || "2a",
-        status: "completed",
+        status: materializationError ? "technically_incomplete" : "completed",
         active: false
     };
 }

@@ -23,6 +23,31 @@ const reconstructedContractMigrationUrl = new URL(
     "../supabase/migrations/20260912120000_reconstruct_case_bound_analysis_contract.sql",
     import.meta.url
 );
+const requiredReportMigrationUrls = [
+    "../supabase/migrations/20260913120000_create_analysis_report_store.sql",
+    "../supabase/migrations/20260913120500_create_gpt56_report_backfill.sql",
+    "../supabase/migrations/20260913121000_backfill_gpt56_reports_001_050.sql",
+    "../supabase/migrations/20260913121100_backfill_gpt56_reports_051_100.sql",
+    "../supabase/migrations/20260913121150_optimize_gpt56_report_backfill.sql",
+    "../supabase/migrations/20260913121175_bound_raw_gpt56_report_backfill.sql",
+    "../supabase/migrations/20260913121200_backfill_gpt56_reports_101_125.sql",
+    "../supabase/migrations/20260913121250_backfill_gpt56_reports_126_150.sql",
+    "../supabase/migrations/20260913121300_backfill_gpt56_reports_151_175.sql",
+    "../supabase/migrations/20260913121350_backfill_gpt56_reports_176_200.sql",
+    "../supabase/migrations/20260913121400_backfill_gpt56_reports_201_225.sql",
+    "../supabase/migrations/20260913121450_backfill_gpt56_reports_226_250.sql",
+    "../supabase/migrations/20260913121500_backfill_gpt56_reports_251_275.sql",
+    "../supabase/migrations/20260913121550_backfill_gpt56_reports_276_300.sql",
+    "../supabase/migrations/20260913121600_backfill_gpt56_reports_301_350.sql",
+    "../supabase/migrations/20260913121650_backfill_gpt56_reports_351_400.sql",
+    "../supabase/migrations/20260913121700_backfill_gpt56_reports_401_450.sql",
+    "../supabase/migrations/20260913121750_backfill_gpt56_reports_701_750.sql",
+    "../supabase/migrations/20260913121800_backfill_gpt56_reports_751_775.sql",
+    "../supabase/migrations/20260913121850_backfill_gpt56_reports_776_800.sql",
+    "../supabase/migrations/20260913121900_backfill_gpt56_reports_801_850.sql",
+    "../supabase/migrations/20260913121950_verify_gpt56_report_backfill.sql",
+    "../supabase/migrations/20260913122000_require_report_to_finalize_analysis.sql"
+].map(path => new URL(path, import.meta.url));
 const dashboardUrl = new URL("../server/caseBoundAnalysisDashboard.js", import.meta.url);
 const researcherScriptUrl = new URL("../researcher-case-bound-analysis.js", import.meta.url);
 
@@ -110,11 +135,39 @@ test("researcher can inspect every exact frozen Stage 2 request and provider rec
     assert.match(dashboard, /stage2_requests_v2/);
     assert.match(dashboard, /stage2_presentations_v2/);
     assert.match(dashboard, /frozenRequest:\s*requests\[0\]/);
-    assert.match(researcherScript, /Inspect frozen Stage \$\{run\.analysis_layer\.toUpperCase\(\)\} attempt \$\{run\.attempt_number\}/);
+    assert.match(researcherScript, /showStage2Report\(record\)/);
+    assert.match(researcherScript, /View.*Stage.*report/);
     assert.match(researcherScript, /runId=/);
     assert.match(html, /CO → HCO, CA → HCA, and TH → HTH/);
     assert.match(html, /P# is not sent to the model/);
     assert.doesNotMatch(html, /receives only P# \+ preliminary CO/);
+});
+
+test("every completed analysis stage requires a stored readable report", async () => {
+    const [migrationParts, dashboard, researcherScript, html] = await Promise.all([
+        Promise.all(requiredReportMigrationUrls.map(url => readFile(url, "utf8"))),
+        readFile(dashboardUrl, "utf8"),
+        readFile(researcherScriptUrl, "utf8"),
+        readFile(new URL("../case-bound-analysis.html", import.meta.url), "utf8")
+    ]);
+    const sql = migrationParts.join("\n");
+    assert.match(sql, /create table public\.stage1_readable_reports_v2/);
+    assert.match(sql, /Stage 1 cannot complete before its readable report is submitted/);
+    assert.match(sql, /A Stage 2 operation cannot complete before its report is submitted/);
+    assert.match(sql, /stage1_readable_report_complete_v2/);
+    assert.match(sql, /stage2_readable_report_complete_v2/);
+    assert.match(sql, /frozen_gpt56_response_projection/);
+    assert.match(sql, /source_report\.raw_model_output_text = attempt\.raw_model_output_text/);
+    assert.match(sql, /source_report\.reasoning_effort = 'high'/);
+    assert.match(sql, /configuration\.model = 'gpt-5\.6-sol'/);
+    assert.match(sql, /P00171 and P00175/);
+    assert.doesNotMatch(sql, /GPT-5\.1 production output is not a source[\s\S]{0,80}select.*GPT-5\.1/);
+    assert.match(dashboard, /stage1_readable_reports_v2/);
+    assert.match(researcherScript, /View annotated Stage 1 report/);
+    assert.match(researcherScript, /No GPT-5\.1 analytical content/);
+    assert.doesNotMatch(html, /id="v2RecordText"/);
+    assert.match(html, /id="v2RecordContent"/);
+    assert.match(html, /Researcher viewing is optional/);
 });
 
 test("parallel Stage 2 migration freezes isolated CA and TH corpora with private lineage", async () => {

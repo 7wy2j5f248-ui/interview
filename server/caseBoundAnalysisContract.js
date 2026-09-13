@@ -22,7 +22,7 @@ export const STAGE1_GLOBAL_RULES = Object.freeze([
     "Do not force a number of MUs, COs, CAs, or THs. Do not standardize terminology across cases in Stage 1.",
     "Do not add unsupported facts, motives, causes, diagnoses, theories, or conclusions.",
     "All analytical output is English. All MU, CO, CA, and TH identifiers are local to this case and begin at 1; their complete identity is the case ID plus the local ID.",
-    "Return one connected structure. Do not provide a second analysis, quality score, validation report, repair, or recommendation to rerun."
+    "Return one complete connected report with no blank MU, CO, CA, or TH rows. Do not provide a second analysis, quality score, validation report, repair, or recommendation to rerun."
 ]);
 
 export const STAGE1_ANALYTICAL_DEFINITIONS = Object.freeze({
@@ -40,17 +40,19 @@ export const PLI_CASE_BOUND_SYSTEM_CONTRACT = Object.freeze({
         "The complete assembled provider request is frozen before submission, and the exact provider response is frozen immediately upon receipt before presentation processing.",
         "No validator AI, reviewer AI, repair AI, monitor AI, gatekeeper AI, fallback model, substitute model, or second analytical call may judge, change, complete, correct, or replace the selected model's output.",
         "Run status is determined only from objective provider or technical completion information; qualitative adequacy never determines completion.",
+        "A provider-completed response does not complete the Stage 1 case until its complete readable MU to CO to CA to TH report has been stored. Report submission is automatic and objective; researcher viewing, inspection, or approval is never required and never controls progression.",
         "A completed Stage 1 case is final and may never be reopened, rerun, repaired, reanalyzed, or replaced.",
         "A technically incomplete or failed attempt is preserved exactly, receives no automatic retry or recovery, and leaves the case unresolved until the researcher explicitly starts a separate attempt.",
         "An unresolved cohort member may not be dropped, bypassed, or silently treated as complete."
     ]),
     stage2: Object.freeze([
-        "Stage 2 begins only after the researcher-defined cohort is closed and every cohort member has objectively completed Stage 1 with an explicit presentation.",
+        "Stage 2 begins only after the researcher-defined cohort is closed and every cohort member has objectively completed Stage 1 with a complete stored report.",
         "The full cohort advances together; no individual case advances alone and no cohort member may be omitted.",
         "Stage 2A, Stage 2B, and Stage 2C are created as one execution set and start concurrently from three separately frozen whole-cohort sources.",
         "Stage 2A receives only compact preliminary Code references and Code labels; Stage 2B receives only compact preliminary Category references and Category labels; Stage 2C receives only compact preliminary Theme references and Theme statements.",
         "Participant identifiers, transcripts, Meaning Units, demographics, and every unrelated analytical layer are excluded from all Stage 2 model requests. Private database lineage retains the return path to each case-local source item.",
         "PLI imposes no Stage 2 output-token ceiling. Only the selected provider and model's native technical limits apply.",
+        "Each Stage 2A, Stage 2B, and Stage 2C operation is finalized only when its readable report has been stored. Researcher viewing is optional and has no workflow effect.",
         "Each Stage 2 request and exact provider response is immutable. No validator, reviewer, repair, fallback, automatic retry, or analytical quality gate is permitted."
     ]),
     softwareAuthority: Object.freeze([
@@ -77,6 +79,7 @@ export const CASE_BOUND_STAGE1_SCHEMA = Object.freeze({
     properties: {
         meaning_units: {
             type: "array",
+            minItems: 1,
             items: {
                 type: "object",
                 properties: {
@@ -89,6 +92,7 @@ export const CASE_BOUND_STAGE1_SCHEMA = Object.freeze({
         },
         preliminary_codes: {
             type: "array",
+            minItems: 1,
             items: {
                 type: "object",
                 properties: {
@@ -105,6 +109,7 @@ export const CASE_BOUND_STAGE1_SCHEMA = Object.freeze({
         },
         preliminary_categories: {
             type: "array",
+            minItems: 1,
             items: {
                 type: "object",
                 properties: {
@@ -121,6 +126,7 @@ export const CASE_BOUND_STAGE1_SCHEMA = Object.freeze({
         },
         preliminary_tentative_themes: {
             type: "array",
+            minItems: 1,
             items: {
                 type: "object",
                 properties: {
