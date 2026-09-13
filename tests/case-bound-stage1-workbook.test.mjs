@@ -4,6 +4,7 @@ import { PassThrough } from "node:stream";
 import { finished } from "node:stream/promises";
 import { readFile } from "node:fs/promises";
 import ExcelJS from "exceljs";
+import JSZip from "jszip";
 import { buildCaseInspection } from "../server/caseBoundInspection.js";
 import {
     CASE_BOUND_STAGE1_WORKBOOK_SHEETS,
@@ -199,6 +200,12 @@ test("the pilot workbook uses corrected GPT-5.1 demographics without importing G
     };
 
     const generated = await workbookBuffer(reportData);
+    const packageZip = await JSZip.loadAsync(generated);
+    assert.equal(packageZip.file("xl/tables/table1.xml"), null);
+    assert.doesNotMatch(
+        await packageZip.file("xl/worksheets/sheet1.xml").async("text"),
+        /<autoFilter/u
+    );
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(generated);
     assert.deepEqual(workbook.worksheets.map(sheet => sheet.name), [
