@@ -19,8 +19,8 @@ const parallelStage2MigrationUrl = new URL(
     "../supabase/migrations/20260904162000_add_parallel_stage2_harmonization.sql",
     import.meta.url
 );
-const noCodexAttemptGatesMigrationUrl = new URL(
-    "../supabase/migrations/20260904170000_remove_codex_attempt_gates.sql",
+const reconstructedContractMigrationUrl = new URL(
+    "../supabase/migrations/20260912120000_reconstruct_case_bound_analysis_contract.sql",
     import.meta.url
 );
 const dashboardUrl = new URL("../server/caseBoundAnalysisDashboard.js", import.meta.url);
@@ -129,27 +129,37 @@ test("parallel Stage 2 migration freezes isolated CA and TH corpora with private
     assert.doesNotMatch(sql, /jsonb_build_object\([\s\S]{0,200}'case_id'/);
 });
 
-test("Codex does not gate researcher-requested Stage 1 or Stage 2 attempts", async () => {
+test("completed Stage 1 is closed and Stage 2 attempts are one concurrent set", async () => {
     const [sql, dashboard, researcherScript] = await Promise.all([
-        readFile(noCodexAttemptGatesMigrationUrl, "utf8"),
+        readFile(reconstructedContractMigrationUrl, "utf8"),
         readFile(dashboardUrl, "utf8"),
         readFile(researcherScriptUrl, "utf8")
     ]);
-    assert.match(sql, /drop function if exists public\.authorize_stage2_v2_replacement/);
-    assert.match(sql, /drop function if exists public\.authorize_stage1_v2_new_attempt/);
-    assert.match(sql, /drop constraint if exists stage2_runs_v2_replacement_lineage_consistent/);
-    assert.match(sql, /source\.cohort_id = new\.cohort_id/);
-    assert.match(sql, /source\.analysis_layer = new\.analysis_layer/);
+    assert.match(sql, /where id = p_case_id and stage1_status = 'unresolved'/);
+    assert.match(sql, /analysis_case\.stage1_status <> 'completed'/);
     assert.match(sql, /create function public\.create_stage1_v2_attempt/);
-    assert.match(sql, /create function public\.create_stage2_v2_attempt/);
-    assert.doesNotMatch(sql, /Only a terminal Stage 2 run/);
-    assert.doesNotMatch(sql, /researcher reason is required/i);
-    assert.match(dashboard, /run_stage1_again/);
-    assert.match(dashboard, /run_stage2_again/);
-    assert.match(researcherScript, /Run Stage 1 again from this frozen source/);
-    assert.match(researcherScript, /Run Stage \$\{run\.analysis_layer\.toUpperCase\(\)\} again from this frozen source/);
-    assert.doesNotMatch(researcherScript, /Permanently closed/);
-    assert.doesNotMatch(researcherScript, /Authorize a separate new attempt/);
+    assert.match(sql, /create function public\.create_stage2_v2_attempt_set/);
+    assert.match(sql, /execution_set_id/);
+    assert.match(sql, /source_run\.analysis_layer/);
+    assert.match(sql, /max_output_tokens, corpus_snapshot_json[\s\S]*null,/);
+    assert.match(dashboard, /run_unresolved_stage1/);
+    assert.match(dashboard, /run_stage2_set/);
+    assert.doesNotMatch(dashboard, /run_stage1_again|run_stage2_again/);
+    assert.match(researcherScript, /item\.stage1_status === "unresolved"/);
+    assert.match(researcherScript, /Run 2A, 2B, and 2C concurrently/);
+    assert.doesNotMatch(researcherScript, /Run Stage 1 again from this frozen source/);
+});
+
+test("reconstructed migration builds all three future corpora without P#", async () => {
+    const sql = await readFile(reconstructedContractMigrationUrl, "utf8");
+    assert.match(sql, /'preliminary_codes', corpus_codes/);
+    assert.match(sql, /'preliminary_categories', corpus_categories/);
+    assert.match(sql, /'preliminary_themes', corpus_themes/);
+    assert.match(sql, /'PC' \|\| lpad/);
+    assert.match(sql, /'PCA' \|\| lpad/);
+    assert.match(sql, /'PTH' \|\| lpad/);
+    assert.doesNotMatch(sql, /jsonb_build_object\([\s\S]{0,100}'case_id', analysis_case\.case_number/);
+    assert.match(sql, /stage2_runs_v2_no_application_ceiling/);
 });
 
 test("all new analysis tables are RLS-enabled and browser roles receive no grants", async () => {

@@ -1,13 +1,17 @@
 {
-    "crons": [
-        {
-            "path": "/api/automatic-analysis?cron=staged",
-            "schedule": "0 0 * * *"
-        }
-    ],
     "redirects": [
         {
             "source": "/researcher.html",
+            "destination": "/case-bound-analysis.html",
+            "permanent": false
+        },
+        {
+            "source": "/staged-analysis.html",
+            "destination": "/case-bound-analysis.html",
+            "permanent": false
+        },
+        {
+            "source": "/validation-rules.html",
             "destination": "/case-bound-analysis.html",
             "permanent": false
         },

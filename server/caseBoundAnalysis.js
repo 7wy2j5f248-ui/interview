@@ -131,7 +131,7 @@ async function saveStage2Outcome(supabase, claim, response) {
     if (outcome !== "completed") {
         return {
             claimed: true,
-            layer: "stage2a",
+            layer: claim.analysisLayer || "2a",
             status: outcome,
             active: outcome === "provider_pending"
         };
@@ -150,7 +150,12 @@ async function saveStage2Outcome(supabase, claim, response) {
         p_presentation_json: presentation,
         p_materialization_error: materializationError
     });
-    return { claimed: true, layer: "stage2a", status: "completed", active: false };
+    return {
+        claimed: true,
+        layer: claim.analysisLayer || "2a",
+        status: "completed",
+        active: false
+    };
 }
 
 async function processStage2Claim(supabase, claim, providerClientFactory) {
@@ -159,7 +164,7 @@ async function processStage2Claim(supabase, claim, providerClientFactory) {
         const client = providerClientFactory(claim.provider);
         if (claim.action === "retrieve") {
             if (!claim.providerResponseId) {
-                throw new Error("The pending Stage 2A response has no provider response ID.");
+                throw new Error(`The pending Stage ${String(claim.analysisLayer || "2a").toUpperCase()} response has no provider response ID.`);
             }
             response = await client.responses.retrieve(claim.providerResponseId);
         } else {
@@ -192,7 +197,12 @@ async function processStage2Claim(supabase, claim, providerClientFactory) {
             p_run_id: claim.runId,
             p_technical_error: technicalMessage(error)
         });
-        return { claimed: true, layer: "stage2a", status: "failed", active: false };
+        return {
+            claimed: true,
+            layer: claim.analysisLayer || "2a",
+            status: "failed",
+            active: false
+        };
     }
     return saveStage2Outcome(supabase, claim, response);
 }
@@ -209,6 +219,18 @@ export async function processParallelStage2Tick(
     return processStage2Claim(supabase, claim, providerClientFactory);
 }
 
+export async function processStage2ATick(
+    supabase,
+    {
+        providerClientFactory = provider =>
+            createAnalysisProviderClient(provider).client
+    } = {}
+) {
+    const claim = await callRpc(supabase, "claim_next_stage2_v2_run");
+    if (!claim) return { claimed: false, active: false };
+    return processStage2Claim(supabase, claim, providerClientFactory);
+}
+
 export async function processCaseBoundAnalysisTick(
     supabase,
     {
@@ -220,9 +242,5 @@ export async function processCaseBoundAnalysisTick(
     if (stage1Claim) {
         return processStage1Claim(supabase, stage1Claim, providerClientFactory);
     }
-    const stage2Claim = await callRpc(supabase, "claim_next_stage2_v2_run");
-    if (stage2Claim) {
-        return processStage2Claim(supabase, stage2Claim, providerClientFactory);
-    }
-    return { claimed: false, active: false };
+    return processStage2ATick(supabase, { providerClientFactory });
 }

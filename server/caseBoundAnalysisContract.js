@@ -1,12 +1,12 @@
 import { createHash, randomUUID } from "node:crypto";
 import { normalizeAnalysisModel } from "./modelConfiguration.js";
 
-export const CASE_BOUND_ANALYSIS_VERSION = "case-bound-stage1-v1";
-export const CASE_BOUND_PROMPT_VERSION = "case-bound-mu-co-ca-th-v1";
-export const CASE_BOUND_CONTRACT_VERSION = "pli-case-bound-analysis-v1";
-export const STAGE2A_PROMPT_VERSION = "whole-cohort-hco-v1";
-export const STAGE2B_PROMPT_VERSION = "whole-cohort-hca-v1";
-export const STAGE2C_PROMPT_VERSION = "whole-cohort-hth-v1";
+export const CASE_BOUND_ANALYSIS_VERSION = "case-bound-stage1-v2";
+export const CASE_BOUND_PROMPT_VERSION = "case-bound-mu-co-ca-th-v2";
+export const CASE_BOUND_CONTRACT_VERSION = "pli-case-bound-analysis-v2";
+export const STAGE2A_PROMPT_VERSION = "whole-cohort-hco-v2";
+export const STAGE2B_PROMPT_VERSION = "whole-cohort-hca-v2";
+export const STAGE2C_PROMPT_VERSION = "whole-cohort-hth-v2";
 
 export const STAGE1_REASONING_EFFORTS = Object.freeze([
     "none", "minimal", "low", "medium", "high", "xhigh"
@@ -24,6 +24,40 @@ export const STAGE1_GLOBAL_RULES = Object.freeze([
     "All analytical output is English. All MU, CO, CA, and TH identifiers are local to this case and begin at 1; their complete identity is the case ID plus the local ID.",
     "Return one connected structure. Do not provide a second analysis, quality score, validation report, repair, or recommendation to rerun."
 ]);
+
+export const STAGE1_ANALYTICAL_DEFINITIONS = Object.freeze({
+    meaningUnit: "A Meaning Unit is a semantically coherent, participant-specific piece of substantive information that is analytically relevant to the research project and copied exactly from its cited English participant turn or turns. Unrelated fragments may not be concatenated into a Meaning Unit.",
+    preliminaryCode: "A Preliminary Code is a concise, intelligible analytical label representing a coherent meaning in one or more linked Meaning Units in this case. It must not introduce meaning unsupported by those Meaning Units.",
+    preliminaryCategory: "A Preliminary Category is a coherent higher-level analytical grouping of one or more linked Preliminary Codes in this case. It must identify a recognizable analytical area without exceeding the Codes that support it.",
+    preliminaryTentativeTheme: "A Preliminary Tentative Theme is an intelligible participant-specific pattern of meaning connecting one or more linked Preliminary Categories in this case. It may synthesize beyond simple restatement, but must remain grounded in what this case supports.",
+    connectedStructure: "The four arrays are synchronized views of one model-produced hierarchy. Every CO cites its supporting MU IDs, every CA cites its supporting CO IDs, and every TH cites its supporting CA IDs. Software never infers, repairs, remaps, or regenerates those analytical relationships."
+});
+
+export const PLI_CASE_BOUND_SYSTEM_CONTRACT = Object.freeze({
+    stage1: Object.freeze([
+        "A formally completed interview case automatically freezes its authoritative source and enters Stage 1 under the active researcher-approved configuration.",
+        "Each Stage 1 attempt analyzes exactly one frozen case with exactly one researcher-selected provider and model.",
+        "The complete assembled provider request is frozen before submission, and the exact provider response is frozen immediately upon receipt before presentation processing.",
+        "No validator AI, reviewer AI, repair AI, monitor AI, gatekeeper AI, fallback model, substitute model, or second analytical call may judge, change, complete, correct, or replace the selected model's output.",
+        "Run status is determined only from objective provider or technical completion information; qualitative adequacy never determines completion.",
+        "A completed Stage 1 case is final and may never be reopened, rerun, repaired, reanalyzed, or replaced.",
+        "A technically incomplete or failed attempt is preserved exactly, receives no automatic retry or recovery, and leaves the case unresolved until the researcher explicitly starts a separate attempt.",
+        "An unresolved cohort member may not be dropped, bypassed, or silently treated as complete."
+    ]),
+    stage2: Object.freeze([
+        "Stage 2 begins only after the researcher-defined cohort is closed and every cohort member has objectively completed Stage 1 with an explicit presentation.",
+        "The full cohort advances together; no individual case advances alone and no cohort member may be omitted.",
+        "Stage 2A, Stage 2B, and Stage 2C are created as one execution set and start concurrently from three separately frozen whole-cohort sources.",
+        "Stage 2A receives only compact preliminary Code references and Code labels; Stage 2B receives only compact preliminary Category references and Category labels; Stage 2C receives only compact preliminary Theme references and Theme statements.",
+        "Participant identifiers, transcripts, Meaning Units, demographics, and every unrelated analytical layer are excluded from all Stage 2 model requests. Private database lineage retains the return path to each case-local source item.",
+        "PLI imposes no Stage 2 output-token ceiling. Only the selected provider and model's native technical limits apply.",
+        "Each Stage 2 request and exact provider response is immutable. No validator, reviewer, repair, fallback, automatic retry, or analytical quality gate is permitted."
+    ]),
+    softwareAuthority: Object.freeze([
+        "Ordinary software may freeze, hash, queue, send, retrieve, store, classify objective technical status, and display explicit provider fields.",
+        "Ordinary software may not make a qualitative judgment, exclude difficult material, invent analytical content, or alter provider-produced analytical relationships."
+    ])
+});
 
 const idPattern = "^(MU|CO|CA|TH)[0-9]{3,}$";
 
@@ -198,6 +232,7 @@ export function normalizeStage1ReasoningEffort(value) {
 }
 
 export function normalizeStage1OutputAllowance(value) {
+    if (value === null || value === undefined || value === "") return null;
     const allowance = Number(value);
     if (!Number.isSafeInteger(allowance) || allowance < 1) {
         throw new Error("The Stage 1 output allowance must be a positive integer.");
@@ -219,8 +254,14 @@ export function buildCaseBoundInstructions(configuration) {
         ? configuration.analysisSpecificGuidelines.trim() : "";
     return [
         `PLI Stage 1 contract ${CASE_BOUND_CONTRACT_VERSION}.`,
+        "BINDING STAGE 1 SYSTEM CONTRACT\n" +
+            PLI_CASE_BOUND_SYSTEM_CONTRACT.stage1.map((rule, index) =>
+                `${index + 1}. ${rule}`).join("\n"),
         "GLOBAL ANALYSIS RULES\n" + rules.map((rule, index) =>
             `${index + 1}. ${rule}`).join("\n"),
+        "ANALYTICAL DEFINITIONS\n" + JSON.stringify(
+            STAGE1_ANALYTICAL_DEFINITIONS, null, 2
+        ),
         "PROJECT CONTEXT\n" + JSON.stringify(projectContext, null, 2),
         "ANALYSIS-SPECIFIC GUIDELINES\n" + (guidelines || "None supplied by the researcher."),
         "OUTPUT REQUIREMENT\nReturn only the defined MU -> CO -> CA -> TH structure. Each upper-level object must cite the explicit case-local IDs directly supporting it."
@@ -242,11 +283,17 @@ export function buildCaseBoundStage1Request(sourceSnapshot, configuration, {
     if (!Array.isArray(turns) || !turns.length) {
         throw new Error("The frozen analytical transcript is required.");
     }
+    const caseConfiguration = {
+        ...configuration,
+        projectContext: sourceSnapshot?.projectContext
+            || configuration?.projectContext || {}
+    };
     const request = {
         model,
         store: true,
         background: true,
-        max_output_tokens: maxOutputTokens,
+        ...(maxOutputTokens === null
+            ? {} : { max_output_tokens: maxOutputTokens }),
         reasoning: { effort: reasoningEffort },
         text: {
             verbosity: "medium",
@@ -263,7 +310,7 @@ export function buildCaseBoundStage1Request(sourceSnapshot, configuration, {
             pli_request_id: requestId
         },
         input: [
-            { role: "system", content: buildCaseBoundInstructions(configuration) },
+            { role: "system", content: buildCaseBoundInstructions(caseConfiguration) },
             {
                 role: "user",
                 content: "FROZEN AUTHORITATIVE CASE SOURCE\n" + JSON.stringify({
@@ -313,7 +360,10 @@ export function buildCaseBoundStage2ARequest(corpusSnapshot, configuration, {
             content: [
                 `PLI Stage 2A contract ${CASE_BOUND_CONTRACT_VERSION}.`,
                 "Harmonize preliminary Codes across the entire closed cohort in one response.",
-                "Use only the supplied compact source reference plus preliminary Code label. P#, transcript, Meaning Unit, demographic, Category, Theme, earlier analysis, and external knowledge are unavailable and prohibited.",
+                "BINDING STAGE 2 SYSTEM CONTRACT\n" +
+                    PLI_CASE_BOUND_SYSTEM_CONTRACT.stage2.map((rule, index) =>
+                        `${index + 1}. ${rule}`).join("\n"),
+                "Use only the supplied compact source reference plus preliminary Code label. Participant identifiers, transcript, Meaning Unit, demographic, Category, Theme, earlier analysis, and external knowledge are unavailable and prohibited.",
                 "Map every compact source reference to exactly one Harmonized Code. The database retains case provenance outside this model request. Do not validate, repair, or revise Stage 1.",
                 "FROZEN WHOLE-COHORT PRELIMINARY CO SOURCE\n" + JSON.stringify({
                     cohort_id: cohortId,
@@ -386,7 +436,10 @@ export function buildCaseBoundParallelStage2Request(
             content: [
                 `PLI Stage ${analysisLayer.toUpperCase()} contract ${CASE_BOUND_CONTRACT_VERSION}.`,
                 `Harmonize preliminary ${contract.sourceObject}s across the entire closed cohort in one response.`,
-                `Use only the supplied compact source reference plus ${contract.sourceObject}. P#, transcript, Meaning Unit, demographic, and every other analytical layer are unavailable and prohibited.`,
+                "BINDING STAGE 2 SYSTEM CONTRACT\n" +
+                    PLI_CASE_BOUND_SYSTEM_CONTRACT.stage2.map((rule, index) =>
+                        `${index + 1}. ${rule}`).join("\n"),
+                `Use only the supplied compact source reference plus ${contract.sourceObject}. Participant identifiers, transcript, Meaning Unit, demographic, and every other analytical layer are unavailable and prohibited.`,
                 `Map every compact source reference to exactly one ${contract.outputLabel}. The database retains case provenance outside this model request. Do not validate, repair, or revise Stage 1.`,
                 `FROZEN WHOLE-COHORT ${contract.sourceLabel.toUpperCase()} SOURCE\n` + JSON.stringify({
                     cohort_id: cohortId,

@@ -110,7 +110,7 @@ test("durable background calls are submitted once and then polled by response ID
     assert.match(worker, /\["queued", "in_progress"\]/);
 });
 
-test("execution concurrency remains technical and workload-derived", async () => {
+test("the Codex-era advanced-analysis worker is disconnected from the live endpoint", async () => {
     assert.equal(configuredAdvancedPreliminaryWorkerConcurrency({}), null);
     assert.equal(configuredAdvancedPreliminaryWorkerConcurrency({
         ADVANCED_PRELIMINARY_WORKER_CONCURRENCY: "13"
@@ -122,8 +122,10 @@ test("execution concurrency remains technical and workload-derived", async () =>
         ADVANCED_PRELIMINARY_WORKER_CONCURRENCY: "0"
     }), /positive integer/);
     const endpoint = await source("api/automatic-analysis.js");
-    assert.match(endpoint, /active_run_remaining_workload/);
-    assert.match(endpoint, /p_maximum_parallel_cases: maximumParallelCases/);
+    assert.doesNotMatch(endpoint, /active_run_remaining_workload/);
+    assert.doesNotMatch(endpoint, /p_maximum_parallel_cases: maximumParallelCases/);
+    assert.doesNotMatch(endpoint, /processNextAdvancedPreliminaryAnalysis/);
+    assert.match(endpoint, /Codex-era analytical route is permanently retired/);
 });
 
 test("database contract stores exact output and never retries without researcher authority", async () => {
@@ -267,5 +269,14 @@ test("ordinary Stage 1 activity cannot start cross-case work", async () => {
     assert.doesNotMatch(loadDesign, /scheduleStagedAnalysis/);
     assert.doesNotMatch(stage1, /ensureEnglishTranslations/);
     assert.doesNotMatch(endpoint, /processNextCrossCaseCodeRefinement/);
-    assert.match(endpoint, /explicitly_authorized_run_continuation/);
+    assert.doesNotMatch(endpoint, /processStagedAndContinue/);
+    assert.match(endpoint, /case_bound_stage1_then_objective_stage2a_barrier/);
+});
+
+test("the case-bound Stage 2 worker starts one concurrent 2A, 2B, and 2C set", async () => {
+    const endpoint = await source("api/automatic-analysis.js");
+    assert.match(endpoint, /worker === "case-bound-stage2-set-v2"/);
+    assert.match(endpoint, /Promise\.all\(\[\s*processCaseBoundStage2AAndContinue\(req\),\s*processParallelStage2AndContinue\(req\),\s*processParallelStage2AndContinue\(req\)/);
+    assert.match(endpoint, /stage2a_2b_2c_concurrent_execution_set/);
+    assert.doesNotMatch(endpoint, /processStagedAndContinue/);
 });

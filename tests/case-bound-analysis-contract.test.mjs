@@ -6,6 +6,7 @@ import {
     buildCaseBoundParallelStage2Request,
     classifyProviderOutcome,
     explicitStage1Presentation,
+    PLI_CASE_BOUND_SYSTEM_CONTRACT,
     stage1ContractSnapshot
 } from "../server/caseBoundAnalysisContract.js";
 
@@ -58,9 +59,9 @@ test("Stage 2B and 2C independently harmonize only their matching preliminary la
         preliminary_themes: [{ source_ref: "PTH000001", statement: "Sleep adapts to constraints" }]
     }, configuration, { requestId: "stage2c-fixed" });
     assert.match(stage2b.request.input[0].content, /PCA000001/);
-    assert.doesNotMatch(stage2b.request.input[0].content, /PTH|P00001|preliminary_codes/);
+    assert.doesNotMatch(stage2b.request.input[0].content, /P#|PTH|P00001|preliminary_codes/);
     assert.match(stage2c.request.input[0].content, /PTH000001/);
-    assert.doesNotMatch(stage2c.request.input[0].content, /PCA|P00001|preliminary_codes/);
+    assert.doesNotMatch(stage2c.request.input[0].content, /P#|PCA|P00001|preliminary_codes/);
     assert.ok(stage2b.request.text.format.schema.properties.harmonized_categories);
     assert.ok(stage2c.request.text.format.schema.properties.harmonized_themes);
     assert.equal(Object.hasOwn(stage2b.request, "max_output_tokens"), false);
@@ -93,6 +94,28 @@ test("configuration snapshot freezes researcher selections and all global rules"
     assert.match(result.snapshot.configurationSha256 || result.snapshotSha256, /^[0-9a-f]{64}$/);
 });
 
+test("no PLI output ceiling is sent unless the researcher explicitly chooses one", () => {
+    const noCeiling = { ...configuration, maxOutputTokens: null };
+    const source = {
+        caseNumber: "P00001",
+        sourceSha256: "a".repeat(64),
+        projectContext: { research_purpose: "Understand sleep." },
+        analyticalTranscript: [{
+            turn_id: "T001", message_id: "m1", speaker: "participant",
+            original_text: "Text", english_text: "Text"
+        }]
+    };
+    const frozen = buildCaseBoundStage1Request(source, noCeiling, {
+        requestId: "no-ceiling"
+    });
+    assert.equal(Object.hasOwn(frozen.request, "max_output_tokens"), false);
+    assert.match(frozen.request.input[0].content, /Understand sleep/);
+    assert.ok(PLI_CASE_BOUND_SYSTEM_CONTRACT.stage1.some(rule =>
+        /completed Stage 1 case is final/.test(rule)));
+    assert.ok(PLI_CASE_BOUND_SYSTEM_CONTRACT.stage2.some(rule =>
+        /start concurrently/.test(rule)));
+});
+
 test("Stage 2A frozen source excludes P# and carries only compact preliminary CO references", () => {
     const frozen = buildCaseBoundStage2ARequest({
         cohortId: "cohort-1",
@@ -104,7 +127,7 @@ test("Stage 2A frozen source excludes P# and carries only compact preliminary CO
     assert.deepEqual(Object.keys(supplied).sort(), ["cohort_id", "corpus_sha256", "preliminary_codes"]);
     assert.deepEqual(Object.keys(supplied.preliminary_codes[0]).sort(), ["label", "source_ref"]);
     assert.equal(Object.hasOwn(frozen.request, "max_output_tokens"), false);
-    assert.doesNotMatch(frozen.request.input[0].content, /P00001|case_id|code_id/);
+    assert.doesNotMatch(frozen.request.input[0].content, /P#|P00001|case_id|code_id/);
     assert.equal(frozen.request.text.format.schema.properties.harmonized_codes
         .items.properties.source_codes.items.pattern, "^PC[0-9]{6,}$");
 });

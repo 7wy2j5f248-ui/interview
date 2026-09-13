@@ -79,6 +79,23 @@ export function scheduleParallelStage2(req) {
     return true;
 }
 
+export function scheduleStage2Set(req) {
+    const secret = configuredWorkerSecret();
+    const baseUrl = requestBaseUrl(req);
+    if (!secret || !baseUrl) return false;
+    waitUntil(fetch(`${baseUrl}${WORKER_PATH}`, {
+        method: "POST",
+        headers: {
+            Authorization: `Bearer ${secret}`,
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ worker: "case-bound-stage2-set-v2" })
+    }).catch(error => {
+        console.error("Concurrent Stage 2 set trigger failed:", error);
+    }));
+    return true;
+}
+
 export async function continueCaseBoundAnalysis(baseUrl) {
     const secret = configuredWorkerSecret();
     if (!secret || !baseUrl) return;
@@ -110,6 +127,23 @@ export async function continueParallelStage2(baseUrl) {
     });
     if (!response.ok) {
         throw new Error(`Parallel Stage 2 continuation returned ${response.status}.`);
+    }
+}
+
+export async function continueCaseBoundStage2A(baseUrl) {
+    const secret = configuredWorkerSecret();
+    if (!secret || !baseUrl) return;
+    await new Promise(resolve => setTimeout(resolve, CASE_BOUND_POLL_DELAY_MS));
+    const response = await fetch(`${baseUrl}${WORKER_PATH}`, {
+        method: "POST",
+        headers: {
+            Authorization: `Bearer ${secret}`,
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ worker: "case-bound-stage2a-v2-continuation" })
+    });
+    if (!response.ok) {
+        throw new Error(`Case-bound Stage 2A continuation returned ${response.status}.`);
     }
 }
 

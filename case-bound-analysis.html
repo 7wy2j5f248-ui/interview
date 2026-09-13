@@ -55,9 +55,9 @@
                 <label>Exact model ID<input id="v2Model" list="v2Models"></label>
                 <datalist id="v2Models"></datalist>
                 <label>Reasoning<select id="v2Reasoning"><option>high</option><option>xhigh</option><option>medium</option><option>low</option><option>minimal</option><option>none</option></select></label>
-                <label>Stage 1 output allowance<input id="v2Output" type="number" min="1" value="30000"></label>
+                <label>Optional Stage 1 output allowance<input id="v2Output" type="number" min="1" placeholder="No PLI ceiling"></label>
             </div>
-            <p class="muted">This allowance applies only to Stage 1. Stage 2A, 2B, and 2C do not impose an application-level output-token ceiling; the selected provider model's own limit applies.</p>
+            <p class="muted">Leave this blank to impose no PLI output-token ceiling. If you deliberately enter a value, it is frozen as your visible Stage 1 choice. Stage 2A, 2B, and 2C never add a PLI ceiling; the selected provider model's own technical limit still applies.</p>
             <label>Optional analysis-specific guidelines<textarea id="v2Guidelines" placeholder="Leave blank when there are no additional researcher-defined guidelines."></textarea></label>
             <div class="actions">
                 <button id="v2Preview" type="button">Preview complete frozen contract</button>
@@ -94,6 +94,6 @@
     </dialog>
 </main>
 <script src="researcher-staged-access.js?version=20260903-case-bound-v2"></script>
-<script src="researcher-case-bound-analysis.js?version=20260904-harmonized-report"></script>
+<script src="researcher-case-bound-analysis.js?version=20260912-reconstructed-contract"></script>
 </body>
 </html>

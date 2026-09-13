@@ -128,14 +128,17 @@
                 }).join(" · ") || "—"]
                 .forEach(value => { const cell = document.createElement("td"); cell.textContent = value; row.appendChild(cell); });
             const action = document.createElement("td");
-            const rerun = document.createElement("button");
-            rerun.type = "button";
-            rerun.textContent = "Run Stage 1 again from this frozen source";
-            rerun.addEventListener("click", async () => {
-                await post("run_stage1_again", { caseId: item.id });
-                await load();
-            });
-            action.appendChild(rerun);
+            if (item.stage1_status === "unresolved") {
+                const resolve = document.createElement("button");
+                resolve.type = "button";
+                resolve.textContent = "Start a separate attempt using the active researcher configuration";
+                resolve.addEventListener("click", async () => {
+                    await post("run_unresolved_stage1", { caseId: item.id });
+                    await load();
+                });
+                action.appendChild(resolve);
+                action.appendChild(document.createTextNode(" "));
+            }
             const inspect = document.createElement("button");
             inspect.type = "button";
             inspect.textContent = "Inspect frozen record";
@@ -184,15 +187,6 @@
                 });
                 panel.appendChild(inspect);
                 panel.appendChild(document.createTextNode(" "));
-                const rerun = document.createElement("button");
-                rerun.type = "button";
-                rerun.textContent = `Run Stage ${run.analysis_layer.toUpperCase()} again from this frozen source`;
-                rerun.addEventListener("click", async () => {
-                    await post("run_stage2_again", { runId: run.id });
-                    await load();
-                });
-                panel.appendChild(rerun);
-                panel.appendChild(document.createTextNode(" "));
             });
             const latestByLayer = new Map();
             runs.forEach(run => {
@@ -203,6 +197,20 @@
             });
             const reportReady = ["2a", "2b", "2c"].every(layer =>
                 latestByLayer.get(layer)?.status === "completed");
+            const latestSetTerminal = ["2a", "2b", "2c"].every(layer =>
+                ["completed", "technically_incomplete", "failed"]
+                    .includes(latestByLayer.get(layer)?.status));
+            if (latestSetTerminal) {
+                const runSet = document.createElement("button");
+                runSet.type = "button";
+                runSet.textContent = "Run 2A, 2B, and 2C concurrently from the frozen sources";
+                runSet.addEventListener("click", async () => {
+                    await post("run_stage2_set", { cohortId: item.id });
+                    await load();
+                });
+                panel.appendChild(runSet);
+                panel.appendChild(document.createTextNode(" "));
+            }
             if (reportReady) {
                 const download = document.createElement("button");
                 download.type = "button";
@@ -216,7 +224,7 @@
                 button.type = "button";
                 button.textContent = "Close and freeze this cohort";
                 button.addEventListener("click", async () => {
-                    if (!window.confirm("Close this cohort permanently? Its membership will freeze and Stage 2A will start automatically once every member completes Stage 1.")) return;
+                    if (!window.confirm("Close this cohort permanently? Its membership will freeze and Stage 2A, 2B, and 2C will start concurrently once every member completes Stage 1.")) return;
                     await post("close_cohort", { cohortId: item.id });
                     await load();
                 });
@@ -258,7 +266,7 @@
             provider: provider.value,
             model: model.value.trim(),
             reasoningEffort: reasoning.value,
-            maxOutputTokens: Number(output.value),
+            maxOutputTokens: output.value.trim() ? Number(output.value) : null,
             analysisSpecificGuidelines: guidelines.value
         };
     }

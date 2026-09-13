@@ -12,7 +12,7 @@ import {
 import { configuredStage1Models } from "./analysisModelCatalog.js";
 import {
     scheduleCaseBoundAnalysis,
-    scheduleParallelStage2
+    scheduleStage2Set
 } from "./stagedAnalysisWorker.js";
 import {
     harmonizedReportFilename,
@@ -51,7 +51,8 @@ async function projectById(supabase, projectId) {
 function projectContext(project) {
     return {
         project_name: project.project_name,
-        research_topic: project.research_topic
+        research_topic: project.research_topic,
+        frozen_case_design_context: "The actual request inherits the research title, topic, purpose, goal, questions, and design version frozen with that case. Interviewer-operating instructions and demographics are excluded."
     };
 }
 
@@ -98,10 +99,10 @@ async function summary(supabase) {
                 .select("id, project_id, configuration_id, name, status, created_at, closed_at, blocked_reason")
                 .order("created_at", { ascending: false }), "Cohorts could not be loaded."),
             requireRows(supabase.from("stage1_attempts_v2")
-                .select("id, case_id, attempt_number, status, researcher_reason, queued_at, provider_status, terminal_at, technical_error, completion_authority, completion_record")
+                .select("id, case_id, configuration_id, attempt_number, status, researcher_reason, queued_at, provider_status, terminal_at, technical_error, completion_authority, completion_record")
                 .order("attempt_number"), "Stage 1 attempts could not be loaded."),
             requireRows(supabase.from("stage2_runs_v2")
-                .select("id, cohort_id, analysis_layer, attempt_number, prior_run_id, researcher_reason, status, provider, model, reasoning_effort, queued_at, provider_status, terminal_at, technical_error")
+                .select("id, cohort_id, analysis_layer, execution_set_id, attempt_number, prior_run_id, researcher_reason, status, provider, model, reasoning_effort, queued_at, provider_status, terminal_at, technical_error")
                 .order("queued_at", { ascending: false }), "Stage 2A runs could not be loaded.")
         ]);
     return {
@@ -282,11 +283,11 @@ async function post(supabase, req) {
             p_actor: "researcher"
         }],
         close_cohort: ["close_analysis_cohort_v2", { p_cohort_id: body.cohortId }],
-        run_stage1_again: ["create_stage1_v2_attempt", {
+        run_unresolved_stage1: ["create_stage1_v2_attempt", {
             p_case_id: body.caseId
         }],
-        run_stage2_again: ["create_stage2_v2_attempt", {
-            p_source_run_id: body.runId
+        run_stage2_set: ["create_stage2_v2_attempt_set", {
+            p_cohort_id: body.cohortId
         }]
     };
     const operation = procedures[body.action];
@@ -295,11 +296,13 @@ async function post(supabase, req) {
     }
     const { data, error } = await supabase.rpc(operation[0], operation[1]);
     if (error) throw new Error("The requested case-bound action could not be saved.", { cause: error });
-    if (["close_cohort", "run_stage1_again", "run_stage2_again"]
+    if (["close_cohort", "run_unresolved_stage1"]
         .includes(body.action)) {
         scheduleCaseBoundAnalysis(req);
     }
-    if (body.action === "run_stage2_again") scheduleParallelStage2(req);
+    if (["close_cohort", "run_stage2_set"].includes(body.action)) {
+        scheduleStage2Set(req);
+    }
     return { saved: true, id: data };
 }
 
