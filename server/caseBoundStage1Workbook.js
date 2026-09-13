@@ -3,7 +3,7 @@ import { buildCaseInspection } from "./caseBoundInspection.js";
 import { rowsForIds } from "./supabaseBatching.js";
 
 export const CASE_BOUND_STAGE1_WORKBOOK_VERSION =
-    "case-bound-stage1-workbook-v1";
+    "case-bound-stage1-cohort-workbook-v2";
 
 export const CASE_BOUND_STAGE1_WORKBOOK_SHEETS = Object.freeze([
     "1 Cases & meaning units",
@@ -119,41 +119,40 @@ function workbookCase(
 }
 
 export async function loadCaseBoundStage1Workbook(supabase, selection = {}) {
-    const suppliedCaseId = typeof selection.caseId === "string"
-        ? selection.caseId.trim() : "";
     const suppliedCohortId = typeof selection.cohortId === "string"
         ? selection.cohortId.trim() : "";
-    if (Boolean(suppliedCaseId) === Boolean(suppliedCohortId)) {
+    if (!suppliedCohortId) {
         throw Object.assign(new Error(
-            "Choose exactly one Stage 1 case or one cohort workbook."
+            "Choose the completed cohort for the single Stage 1 workbook."
         ), { status: 400 });
     }
 
     let cohort = null;
     let caseIds = [];
-    if (suppliedCohortId) {
-        const cohortId = requireUuid(suppliedCohortId, "Choose a valid cohort.");
-        const cohorts = await requireRows(
-            supabase.from("analysis_cohorts_v2")
-                .select("id, project_id, name, status, closed_at")
-                .eq("id", cohortId),
-            "The Stage 1 workbook cohort could not be loaded."
-        );
-        cohort = cohorts[0] || null;
-        if (!cohort) {
-            throw Object.assign(new Error("The cohort does not exist."), {
-                status: 404
-            });
-        }
-        const members = await requireRows(
-            supabase.from("analysis_cohort_cases_v2")
-                .select("case_id").eq("cohort_id", cohortId),
-            "The Stage 1 workbook cohort membership could not be loaded."
-        );
-        caseIds = members.map(member => member.case_id);
-    } else {
-        caseIds = [requireUuid(suppliedCaseId, "Choose a valid Stage 1 case.")];
+    const cohortId = requireUuid(suppliedCohortId, "Choose a valid cohort.");
+    const cohorts = await requireRows(
+        supabase.from("analysis_cohorts_v2")
+            .select("id, project_id, name, status, closed_at")
+            .eq("id", cohortId),
+        "The Stage 1 workbook cohort could not be loaded."
+    );
+    cohort = cohorts[0] || null;
+    if (!cohort) {
+        throw Object.assign(new Error("The cohort does not exist."), {
+            status: 404
+        });
     }
+    if (!cohort.closed_at) {
+        throw Object.assign(new Error(
+            "The single Stage 1 workbook is unavailable until the cohort is closed."
+        ), { status: 409 });
+    }
+    const members = await requireRows(
+        supabase.from("analysis_cohort_cases_v2")
+            .select("case_id").eq("cohort_id", cohortId),
+        "The Stage 1 workbook cohort membership could not be loaded."
+    );
+    caseIds = members.map(member => member.case_id);
     if (!caseIds.length) {
         throw Object.assign(new Error("The Stage 1 workbook has no cases."), {
             status: 409
@@ -285,9 +284,7 @@ export async function loadCaseBoundStage1Workbook(supabase, selection = {}) {
         workbookVersion: CASE_BOUND_STAGE1_WORKBOOK_VERSION,
         project: projects[0] || { project_name: "Research project" },
         cohort,
-        selection: suppliedCohortId
-            ? { type: "cohort", id: suppliedCohortId }
-            : { type: "case", id: suppliedCaseId },
+        selection: { type: "cohort", id: suppliedCohortId },
         cases
     };
 }
@@ -622,9 +619,7 @@ export async function writeCaseBoundStage1Workbook(
 }
 
 export function caseBoundStage1WorkbookFilename(data) {
-    const scope = data.selection?.type === "case"
-        ? participantCode(data.cases[0]?.caseNumber)
-        : data.cohort?.name || "cohort";
+    const scope = data.cohort?.name || "cohort";
     const slug = String(scope || "stage1").toLowerCase()
         .replace(/[^a-z0-9]+/gu, "-")
         .replace(/^-+|-+$/gu, "") || "stage1";

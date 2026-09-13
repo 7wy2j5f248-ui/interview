@@ -63,27 +63,33 @@ function inspection() {
 
 function data() {
     return {
-        selection: { type: "case", id: "case-1" },
+        selection: { type: "cohort", id: "cohort-1" },
         project: { project_name: "Sleep study" },
-        cohort: null,
+        cohort: { name: "Pilot cohort" },
         cases: [{
             caseNumber: "P00171-S01",
             stage1Status: "completed",
             language: "zh",
             demographics: { age: 42 },
             inspection: inspection()
+        }, {
+            caseNumber: "P00175-S01",
+            stage1Status: "completed",
+            language: "zh",
+            demographics: { age: 39 },
+            inspection: inspection()
         }]
     };
 }
 
-async function workbookBuffer() {
+async function workbookBuffer(reportData = data()) {
     const stream = new PassThrough();
     const chunks = [];
     stream.on("data", chunk => chunks.push(Buffer.from(chunk)));
     const completed = finished(stream);
     await writeCaseBoundStage1Workbook(
         stream,
-        data(),
+        reportData,
         new Date("2026-09-13T00:00:00.000Z")
     );
     await completed;
@@ -94,7 +100,7 @@ function columnFor(sheet, header) {
     return sheet.getRow(1).values.slice(1).indexOf(header) + 1;
 }
 
-test("the authoritative Stage 1 report is a five-sheet Excel workbook from the frozen selected-model report", async () => {
+test("the authoritative Stage 1 report is one cohort workbook containing every case", async () => {
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(await workbookBuffer());
 
@@ -105,6 +111,8 @@ test("the authoritative Stage 1 report is a five-sheet Excel workbook from the f
     assert.match(workbook.description, /Excel workbook is the Stage 1 report/);
     const cases = workbook.getWorksheet(CASE_BOUND_STAGE1_WORKBOOK_SHEETS[0]);
     assert.equal(cases.getCell("A2").value, "P00171");
+    assert.equal(cases.getCell("A3").value, "P00175");
+    assert.equal(cases.rowCount, 3);
     assert.equal(cases.getCell("B2").value, 1);
     assert.equal(cases.getCell("C2").value, "zh");
     assert.equal(cases.getRow(2).getCell(columnFor(cases, "Age")).value, 42);
@@ -143,7 +151,7 @@ test("the authoritative Stage 1 report is a five-sheet Excel workbook from the f
     assert.match(rows.flat().join("\n"), /gpt-5\.6-sol/);
     assert.doesNotMatch(rows.flat().join("\n"), /gpt-5\.1/);
     assert.equal(caseBoundStage1WorkbookFilename(data()),
-        "p00171-stage1-report.xlsx");
+        "pilot-cohort-stage1-report.xlsx");
 });
 
 test("the case-bound page makes the workbook primary and the annotated transcript supporting evidence", async () => {
@@ -155,10 +163,34 @@ test("the case-bound page makes the workbook primary and the annotated transcrip
     ]);
     assert.match(dashboard, /download === "stage1-report-xlsx"/);
     assert.match(dashboard, /writeCaseBoundStage1Workbook/);
-    assert.match(client, /Download Stage 1 Excel workbook report/);
-    assert.match(client, /Download complete Stage 1 Excel workbook report/);
+    assert.match(client, /Download one complete Stage 1 workbook/);
+    assert.doesNotMatch(client, /caseId=.*stage1-report-xlsx/);
     assert.match(client, /View supporting annotated transcript/);
-    assert.match(html, /one complete Excel workbook report/);
-    assert.match(html, /annotated transcript is supporting evidence, not a substitute/);
-    assert.match(contract, /authoritative researcher-facing Stage 1 report is the deterministic Excel workbook/);
+    assert.match(html, /all cases are presented together in one Excel workbook report/);
+    assert.match(html, /annotated transcripts are supporting evidence, not substitutes/);
+    assert.match(contract, /one deterministic Excel workbook containing every case/);
+    assert.match(contract, /Separate per-case workbooks are not Stage 1 reports/);
+});
+
+test("all 275 cohort cases stream into one Stage 1 workbook", async () => {
+    const reportData = data();
+    reportData.cases = Array.from({ length: 275 }, (_, index) => ({
+        caseNumber: `P${String(index + 1).padStart(5, "0")}-S01`,
+        stage1Status: "completed",
+        language: "zh",
+        demographics: { age: 40 },
+        inspection: inspection()
+    }));
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(await workbookBuffer(reportData));
+    assert.equal(workbook.getWorksheet(
+        CASE_BOUND_STAGE1_WORKBOOK_SHEETS[0]).rowCount, 276);
+    assert.equal(workbook.getWorksheet(
+        CASE_BOUND_STAGE1_WORKBOOK_SHEETS[1]).rowCount, 276);
+    assert.equal(workbook.getWorksheet(
+        CASE_BOUND_STAGE1_WORKBOOK_SHEETS[2]).rowCount, 276);
+    assert.equal(workbook.getWorksheet(
+        CASE_BOUND_STAGE1_WORKBOOK_SHEETS[3]).rowCount, 276);
+    assert.equal(workbook.getWorksheet(
+        CASE_BOUND_STAGE1_WORKBOOK_SHEETS[4]).rowCount, 1 + (275 * 6));
 });

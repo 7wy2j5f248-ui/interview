@@ -93,7 +93,8 @@ function requestTemplate(configuration) {
 }
 
 async function summary(supabase) {
-    const [projects, activeConfigurations, cases, cohorts, attempts, stage2Runs] =
+    const [projects, activeConfigurations, cases, cohorts, cohortMemberships,
+        attempts, stage2Runs] =
         await Promise.all([
             requireRows(supabase.from("research_projects")
                 .select("id, project_code, project_name, research_topic")
@@ -107,6 +108,9 @@ async function summary(supabase) {
             requireRows(supabase.from("analysis_cohorts_v2")
                 .select("id, project_id, configuration_id, name, status, created_at, closed_at, blocked_reason")
                 .order("created_at", { ascending: false }), "Cohorts could not be loaded."),
+            requireRows(supabase.from("analysis_cohort_cases_v2")
+                .select("cohort_id, case_id"),
+            "Cohort membership could not be loaded."),
             requireRows(supabase.from("stage1_attempts_v2")
                 .select("id, case_id, configuration_id, attempt_number, status, researcher_reason, queued_at, provider_status, terminal_at, technical_error, completion_authority, completion_record")
                 .order("attempt_number"), "Stage 1 attempts could not be loaded."),
@@ -119,6 +123,7 @@ async function summary(supabase) {
         activeConfigurations,
         cases,
         cohorts,
+        cohortMemberships,
         attempts,
         stage2Runs,
         availableProviders: publicAnalysisProviderCatalog(),
@@ -319,7 +324,6 @@ async function downloadHarmonizedReport(supabase, req, res) {
 
 async function downloadStage1Workbook(supabase, req, res) {
     const data = await loadCaseBoundStage1Workbook(supabase, {
-        caseId: typeof req.query?.caseId === "string" ? req.query.caseId : "",
         cohortId: typeof req.query?.cohortId === "string"
             ? req.query.cohortId : ""
     });

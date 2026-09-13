@@ -663,18 +663,13 @@
         }
     }
 
-    async function downloadStage1Report(selection, button) {
+    async function downloadStage1Report(cohort, button) {
         button.disabled = true;
-        status.textContent = selection.caseId
-            ? "Preparing this case's Stage 1 Excel workbook report…"
-            : "Preparing the cohort's complete Stage 1 Excel workbook report…";
+        status.textContent = `Preparing one complete Stage 1 workbook for every case in ${cohort.name}…`;
         status.className = "muted";
         try {
-            const parameter = selection.caseId
-                ? `caseId=${encodeURIComponent(selection.caseId)}`
-                : `cohortId=${encodeURIComponent(selection.cohortId)}`;
             const response = await fetch(
-                `${API}&download=stage1-report-xlsx&${parameter}&_=${Date.now()}`,
+                `${API}&download=stage1-report-xlsx&cohortId=${encodeURIComponent(cohort.id)}&_=${Date.now()}`,
                 {
                     headers: { Authorization: `Bearer ${token()}` },
                     cache: "no-store"
@@ -698,7 +693,7 @@
             link.remove();
             URL.revokeObjectURL(url);
             const cases = response.headers.get("X-Stage1-Report-Cases") || "—";
-            status.textContent = `Stage 1 Excel workbook report downloaded for ${cases} case${cases === "1" ? "" : "s"}. It uses only the frozen selected-model report; no AI call, validator, reviewer, repair, or retry was used.`;
+            status.textContent = `One complete Stage 1 Excel workbook report downloaded. All ${cases} cohort cases are together in that workbook. It uses only the frozen selected-model reports; no AI call, validator, reviewer, repair, or retry was used.`;
         } catch (error) {
             status.textContent = error.message;
             status.className = "error";
@@ -715,7 +710,7 @@
         }
         const table = document.createElement("table");
         const head = document.createElement("thead");
-        head.innerHTML = "<tr><th>Case</th><th>Frozen source</th><th>Stage 1</th><th>Attempts</th><th>Stage 1 report and supporting evidence</th></tr>";
+        head.innerHTML = "<tr><th>Case</th><th>Frozen source</th><th>Stage 1</th><th>Attempts</th><th>Supporting evidence</th></tr>";
         const body = document.createElement("tbody");
         state.cases.forEach(item => {
             const attempts = state.attempts.filter(attempt => attempt.case_id === item.id);
@@ -741,15 +736,6 @@
                 action.appendChild(resolve);
                 action.appendChild(document.createTextNode(" "));
             }
-            if (item.stage1_status === "completed") {
-                const workbook = document.createElement("button");
-                workbook.type = "button";
-                workbook.textContent = "Download Stage 1 Excel workbook report";
-                workbook.addEventListener("click", () =>
-                    downloadStage1Report({ caseId: item.id }, workbook));
-                action.appendChild(workbook);
-                action.appendChild(document.createTextNode(" "));
-            }
             const inspect = document.createElement("button");
             inspect.type = "button";
             inspect.textContent = "View supporting annotated transcript";
@@ -768,6 +754,42 @@
         host.replaceChildren(table);
     }
 
+    function renderStage1Reports() {
+        const host = element("v2Stage1Reports");
+        host.replaceChildren();
+        const memberships = state.cohortMemberships || [];
+        const completedCaseIds = new Set(state.cases
+            .filter(item => item.stage1_status === "completed")
+            .map(item => item.id));
+        const ready = (state.cohorts || []).filter(cohort => {
+            if (!cohort.closed_at) return false;
+            const memberIds = memberships
+                .filter(member => member.cohort_id === cohort.id)
+                .map(member => member.case_id);
+            return memberIds.length > 0
+                && memberIds.every(caseId => completedCaseIds.has(caseId));
+        });
+        if (!ready.length) {
+            host.appendChild(make("p", "muted",
+                "The single cohort workbook becomes available when the cohort is closed and every member has completed Stage 1."));
+            return;
+        }
+        ready.forEach(cohort => {
+            const memberCount = memberships.filter(member =>
+                member.cohort_id === cohort.id).length;
+            const panel = make("div", "contract");
+            panel.appendChild(make("p", "lineage-primary",
+                `Stage 1 report: one workbook containing all ${memberCount} cases in ${cohort.name}`));
+            const download = document.createElement("button");
+            download.type = "button";
+            download.textContent = `Download one complete Stage 1 workbook — all ${memberCount} cases`;
+            download.addEventListener("click", () =>
+                downloadStage1Report(cohort, download));
+            panel.appendChild(download);
+            host.appendChild(panel);
+        });
+    }
+
     function renderCohorts() {
         const host = element("v2Cohorts");
         host.replaceChildren();
@@ -781,19 +803,6 @@
                 `Stage ${run.analysis_layer.toUpperCase()} attempt ${run.attempt_number} ${run.status}`).join("; ");
             text.textContent = `${item.name} — ${item.status}${runStatus ? `; ${runStatus}` : ""}${item.blocked_reason ? `; ${item.blocked_reason}` : ""}`;
             panel.appendChild(text);
-            if (["stage2_queued", "stage2_processing", "completed"]
-                .includes(item.status)) {
-                const stage1Workbook = document.createElement("button");
-                stage1Workbook.type = "button";
-                stage1Workbook.textContent =
-                    "Download complete Stage 1 Excel workbook report";
-                stage1Workbook.addEventListener("click", () =>
-                    downloadStage1Report(
-                        { cohortId: item.id }, stage1Workbook
-                    ));
-                panel.appendChild(stage1Workbook);
-                panel.appendChild(document.createTextNode(" "));
-            }
             runs.forEach(run => {
                 const inspect = document.createElement("button");
                 inspect.type = "button";
@@ -864,6 +873,7 @@
             metric("Unresolved blockers", counts.unresolved),
             metric("Open or processing", counts.pending + counts.processing + counts.provider_pending + counts.report_pending)
         );
+        renderStage1Reports();
         renderCases();
         renderCohorts();
         status.textContent = "Current stored status loaded. No automatic dashboard refresh is running.";

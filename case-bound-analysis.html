@@ -86,7 +86,7 @@
 <body>
 <main>
     <h1>Case-bound interview analysis</h1>
-    <p class="contract"><strong>Stage 1:</strong> one frozen completed case → one researcher-selected AI → one MU → CO → CA → TH response → one complete Excel workbook report. The exact request, exact provider response, and workbook source record are permanent. Stage 1 cannot complete before the complete workbook source is stored. The annotated transcript is supporting evidence, not a substitute for the workbook. Researcher viewing is optional. There is no validator, reviewer, repair AI, fallback model, or automatic retry.</p>
+    <p class="contract"><strong>Stage 1:</strong> each frozen completed case → one researcher-selected AI → one MU → CO → CA → TH response. When the researcher-defined cohort is complete, all cases are presented together in one Excel workbook report. The exact requests, exact provider responses, and workbook source records are permanent. Stage 1 cannot complete before every case's complete workbook source is stored. The annotated transcripts are supporting evidence, not substitutes for the one cohort workbook. Researcher viewing is optional. There is no validator, reviewer, repair AI, fallback model, or automatic retry.</p>
     <p class="warning"><strong>Cohort rule:</strong> closing a cohort freezes its membership. Any unresolved case blocks it. The three independent whole-corpus operations may run concurrently: CO → HCO, CA → HCA, and TH → HTH. Each request receives only its corresponding preliminary labels. Compact source references preserve lineage outside the model-facing requests; P# is not sent to the model.</p>
 
     <section id="automaticAnalysisTokenGate">
@@ -132,9 +132,10 @@
         </section>
 
         <section>
-            <h2>3. Case and barrier status</h2>
+            <h2>3. Stage 1 report and case status</h2>
             <div class="actions"><button id="v2Refresh" type="button">Refresh status</button></div>
-            <p class="muted">The Stage 1 report is the five-sheet Excel workbook: Cases &amp; Meaning Units, Codes, Categories, Themes, and Notes &amp; Sources. Each completed case has its own workbook, and a completed cohort has one combined workbook. The annotated transcript remains a separate supporting-evidence view. Status refreshes only when you request it; the dashboard does not monitor or poll.</p>
+            <p class="muted">The Stage 1 report is one five-sheet Excel workbook containing every case in the completed cohort: Cases &amp; Meaning Units, Codes, Categories, Themes, and Notes &amp; Sources. The case list does not create separate Stage 1 reports. It provides only the supporting annotated transcript for optional inspection. Status refreshes only when you request it; the dashboard does not monitor or poll.</p>
+            <div id="v2Stage1Reports"></div>
             <div id="v2Metrics" class="grid"></div>
             <p id="v2Status" class="muted" role="status"></p>
             <div id="v2Cases" class="table"></div>
@@ -147,6 +148,6 @@
     </dialog>
 </main>
 <script src="researcher-staged-access.js?version=20260903-case-bound-v2"></script>
-<script src="researcher-case-bound-analysis.js?version=20260913-stage1-workbook-v6"></script>
+<script src="researcher-case-bound-analysis.js?version=20260913-stage1-workbook-v7"></script>
 </body>
 </html>

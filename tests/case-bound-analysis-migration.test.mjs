@@ -163,7 +163,7 @@ test("every completed analysis stage requires a stored readable report", async (
     assert.match(sql, /P00171 and P00175/);
     assert.doesNotMatch(sql, /GPT-5\.1 production output is not a source[\s\S]{0,80}select.*GPT-5\.1/);
     assert.match(dashboard, /stage1_readable_reports_v2/);
-    assert.match(researcherScript, /Download Stage 1 Excel workbook report/);
+    assert.match(researcherScript, /Download one complete Stage 1 workbook/);
     assert.match(researcherScript, /View supporting annotated transcript/);
     assert.match(researcherScript, /No GPT-5\.1 analytical content/);
     assert.doesNotMatch(html, /id="v2RecordText"/);
@@ -231,8 +231,8 @@ test("the v2 researcher UI never starts an automatic status monitor", async () =
         readFile(new URL("../researcher-case-bound-analysis.js", import.meta.url), "utf8")
     ]);
     assert.match(html, /dashboard does not monitor or poll/);
-    assert.match(html, /stage1-workbook-v6/);
-    assert.match(html, /The Stage 1 report is the five-sheet Excel workbook/);
+    assert.match(html, /stage1-workbook-v7/);
+    assert.match(html, /The Stage 1 report is one five-sheet Excel workbook containing every case/);
     assert.doesNotMatch(javascript, /setInterval|refreshTimer/);
     assert.match(javascript, /confirmedConfigurationSha256/);
     assert.match(javascript, /Full transcript with inline MU highlights/);
