@@ -803,6 +803,15 @@ export async function writeCaseBoundStage1Workbook(
     ].join(" ");
     workbook.created = createdAt;
     workbook.modified = createdAt;
+    workbook.views = [{
+        x: 0,
+        y: 0,
+        width: 12000,
+        height: 20000,
+        firstSheet: 0,
+        activeTab: 1,
+        visibility: "visible"
+    }];
     const references = buildReferences(
         data.cases,
         data.participantInformationProvenance

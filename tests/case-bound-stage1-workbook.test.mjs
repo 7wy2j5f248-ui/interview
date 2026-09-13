@@ -189,6 +189,10 @@ test("the pilot workbook visibly combines only the original GPT-5.1 participant 
         "1 Participant & case",
         ...CASE_BOUND_STAGE1_WORKBOOK_SHEETS.slice(1)
     ]);
+    assert.equal(workbook.views[0].firstSheet, 0);
+    assert.equal(workbook.views[0].activeTab, 1);
+    assert.equal(workbook.worksheets[0].state, "visible");
+    assert.equal(workbook.worksheets[1].state, "visible");
     assert.match(workbook.description, /reproduces the surviving GPT-5\.1 Participant & case worksheet/);
     assert.match(workbook.description, /none of its analytical worksheets or analytical process is included/);
 
@@ -230,6 +234,7 @@ test("the case-bound page makes the workbook primary and the annotated transcrip
     assert.doesNotMatch(client, /caseId=.*stage1-report-xlsx/);
     assert.match(client, /View supporting annotated transcript/);
     assert.match(html, /all cases are presented together in one Excel workbook report/);
+    assert.match(html, /opens on worksheet 2, Meaning Units/);
     assert.match(html, /annotated transcripts are supporting evidence, not substitutes/);
     assert.match(contract, /one deterministic Excel workbook containing every case/);
     assert.match(contract, /Participant Information and Meaning Units on separate worksheets/);
