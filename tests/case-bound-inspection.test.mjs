@@ -75,6 +75,84 @@ test("legacy GPT-5.6 raw field names produce no blank tentative Theme", () => {
     assert.equal(inspection.report.themes.length, 1);
 });
 
+test("GPT-5.6 source-language MUs are located in the original message before its English translation", () => {
+    const chineseSource = "我一般十点半左右上床，昨晚也差不多。";
+    const inspection = buildCaseInspection({
+        caseNumber: "P00171",
+        storedMessages: [{
+            id: "m1",
+            Speaker: "participant",
+            Language: "zh",
+            Message: chineseSource,
+            EnglishTranslation: "I usually go to bed around 10:30; last night was similar."
+        }],
+        presentation: {
+            meaning_units: [{
+                id: "MU1",
+                sources: [{
+                    message_id: "m1",
+                    english_text: "我一般十点半左右上床"
+                }]
+            }],
+            preliminary_codes: [{
+                id: "CO1",
+                label: "Usual bedtime",
+                meaning_unit_ids: ["MU1"]
+            }],
+            preliminary_categories: [{
+                id: "CA1",
+                label: "Sleep timing",
+                code_ids: ["CO1"]
+            }],
+            preliminary_tentative_themes: [{
+                id: "TH1",
+                statement: "Stable sleep schedule",
+                category_ids: ["CA1"]
+            }]
+        }
+    });
+    const segment = inspection.report.meaningUnits[0].segments[0];
+    assert.equal(segment.messageId, "m1");
+    assert.equal(segment.textField, "original");
+    assert.equal(segment.startOffset, 0);
+    assert.equal(segment.endOffset, "我一般十点半左右上床".length);
+    assert.equal(
+        inspection.transcript[0].originalText.slice(
+            segment.startOffset, segment.endOffset
+        ),
+        "我一般十点半左右上床"
+    );
+});
+
+test("translated MUs remain inline with the matching translation beside the original message", () => {
+    const inspection = buildCaseInspection({
+        caseNumber: "P00001",
+        storedMessages: [{
+            id: "m1",
+            Speaker: "participant",
+            Language: "zh",
+            Message: "昨晚睡得不好。",
+            EnglishTranslation: "I did not sleep well last night."
+        }],
+        presentation: {
+            meaning_units: [{
+                id: "MU1",
+                sources: [{
+                    message_id: "m1",
+                    english_text: "I did not sleep well last night."
+                }]
+            }],
+            preliminary_codes: [],
+            preliminary_categories: [],
+            preliminary_tentative_themes: []
+        }
+    });
+    const segment = inspection.report.meaningUnits[0].segments[0];
+    assert.equal(segment.textField, "english");
+    assert.equal(segment.startOffset, 0);
+    assert.equal(segment.endOffset, "I did not sleep well last night.".length);
+});
+
 test("normalized pilot rows keep stored relationships without analytical invention", () => {
     const report = normalizePilotReport({
         meaningUnits: [{ id: "mu-record", unit_number: 1, message_id: "m1", exact_source_text: "Text", start_offset: 0, end_offset: 4 }],

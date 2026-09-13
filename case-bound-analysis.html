@@ -40,8 +40,23 @@
         .transcript-turn.participant { border-inline-start: .35rem solid #245fbd; background: #f3f7ff; }
         .transcript-turn.interviewer { border-inline-start: .35rem solid #68768a; }
         .transcript-turn h4 { margin: 0 0 .45rem; color: #314863; }
-        .annotated-text { white-space: pre-wrap; font-size: 1.02rem; }
-        .meaning-unit-mark { background: #ffe47a; border-bottom: 2px solid #a56b00; padding: .06rem .12rem; }
+        .annotated-text { white-space: pre-wrap; font-size: 1.02rem; line-height: 1.85; }
+        .transcript-field-label { color: #314863; }
+        .inline-mu-annotation { display: inline-flex; flex-direction: column; margin: .2rem .08rem; max-width: 100%; vertical-align: bottom; }
+        .inline-mu-label { border-radius: .25rem .25rem 0 0; color: #25354d; font-size: .72rem; font-weight: 700; line-height: 1.2; padding: .18rem .28rem; white-space: normal; }
+        .meaning-unit-mark { border-bottom: 2px solid #a56b00; border-radius: 0 0 .2rem .2rem; color: #172033; padding: .06rem .12rem; }
+        .meaning-unit-color-1 { background: #ffe08a; }
+        .meaning-unit-color-2 { background: #bdebd2; }
+        .meaning-unit-color-3 { background: #bcd9ff; }
+        .meaning-unit-color-4 { background: #f7c4df; }
+        .meaning-unit-color-5 { background: #d9c7ff; }
+        .meaning-unit-color-6 { background: #ffc6ad; }
+        .meaning-unit-color-7 { background: #c9eb8e; }
+        .meaning-unit-color-8 { background: #9ce5e3; }
+        .meaning-unit-color-9 { background: #f7b7b7; }
+        .meaning-unit-color-10 { background: #d6d6d6; }
+        .meaning-unit-color-11 { background: #e5c39b; }
+        .meaning-unit-color-12 { background: #c8c4ef; }
         .mu-mapping, .chip-list { display: flex; flex-wrap: wrap; gap: .35rem; margin: .35rem 0; }
         .report-chip { display: inline-block; border: 1px solid #9db3d1; border-radius: 999px; background: white; padding: .15rem .45rem; font-size: .84rem; }
         .report-chip.mu { background: #fff4bd; border-color: #c59600; }
@@ -118,6 +133,6 @@
     </dialog>
 </main>
 <script src="researcher-staged-access.js?version=20260903-case-bound-v2"></script>
-<script src="researcher-case-bound-analysis.js?version=20260913-readable-reports"></script>
+<script src="researcher-case-bound-analysis.js?version=20260913-inline-transcript-v2"></script>
 </body>
 </html>

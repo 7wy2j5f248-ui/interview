@@ -291,28 +291,88 @@ function v2PresentationReport(presentation) {
     });
 }
 
+function transcriptFields(message, preferred = null) {
+    const fields = [
+        { name: "original", value: message.originalText || "" },
+        { name: "english", value: message.englishText || "" }
+    ].filter(item => item.value);
+    const uniqueFields = fields.filter((item, index) =>
+        fields.findIndex(candidate => candidate.value === item.value) === index);
+    if (!preferred) return uniqueFields;
+    return [...uniqueFields].sort((left, right) =>
+        Number(right.name === preferred) - Number(left.name === preferred));
+}
+
+function overlaps(ranges, start, end) {
+    return ranges.some(range => start < range.end && end > range.start);
+}
+
+function nextUnclaimedOccurrence(haystack, needle, ranges) {
+    const exact = haystack.indexOf(needle);
+    const searchable = exact >= 0 ? haystack : haystack.toLocaleLowerCase();
+    const target = exact >= 0 ? needle : needle.toLocaleLowerCase();
+    let from = 0;
+    while (from <= searchable.length - target.length) {
+        const start = searchable.indexOf(target, from);
+        if (start < 0) return null;
+        const end = start + needle.length;
+        if (!overlaps(ranges, start, end)) return { start, end };
+        from = start + 1;
+    }
+    return null;
+}
+
 function locateUnanchoredMeaningUnits(report, transcript) {
+    const messagesById = new Map(transcript.map(message =>
+        [String(message.id), message]));
     const claimed = new Map();
+    const rangesFor = (message, field) => {
+        const key = `${message.id}:${field}`;
+        if (!claimed.has(key)) claimed.set(key, []);
+        return claimed.get(key);
+    };
     report.meaningUnits.forEach(unit => {
         unit.segments.forEach(segment => {
-            if (segment.messageId && segment.startOffset !== null
-                && segment.endOffset !== null) return;
             const needle = segment.exactText
                 .replace(/^[“”"'\s]+|[“”"'\s]+$/gu, "");
             if (!needle) return;
-            for (const message of transcript) {
-                const usesEnglish = Boolean(message.englishText);
-                const haystack = usesEnglish ? message.englishText : message.originalText;
-                const start = haystack.toLocaleLowerCase().indexOf(
-                    needle.toLocaleLowerCase(), claimed.get(message.id) || 0
-                );
-                if (start < 0) continue;
-                segment.messageId = message.id;
-                segment.startOffset = start;
-                segment.endOffset = start + needle.length;
-                segment.textField = usesEnglish ? "english" : "original";
-                claimed.set(message.id, segment.endOffset);
-                break;
+            const declaredMessage = messagesById.get(String(segment.messageId));
+            if (declaredMessage && segment.startOffset !== null
+                && segment.endOffset !== null) {
+                for (const field of transcriptFields(
+                    declaredMessage, segment.textField
+                )) {
+                    const actual = field.value.slice(
+                        segment.startOffset, segment.endOffset
+                    );
+                    if (actual.trim() !== needle) continue;
+                    segment.textField = field.name;
+                    rangesFor(declaredMessage, field.name).push({
+                        start: segment.startOffset,
+                        end: segment.endOffset
+                    });
+                    return;
+                }
+            }
+
+            const messages = declaredMessage
+                ? [declaredMessage, ...transcript.filter(message =>
+                    String(message.id) !== String(declaredMessage.id))]
+                : transcript;
+            for (const message of messages) {
+                for (const field of transcriptFields(message, segment.textField)) {
+                    const ranges = rangesFor(message, field.name);
+                    const located = nextUnclaimedOccurrence(
+                        field.value, needle, ranges
+                    );
+                    if (!located) continue;
+                    segment.messageId = message.id;
+                    segment.startOffset = located.start;
+                    segment.endOffset = located.end;
+                    segment.textField = field.name;
+                    ranges.push(located);
+                    return;
+                }
             }
         });
     });

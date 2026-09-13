@@ -162,71 +162,134 @@
             list.push(category);
             categoryByCode.set(id, list);
         }));
+
+        function annotationLabel(unit) {
+            const codes = codeByMu.get(unit.id) || [];
+            const categories = [...new Map(codes.flatMap(code =>
+                categoryByCode.get(code.id) || [])
+                .map(category => [category.id, category])).values()];
+            const parts = [unit.id];
+            if (codes.length) {
+                parts.push(codes.map(code =>
+                    `${code.id} · ${code.label} (${code.mentionCount} MU mention${code.mentionCount === 1 ? "" : "s"})`
+                ).join("; "));
+            }
+            if (categories.length) {
+                parts.push(categories.map(category =>
+                    `${category.id} · ${category.label}`).join("; "));
+            }
+            return parts.join(" · ");
+        }
+
+        function colorClass(unit) {
+            const firstCode = (codeByMu.get(unit.id) || [])[0];
+            const number = Number(String(firstCode?.id || unit.id)
+                .replace(/\D/gu, "")) || 1;
+            return `meaning-unit-color-${((number - 1) % 12) + 1}`;
+        }
+
+        function fieldRanges(message, fieldName, sourceText) {
+            const ranges = [];
+            report.meaningUnits.forEach(unit => unit.segments.forEach(segment => {
+                if (String(segment.messageId) !== String(message.id)) return;
+                if (segment.textField && segment.textField !== fieldName) return;
+                const exact = (segment.exactText || "").trim()
+                    .replace(/^[“”"']+|[“”"']+$/gu, "");
+                if (!exact) return;
+                let start = Number.isInteger(segment.startOffset)
+                    ? segment.startOffset : -1;
+                let end = Number.isInteger(segment.endOffset)
+                    ? segment.endOffset : -1;
+                if (start < 0 || end <= start
+                    || sourceText.slice(start, end).trim() !== exact) {
+                    start = sourceText.indexOf(exact);
+                    if (start < 0) {
+                        start = sourceText.toLocaleLowerCase().indexOf(
+                            exact.toLocaleLowerCase()
+                        );
+                    }
+                    end = start < 0 ? -1 : start + exact.length;
+                }
+                if (start >= 0 && end > start) ranges.push({ start, end, unit });
+            }));
+            ranges.sort((left, right) => left.start - right.start
+                || left.end - right.end);
+            const merged = [];
+            ranges.forEach(range => {
+                const previous = merged.at(-1);
+                if (previous && range.start < previous.end) {
+                    previous.end = Math.max(previous.end, range.end);
+                    if (!previous.units.some(unit => unit.id === range.unit.id)) {
+                        previous.units.push(range.unit);
+                    }
+                    return;
+                }
+                merged.push({
+                    start: range.start,
+                    end: range.end,
+                    units: [range.unit]
+                });
+            });
+            return merged;
+        }
+
+        function annotatedField(message, fieldName, fieldLabel, sourceText) {
+            const paragraph = make("p", `annotated-text transcript-${fieldName}`);
+            paragraph.appendChild(make("strong", "transcript-field-label",
+                `${fieldLabel}: `));
+            const ranges = fieldRanges(message, fieldName, sourceText);
+            let cursor = 0;
+            ranges.forEach(range => {
+                paragraph.appendChild(document.createTextNode(
+                    sourceText.slice(cursor, range.start)
+                ));
+                const annotation = make("span", "inline-mu-annotation");
+                const labelText = range.units.map(annotationLabel).join(" | ");
+                const color = colorClass(range.units[0]);
+                annotation.appendChild(make("span",
+                    `inline-mu-label ${color}`, labelText));
+                const mark = make("mark", `meaning-unit-mark ${color}`,
+                    sourceText.slice(range.start, range.end));
+                mark.title = labelText;
+                mark.dataset.meaningUnits = range.units
+                    .map(unit => unit.id).join(",");
+                annotation.appendChild(mark);
+                paragraph.appendChild(annotation);
+                range.units.forEach(unit => anchored.add(unit.id));
+                cursor = range.end;
+            });
+            paragraph.appendChild(document.createTextNode(sourceText.slice(cursor)));
+            return paragraph;
+        }
+
         const anchored = new Set();
         const host = make("div", "transcript-report");
         inspection.transcript.forEach(message => {
             const card = make("article", `transcript-turn ${message.speaker}`);
             card.appendChild(make("h4", "",
                 `${message.turnId} · ${message.speaker === "participant" ? "Participant" : "Interviewer"}`));
-            const sourceText = message.englishText || message.originalText || "";
-            const ranges = [];
-            report.meaningUnits.forEach(unit => unit.segments.forEach(segment => {
-                if (String(segment.messageId) !== String(message.id)) return;
-                let start = Number.isInteger(segment.startOffset) ? segment.startOffset : -1;
-                let end = Number.isInteger(segment.endOffset) ? segment.endOffset : -1;
-                const exact = (segment.exactText || "").trim();
-                if (start < 0 || end <= start
-                    || sourceText.slice(start, end).trim() !== exact) {
-                    start = sourceText.toLocaleLowerCase().indexOf(exact.toLocaleLowerCase());
-                    end = start < 0 ? -1 : start + exact.length;
-                }
-                if (start >= 0 && end > start) ranges.push({ start, end, unit });
-            }));
-            ranges.sort((left, right) => left.start - right.start || left.end - right.end);
-            const textLine = make("p", "annotated-text");
-            let cursor = 0;
-            ranges.forEach(range => {
-                if (range.start < cursor) return;
-                textLine.appendChild(document.createTextNode(sourceText.slice(cursor, range.start)));
-                const mark = make("mark", "meaning-unit-mark", sourceText.slice(range.start, range.end));
-                const codes = codeByMu.get(range.unit.id) || [];
-                mark.title = `${range.unit.id}: ${codes.map(code => `${code.id} ${code.label}`).join("; ")}`;
-                textLine.appendChild(mark);
-                cursor = range.end;
-                anchored.add(range.unit.id);
-            });
-            textLine.appendChild(document.createTextNode(sourceText.slice(cursor)));
-            card.appendChild(textLine);
-            const units = [...new Map(ranges.map(range => [range.unit.id, range.unit])).values()];
-            units.forEach(unit => {
-                const mapping = make("div", "mu-mapping");
-                mapping.appendChild(chip(unit.id, "mu"));
-                const codes = codeByMu.get(unit.id) || [];
-                codes.forEach(code => {
-                    mapping.appendChild(chip(
-                        `${code.id} · ${code.label} · ${code.mentionCount} MU mention${code.mentionCount === 1 ? "" : "s"}`,
-                        "co"
-                    ));
-                    (categoryByCode.get(code.id) || []).forEach(category =>
-                        mapping.appendChild(chip(`${category.id} · ${category.label}`, "ca")));
-                });
-                card.appendChild(mapping);
-            });
-            if (message.originalText && message.englishText
-                && message.originalText !== message.englishText) {
-                const original = make("details", "original-language");
-                original.appendChild(make("summary", "", "Original-language turn"));
-                original.appendChild(make("p", "", message.originalText));
-                card.appendChild(original);
+            if (message.originalText) {
+                card.appendChild(annotatedField(
+                    message, "original",
+                    `Original${message.language ? ` (${message.language})` : ""}`,
+                    message.originalText
+                ));
+            }
+            if (message.englishText
+                && message.englishText !== message.originalText) {
+                card.appendChild(annotatedField(
+                    message, "english", "English analytical text",
+                    message.englishText
+                ));
             }
             host.appendChild(card);
         });
         const unanchored = report.meaningUnits.filter(unit => !anchored.has(unit.id));
         if (unanchored.length) {
             const panel = make("div", "warning");
-            panel.appendChild(make("strong", "", "Meaning Units preserved without a reliable screen position"));
+            panel.appendChild(make("strong", "", "Meaning Units not found verbatim in the stored transcript"));
             panel.appendChild(make("p", "",
-                "Their exact GPT-5.6 text remains in the report; the interface does not invent a transcript location."));
+                "Their exact GPT-5.6 text remains below, but the interface does not invent a passage location when it cannot find the text in either the original message or its English analytical text."));
             const list = document.createElement("ul");
             unanchored.forEach(unit => list.appendChild(
                 make("li", "", `${unit.id}: ${unit.exactText}`)));
@@ -277,9 +340,9 @@
         content.appendChild(metrics);
 
         const transcriptSection = make("section", "report-section");
-        transcriptSection.appendChild(make("h3", "", "Annotated transcript"));
+        transcriptSection.appendChild(make("h3", "", "Full transcript with inline MU highlights"));
         transcriptSection.appendChild(make("p", "muted",
-            "Highlighted passages are GPT-5.6 Meaning Units. The chips show their linked Codes and Categories."));
+            "Each GPT-5.6 Meaning Unit is highlighted directly inside its stored message. Its MU, linked Code, and linked Category labels sit immediately above that passage. The original-language message is always shown; when the analysis used an English translation, that translation appears directly below the same original message with its own inline highlights."));
         transcriptSection.appendChild(annotatedTranscript(inspection));
         content.appendChild(transcriptSection);
 

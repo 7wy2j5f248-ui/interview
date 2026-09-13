@@ -230,6 +230,10 @@ test("the v2 researcher UI never starts an automatic status monitor", async () =
         readFile(new URL("../researcher-case-bound-analysis.js", import.meta.url), "utf8")
     ]);
     assert.match(html, /dashboard does not monitor or poll/);
+    assert.match(html, /inline-transcript-v2/);
     assert.doesNotMatch(javascript, /setInterval|refreshTimer/);
     assert.match(javascript, /confirmedConfigurationSha256/);
+    assert.match(javascript, /Full transcript with inline MU highlights/);
+    assert.match(javascript, /inline-mu-annotation/);
+    assert.match(javascript, /English analytical text/);
 });
