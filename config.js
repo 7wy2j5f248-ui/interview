@@ -1,5 +1,5 @@
 window.APP_CONFIG = Object.freeze({
-    app_name: "Interview Quest",
+    app_name: "Interlog",
     rtl_languages: Object.freeze(["ar", "ur", "fa", "prs"])
 });
 

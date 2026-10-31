@@ -9,7 +9,7 @@ const docxUrl = new URL("../governance-contract/Researcher-Designated-AI-Direct-
 test("Contract and Governance publishes the compiled direct-work contract", async () => {
     const html = await readFile(pageUrl, "utf8");
 
-    assert.match(html, /<title>Contract and Governance \| intervu\.quest<\/title>/);
+    assert.match(html, /<title>Contract and Governance \| Interlog<\/title>/);
     assert.match(html, /<h1>Governance Contract<\/h1>/);
     assert.match(html, /GDAI-1\.0\.0/g);
     assert.match(html, /Researcher–Designated AI Direct Analytical Work Contract/);
