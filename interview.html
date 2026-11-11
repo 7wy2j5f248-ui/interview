@@ -139,7 +139,6 @@ const speechLanguageCodes = {
     ta: "ta-IN",
     sw: "sw-KE",
     id: "id-ID",
-    so: "so-SO",
     my: "my-MM",
     fa: "fa-IR"
 };
@@ -183,6 +182,9 @@ const voiceDisclosureAcknowledgement =
 function updateVoiceButtonAvailability() {
     const selectedLanguage =
         localStorage.getItem("language") || "en";
+
+    voiceDisclosureAcknowledgement.parentElement.hidden =
+        !speechLanguageCodes[selectedLanguage] && !textToSpeechLanguageCodes[selectedLanguage];
 
     const acknowledged =
         voiceDisclosureAcknowledgement.checked;

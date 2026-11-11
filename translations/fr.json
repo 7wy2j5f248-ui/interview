@@ -35,7 +35,7 @@
   "participant": "Participant",
   "ai": "IA",
   "voice_speak_title": "🎙 Dictez votre réponse",
-  "voice_disclosure": "Les outils vocaux facultatifs utilisent des services Google Cloud. Si vous utilisez la transcription vocale, votre audio est envoyé à Google Cloud Speech-to-Text afin de créer une transcription. Si vous utilisez la lecture, le texte de la zone de transcription est envoyé à Google Cloud Text-to-Speech afin de générer un audio. Vous pouvez choisir de ne pas utiliser ces outils et de saisir votre réponse à la place.",
+  "voice_disclosure": "Les outils vocaux facultatifs utilisent des services Google Cloud. Si vous utilisez la transcription vocale, votre audio est envoyé à Google Cloud Speech-to-Text afin de créer une transcription. Si vous utilisez la lecture, le texte de la zone de transcription est envoyé à Google Cloud Text-to-Speech afin de générer un audio. Vous pouvez choisir de ne pas utiliser ces outils et de saisir votre réponse à la place. Lorsque la journalisation facultative des données vocales est désactivée, Google traite votre enregistrement en mémoire et ne conserve ni votre audio ni sa transcription. Google enregistre temporairement des détails comme l’heure et la taille de la demande.",
   "voice_disclosure_agree": "Je comprends et je souhaite utiliser les outils vocaux.",
   "start_recording": "Démarrer l’enregistrement",
   "recording": "Enregistrement en cours...",
