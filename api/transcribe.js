@@ -1,4 +1,4 @@
-import { v2 as speech } from "@google-cloud/speech";
+import { v1 as speech } from "@google-cloud/speech";
 import { getVercelOidcToken } from "@vercel/oidc";
 import { ExternalAccountClient } from "google-auth-library";
 
@@ -63,7 +63,7 @@ function getSpeechClient() {
     return new speech.SpeechClient({
         projectId: GCP_PROJECT_ID,
         authClient,
-        apiEndpoint: "us-central1-speech.googleapis.com"
+        apiEndpoint: "us-speech.googleapis.com"
     });
 }
 
@@ -92,33 +92,15 @@ export default async function handler(req, res) {
             });
         }
 
-        const GCP_PROJECT_ID =
-            process.env.GCP_PROJECT_ID;
-
-        const client =
-            getSpeechClient();
-
+        const client = getSpeechClient();
         const request = {
-            recognizer:
-                `projects/${GCP_PROJECT_ID}` +
-                `/locations/us-central1/recognizers/_`,
-
             config: {
-                autoDecodingConfig: {},
-                languageCodes: [
-                    languageCode
-                ],
-                model: "chirp_2",
-                features: {
-                    enableAutomaticPunctuation: true
-                }
+                encoding: "LINEAR16",
+                sampleRateHertz: 16000,
+                languageCode,
+                enableAutomaticPunctuation: true
             },
-
-            content:
-                Buffer.from(
-                    audioBase64,
-                    "base64"
-                )
+            audio: { content: Buffer.from(audioBase64, "base64") }
         };
 
         const [response] =
@@ -137,12 +119,7 @@ export default async function handler(req, res) {
             transcript
         });
 
-    } catch (error) {
-        console.error(
-            "Google Speech-to-Text V2 error:",
-            error
-        );
-
+    } catch {
         return res.status(500).json({
             error: "Transcription failed."
         });
