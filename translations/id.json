@@ -35,7 +35,7 @@
   "participant": "Peserta",
   "ai": "AI",
   "voice_speak_title": "🎙 Ucapkan jawaban Anda",
-  "voice_disclosure": "Alat suara opsional menggunakan layanan Google Cloud. Jika Anda menggunakan ucapan-ke-teks, audio Anda dikirim ke Google Cloud Speech-to-Text untuk membuat transkrip. Jika Anda menggunakan Baca ulang, teks di kotak transkripsi dikirim ke Google Cloud Text-to-Speech untuk menghasilkan audio. Anda juga dapat memilih untuk tidak menggunakan alat ini dan mengetik jawaban Anda. Jika pencatatan opsional data ucapan dinonaktifkan, Google memproses rekaman Anda di memori tanpa menyimpan audio atau transkrip. Google mencatat sementara rincian seperti waktu dan ukuran permintaan.",
+  "voice_disclosure": "Anda bisa mengetik atau mengucapkan jawaban. Jika Anda berbicara, Google mengubah rekaman suara Anda menjadi teks. Dengan pengaturan bawaan, Google tidak menyimpan rekaman atau teks yang dihasilkan. Jika Anda memilih Baca ulang, Google membacakan teks itu.",
   "voice_disclosure_agree": "Saya memahami dan ingin menggunakan alat suara.",
   "start_recording": "Mulai merekam",
   "recording": "Sedang merekam...",

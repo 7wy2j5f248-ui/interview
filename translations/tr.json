@@ -35,7 +35,7 @@
   "participant": "Katılımcı",
   "ai": "Yapay zekâ",
   "voice_speak_title": "🎙 Yanıtınızı söyleyin",
-  "voice_disclosure": "İsteğe bağlı ses araçları Google Cloud hizmetlerini kullanır. Konuşmayı metne dönüştürmeyi kullanırsanız sesiniz bir transkript oluşturmak için Google Cloud Speech-to-Text'e gönderilir. Sesli okuma özelliğini kullanırsanız transkripsiyon kutusundaki metin ses oluşturmak için Google Cloud Text-to-Speech'e gönderilir. Bu araçları kullanmayıp yanıtınızı yazmayı da seçebilirsiniz. Google’ın isteğe bağlı konuşma verisi kaydı kapalı olduğunda Google, ses kaydınızı bellekte işler ve sesinizi veya dökümünü saklamaz. İsteğin zamanı ve boyutu gibi ayrıntıları geçici olarak kaydeder.",
+  "voice_disclosure": "Yanıtınızı yazabilir veya sesli olarak söyleyebilirsiniz. Konuşursanız Google ses kaydınızı yazıya çevirir. Google, varsayılan ayarlarında ses kaydınızı veya oluşturduğu metni saklamaz. Sesli okumayı seçerseniz Google metni size okur.",
   "voice_disclosure_agree": "Anlıyorum ve ses araçlarını kullanmak istiyorum.",
   "start_recording": "Kaydı başlat",
   "recording": "Kaydediliyor...",

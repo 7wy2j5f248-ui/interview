@@ -35,7 +35,7 @@
   "participant": "Mshiriki",
   "ai": "AI",
   "voice_speak_title": "🎙 Sema jibu lako",
-  "voice_disclosure": "Zana za sauti za hiari hutumia huduma za Google Cloud. Ukitumia kubadilisha sauti kuwa maandishi, sauti yako hutumwa kwa Google Cloud Speech-to-Text ili kutengeneza nakala ya maandishi. Unaweza pia kuchagua kutotumia zana hizi na kuandika jibu lako. Chaguo la Google la kuweka kumbukumbu za data ya matamshi likiwa limezimwa, Google huchakata rekodi yako kwenye kumbukumbu ya muda bila kuhifadhi sauti yako au nakala yake ya maandishi. Google hurekodi kwa muda mfupi taarifa kama vile wakati na ukubwa wa ombi.",
+  "voice_disclosure": "Unaweza kuandika jibu lako au kulisema. Ukisema jibu lako, Google hubadili sauti uliyorekodi kuwa maandishi. Kwa mipangilio yake ya kawaida, Google haihifadhi rekodi hiyo wala maandishi inayotengeneza.",
   "voice_disclosure_agree": "Ninaelewa na ninataka kutumia zana za sauti.",
   "start_recording": "Anza kurekodi",
   "recording": "Inarekodi...",
